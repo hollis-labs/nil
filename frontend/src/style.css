@@ -1,0 +1,29 @@
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--term-bg, #0b0e14);
+    color: var(--term-fg, #e6edf3);
+}
+
+body {
+    margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    background: var(--term-bg, #0b0e14);
+    color: var(--term-fg, #e6edf3);
+}
+
+#root {
+    min-height: 100vh;
+}
+
+input, select, textarea, button {
+    font-family: inherit;
+    color: inherit;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--term-accent, #7aa2f7);
+    outline-offset: 2px;
+}

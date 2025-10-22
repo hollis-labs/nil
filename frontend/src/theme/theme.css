@@ -1,0 +1,108 @@
+:root {
+  --term-bg: #0b0e14;
+  --term-panel: #0f131a;
+  --term-fg: #e6edf3;
+  --term-dim: #8b949e;
+  --term-accent: #7aa2f7;    /* links/underline */
+  --term-success: #22c55e;   /* check */
+  --term-warn: #eab308;      /* star */
+  --term-info: #60a5fa;      /* dot */
+  --term-border: #1f2937;
+}
+
+body {
+  background: var(--term-bg);
+  color: var(--term-fg);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--term-panel);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--term-accent);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--term-info);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--term-accent) var(--term-panel);
+}
+
+.terminal-card {
+  background: var(--term-panel);
+  border: 1px solid var(--term-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.text-dim { color: var(--term-dim); }
+
+a.term-link { color: var(--term-accent); text-decoration: underline; text-underline-offset: 2px; }
+a.term-link:hover { opacity: 0.9; }
+
+.badge { 
+  font-size: 11px; 
+  padding: 4px 8px; 
+  border-radius: 999px; 
+  background: #111827; 
+  border: 1px solid var(--term-border); 
+  color: var(--term-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.badge:hover {
+  background: #1a2332;
+  border-color: var(--term-accent);
+}
+.badge.warn { color: var(--term-warn); border-color: var(--term-warn); }
+.badge.info { color: var(--term-info); border-color: var(--term-info); }
+.badge.success { color: var(--term-success); border-color: var(--term-success); }
+
+.checkbox {
+  width: 16px; height: 16px;
+  border-radius: 4px; border: 1px solid var(--term-border);
+  display: inline-flex; align-items:center; justify-content:center;
+  background: #0b0f16;
+}
+.checkbox.checked { border-color: var(--term-success); background: #0f1a13; }
+.checkbox .mark { width: 10px; height: 10px; border-radius: 2px; background: var(--term-success); display:none; }
+.checkbox.checked .mark { display:block; }
+
+.list-row { display:grid; grid-template-columns: 24px 1fr auto; gap: 12px; align-items:center; padding: 6px 10px; }
+.list-row:hover { background: rgba(255,255,255,0.02); }
+.title { line-height: 1.35; }
+.title.underlined { text-decoration: underline; text-decoration-color: var(--term-accent); text-underline-offset: 3px; }
+.meta { font-size: 12px; gap: 8px; display:flex; align-items:center; }
+.separator { height: 1px; background: var(--term-border); margin: 6px 0; }
+
+.date-header { color: var(--term-dim); font-weight: 600; margin: 14px 0 6px; }
+.summary { color: var(--term-dim); font-size: 12px; margin-top: 10px; }
+
+.tiptap-editor::-webkit-scrollbar,
+.todo-list-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.tiptap-editor::-webkit-scrollbar-track,
+.todo-list-scroll::-webkit-scrollbar-track {
+  background: var(--term-panel);
+  border-radius: 4px;
+}
+.tiptap-editor::-webkit-scrollbar-thumb,
+.todo-list-scroll::-webkit-scrollbar-thumb {
+  background: var(--term-accent);
+  border-radius: 4px;
+}
+.tiptap-editor::-webkit-scrollbar-thumb:hover,
+.todo-list-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--term-info);
+}
+.tiptap-editor,
+.todo-list-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--term-accent) var(--term-panel);
+}
