@@ -59,9 +59,73 @@ func (a *App) DeleteTodo(id int64) error {
 
 func (a *App) Search(req store.SearchRequest) ([]store.Todo, error) {
 	req.Query = strings.TrimSpace(req.Query)
-	return a.Store.Search(a.ctx, req)
+	println("Backend search query:", req.Query, "statuses:", len(req.Statuses))
+	results, err := a.Store.Search(a.ctx, req)
+	println("Backend search returned:", len(results), "results, error:", err)
+	return results, err
 }
 
-func (a *App) GetFilters() (projects, contexts, tags []string, err error) {
-	return a.Store.GetFilterValues(a.ctx)
+type FiltersResult struct {
+	Projects []string `json:"projects"`
+	Contexts []string `json:"contexts"`
+	Tags     []string `json:"tags"`
+}
+
+func (a *App) GetFilters() (*FiltersResult, error) {
+	projects, contexts, tags, err := a.Store.GetFilterValues(a.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure we return empty arrays instead of nil
+	if projects == nil {
+		projects = []string{}
+	}
+	if contexts == nil {
+		contexts = []string{}
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+
+	return &FiltersResult{
+		Projects: projects,
+		Contexts: contexts,
+		Tags:     tags,
+	}, nil
+}
+
+func (a *App) ExportTodoTxt() (string, error) {
+	req := store.SearchRequest{
+		Query:    "",
+		Page:     0,
+		PageSize: 10000,
+		SortBy:   "created_at",
+		SortDir:  "asc",
+	}
+	todos, err := a.Store.Search(a.ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	var lines []string
+	for _, t := range todos {
+		lines = append(lines, t.Source)
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func (a *App) ImportTodoTxt(content string) error {
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		_, err := a.CreateTodoFromLine(line)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

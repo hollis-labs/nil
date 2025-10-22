@@ -14,8 +14,16 @@ export function DeleteTodo(arg1) {
   return window['go']['main']['App']['DeleteTodo'](arg1);
 }
 
+export function ExportTodoTxt() {
+  return window['go']['main']['App']['ExportTodoTxt']();
+}
+
 export function GetFilters() {
   return window['go']['main']['App']['GetFilters']();
+}
+
+export function ImportTodoTxt(arg1) {
+  return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
 
 export function Search(arg1) {

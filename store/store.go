@@ -18,6 +18,13 @@ type Store struct {
 	DB *sql.DB
 }
 
+func (s *Store) Close() error {
+	if s.DB != nil {
+		return s.DB.Close()
+	}
+	return nil
+}
+
 func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, err
@@ -25,6 +32,11 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	dbPath := filepath.Join(dataDir, "todo.db?_fk=1")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
+		return nil, err
+	}
+
+	// Enable WAL mode for better cloud sync compatibility
+	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		return nil, err
 	}
 
@@ -233,8 +245,24 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 
 	// keywords via FTS
 	if strings.TrimSpace(req.Query) != "" {
-		q.joins = append(q.joins, "JOIN todos_fts fts ON fts.rowid=t.id AND fts MATCH ?")
-		q.args = append(q.args, req.Query)
+		q.joins = append(q.joins, "JOIN todos_fts ON todos_fts.rowid=t.id")
+		q.where = append(q.where, "todos_fts MATCH ?")
+
+		// If query is quoted, use exact match. Otherwise, add wildcard for prefix matching
+		query := strings.TrimSpace(req.Query)
+		if strings.HasPrefix(query, `"`) && strings.HasSuffix(query, `"`) {
+			// Quoted search - exact match
+			q.args = append(q.args, query)
+		} else {
+			// Add wildcard to each word for prefix matching
+			words := strings.Fields(query)
+			for i, word := range words {
+				if !strings.HasSuffix(word, "*") {
+					words[i] = word + "*"
+				}
+			}
+			q.args = append(q.args, strings.Join(words, " "))
+		}
 	}
 
 	// taxonomy filters
@@ -287,6 +315,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	}
 	sqlStr += " WHERE " + strings.Join(q.where, " AND ") + q.order + q.limit
 
+	println("SQL Query:", sqlStr)
 	rows, err := s.DB.QueryContext(ctx, sqlStr, q.args...)
 	if err != nil {
 		return []Todo{}, err

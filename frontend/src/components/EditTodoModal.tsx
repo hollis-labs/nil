@@ -3,6 +3,8 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TodoRow } from "./TerminalList";
 import TagsInput from "./TagsInput";
+import TodoTitleInput from "./TodoTitleInput";
+import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
   open: boolean;
@@ -11,16 +13,55 @@ type Props = {
   onUpdate?: (todo: TodoRow) => void;
   onDelete?: (id: number) => void;
   editTodo?: TodoRow | null;
+  defaultContexts?: string[];
+  defaultProjects?: string[];
+  defaultTags?: string[];
 };
 
-export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo }: Props) {
+export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [] }: Props) {
   const isEditMode = !!editTodo;
   
   const [line, setLine] = React.useState("");
   const [priority, setPriority] = React.useState("");
   const [due, setDue] = React.useState("");
   const [tags, setTags] = React.useState<string[]>([]);
+  const [contexts, setContexts] = React.useState<string[]>([]);
+  const [projects, setProjects] = React.useState<string[]>([]);
+  const [useDefaults, setUseDefaults] = React.useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [availableProjects, setAvailableProjects] = React.useState<string[]>([]);
+  const [availableContexts, setAvailableContexts] = React.useState<string[]>([]);
+  const [availableTags, setAvailableTags] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (open) {
+      Backend.GetFilters().then((result: any) => {
+        console.log("GetFilters result:", result);
+        
+        if (result && typeof result === 'object') {
+          const projects = result.projects || [];
+          const contexts = result.contexts || [];
+          const tags = result.tags || [];
+          
+          setAvailableProjects(projects);
+          setAvailableContexts(contexts);
+          setAvailableTags(tags);
+          
+          console.log("Loaded filters:", { projects, contexts, tags });
+        } else {
+          console.warn("Unexpected GetFilters result format:", result);
+          setAvailableProjects([]);
+          setAvailableContexts([]);
+          setAvailableTags([]);
+        }
+      }).catch(err => {
+        console.error("Failed to load filters:", err);
+        setAvailableProjects([]);
+        setAvailableContexts([]);
+        setAvailableTags([]);
+      });
+    }
+  }, [open]);
 
   const editor = useEditor({
     extensions: [StarterKit],
@@ -28,7 +69,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none focus:outline-none bg-transparent tiptap-editor",
-        style: "min-height: 250px; max-height: 400px; overflow-y: auto; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px;",
+        style: "min-height: 120px; max-height: 200px; overflow-y: auto; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px;",
       },
     },
   });
@@ -41,6 +82,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         setPriority(editTodo.priority || "");
         setDue(editTodo.due_at ? editTodo.due_at.slice(0, 10) : "");
         setTags(editTodo.tags || []);
+        setContexts(editTodo.contexts || []);
+        setProjects(editTodo.projects || []);
+        setUseDefaults(false);
         if (editor) {
           editor.commands.setContent(editTodo.notes_md || "");
         }
@@ -48,23 +92,30 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         setLine("");
         setPriority("");
         setDue("");
-        setTags([]);
+        setTags(useDefaults ? defaultTags : []);
+        setContexts(useDefaults ? defaultContexts : []);
+        setProjects(useDefaults ? defaultProjects : []);
+        setUseDefaults(true);
         if (editor) {
           editor.commands.setContent("");
         }
       }
     }
-  }, [open, isEditMode, editTodo, editor]);
+  }, [open, isEditMode, editTodo, editor, defaultContexts, defaultProjects, defaultTags, useDefaults]);
 
   React.useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) {
         onOpenChange(false);
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && open) {
+        e.preventDefault();
+        handleSubmit(e as any);
+      }
     };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [open, onOpenChange]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onOpenChange, line, priority, due, tags, contexts, projects]);
 
   if (!open) return null;
 
@@ -79,17 +130,32 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         priority: priority || undefined,
         due_at: due || undefined,
         tags,
+        contexts,
+        projects,
         notes_md,
       };
       onUpdate(updated);
     } else {
-      const extras: any = { tags };
+      const extras: any = { tags, contexts, projects };
       if (priority) extras.priority = priority;
       if (due) extras.due = due;
       if (notes_md) extras.notes_md = notes_md;
       onSubmit(line, extras);
     }
   }
+  
+  const toggleUseDefaults = () => {
+    setUseDefaults(!useDefaults);
+    if (!useDefaults) {
+      setContexts(defaultContexts);
+      setProjects(defaultProjects);
+      setTags(defaultTags);
+    } else {
+      setContexts([]);
+      setProjects([]);
+      setTags([]);
+    }
+  };
 
 
 
@@ -115,20 +181,39 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
   return (
     <div style={modalStyle}>
-      <div className="terminal-card" style={{ width: '720px', maxWidth: '95vw', padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-          <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Quick Add Todo'}</div>
-          <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+      <div className="terminal-card" style={{ 
+        width: '720px', 
+        maxWidth: '95vw', 
+        height: '650px',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Fixed Header */}
+        <div style={{ padding: '20px 20px 0 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Quick Add Todo'}</div>
+            <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+          </div>
         </div>
+
+        {/* Scrollable Body */}
+        <div style={{ 
+          flex: 1, 
+          overflowY: 'auto', 
+          padding: '0 20px',
+          minHeight: 0
+        }}>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Task</label>
-            <input
-              autoFocus
-              style={inputStyle}
-              placeholder="e.g. Review pull request +project @context"
+            <TodoTitleInput
               value={line}
-              onChange={(e) => setLine(e.target.value)}
+              onChange={setLine}
+              placeholder="e.g. Review pull request +project @context"
+              autoFocus={true}
+              recentContexts={availableContexts}
+              recentProjects={availableProjects}
+              recentTags={availableTags}
             />
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -171,32 +256,79 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             </div>
           </div>
 
+          {!isEditMode && (defaultContexts.length > 0 || defaultProjects.length > 0 || defaultTags.length > 0) && (
+            <div style={{ 
+              padding: '12px', 
+              background: 'var(--term-panel)', 
+              borderRadius: '6px', 
+              border: '1px solid var(--term-border)' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <input
+                  type="checkbox"
+                  id="use-defaults"
+                  checked={useDefaults}
+                  onChange={toggleUseDefaults}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="use-defaults" style={{ fontSize: '12px', cursor: 'pointer' }}>
+                  Use active filter context
+                </label>
+              </div>
+              {useDefaults && (
+                <div style={{ fontSize: '11px', marginLeft: '24px' }} className="text-dim">
+                  {defaultContexts.length > 0 && <div>Contexts: {defaultContexts.map(c => `@${c}`).join(', ')}</div>}
+                  {defaultProjects.length > 0 && <div>Projects: {defaultProjects.map(p => `+${p}`).join(', ')}</div>}
+                  {defaultTags.length > 0 && <div>Tags: {defaultTags.map(t => `#${t}`).join(', ')}</div>}
+                </div>
+              )}
+            </div>
+          )}
+
           <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
-            <TagsInput tags={tags} onTagsChange={setTags} placeholder="Add tag..." />
+            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
+            <TagsInput tags={contexts} onTagsChange={setContexts} placeholder="Add context (e.g., work, home)..." prefix="@" />
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
-            {isEditMode && onDelete && (
-              <div>
-                {!showDeleteConfirm ? (
-                  <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
-                ) : (
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px', color: 'var(--term-dim)' }}>Confirm delete?</span>
-                    <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }}>Yes, Delete</button>
-                    <button type="button" className="badge" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-                  </div>
-                )}
-              </div>
-            )}
-            {!isEditMode && <div />}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
-              <button type="submit" className="badge success">{isEditMode ? 'Save' : 'Create'}</button>
-            </div>
+          <div>
+            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
+            <TagsInput tags={projects} onTagsChange={setProjects} placeholder="Add project (e.g., myproject)..." prefix="+" />
+          </div>
+
+          <div>
+            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
+            <TagsInput tags={tags} onTagsChange={setTags} placeholder="Add tag..." prefix="#" />
           </div>
         </form>
+        </div>
+
+        {/* Fixed Footer */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          padding: '16px 20px 20px 20px',
+          borderTop: '1px solid var(--term-border)' 
+        }}>
+          {isEditMode && onDelete && (
+            <div>
+              {!showDeleteConfirm ? (
+                <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
+              ) : (
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--term-dim)' }}>Confirm delete?</span>
+                  <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }}>Yes, Delete</button>
+                  <button type="button" className="badge" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+                </div>
+              )}
+            </div>
+          )}
+          {!isEditMode && <div />}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
+            <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
+          </div>
+        </div>
       </div>
     </div>
   );

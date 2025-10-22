@@ -4,9 +4,10 @@ type TagsInputProps = {
   tags: string[];
   onTagsChange: (tags: string[]) => void;
   placeholder?: string;
+  prefix?: string;
 };
 
-export default function TagsInput({ tags, onTagsChange, placeholder = "Add tag..." }: TagsInputProps) {
+export default function TagsInput({ tags, onTagsChange, placeholder = "Add tag...", prefix = "#" }: TagsInputProps) {
   const [inputValue, setInputValue] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -88,7 +89,7 @@ export default function TagsInput({ tags, onTagsChange, placeholder = "Add tag..
             e.currentTarget.style.background = 'var(--term-panel)';
           }}
         >
-          #{tag}
+          {prefix}{tag}
           <span style={{ fontSize: '14px', marginLeft: '2px', opacity: 0.7 }}>×</span>
         </span>
       ))}

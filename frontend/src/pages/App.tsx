@@ -3,10 +3,11 @@ import TerminalList, { TodoRow } from "@/components/TerminalList";
 import KeyboardScope from "@/components/KeyboardScope";
 import NotesModal from "@/components/NotesModal";
 import EditTodoModal from "@/components/EditTodoModal";
-import SettingsModal, { useSettings } from "@/components/SettingsModal";
+import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { SlidersVertical, Plus } from "lucide-react";
+import { parseQuery } from "@/lib/query";
 
 import * as Backend from "../../wailsjs/go/main/App";
 
@@ -20,46 +21,59 @@ function Inner() {
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
   const { settings } = useSettings();
+  
+  const defaultNewTodoFilters = React.useMemo(() => {
+    const activeTab = settings.tabs.find(t => t.id === activeTabId);
+    const mainParsed = parseQuery(query);
+    const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
+    
+    return {
+      contexts: [...mainParsed.contexts, ...(tabParsed?.contexts || [])],
+      projects: [...mainParsed.projects, ...(tabParsed?.projects || [])],
+      tags: [...mainParsed.tags, ...(tabParsed?.tags || [])]
+    };
+  }, [query, activeTabId, settings.tabs]);
 
   const runSearch = React.useCallback(async () => {
     try {
+      const activeTab = settings.tabs.find(t => t.id === activeTabId);
+      const mainParsed = parseQuery(query);
+      const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
+      
+      const merged = {
+        keywords: [...mainParsed.keywords],
+        projects: [...mainParsed.projects, ...(tabParsed?.projects || [])],
+        contexts: [...mainParsed.contexts, ...(tabParsed?.contexts || [])],
+        tags: [...mainParsed.tags, ...(tabParsed?.tags || [])],
+        priorities: [...(mainParsed.priority || []), ...(tabParsed?.priority || [])],
+        statuses: [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])]
+      };
+      
       const req: any = { 
-        query: query || "", 
+        query: merged.keywords.join(" "), 
         page: 0, 
         page_size: 500, 
         sort_by: "created_at", 
         sort_dir: "desc",
-        projects: [],
-        contexts: [],
-        tags: [],
-        statuses: [],
-        priorities: []
+        projects: merged.projects,
+        contexts: merged.contexts,
+        tags: merged.tags,
+        statuses: merged.statuses,
+        priorities: merged.priorities
       };
       const res = await Backend.Search(req);
-      console.log("Search result:", res);
       setAllRows(Array.isArray(res) ? res : []);
     } catch (err) {
       console.error("Search failed:", err);
       setAllRows([]);
     }
-  }, [query]);
+  }, [query, activeTabId, settings.tabs]);
 
   React.useEffect(()=>{ runSearch(); }, [runSearch]);
 
-  // Filter rows based on active tab and settings
+  // Filter rows based on settings
   const rows = React.useMemo(() => {
     let filtered = allRows;
-    
-    // Apply scope tab filter
-    const activeTab = settings.tabs.find(t => t.id === activeTabId);
-    if (activeTab) {
-      if (activeTab.context) {
-        filtered = filtered.filter(r => r.contexts.includes(activeTab.context!));
-      }
-      if (activeTab.project) {
-        filtered = filtered.filter(r => r.projects.includes(activeTab.project!));
-      }
-    }
     
     // Apply show completed filter
     if (!settings.showCompleted) {
@@ -67,7 +81,7 @@ function Inner() {
     }
     
     return filtered;
-  }, [allRows, activeTabId, settings]);
+  }, [allRows, settings.showCompleted]);
 
   async function handleToggle(id: number, checked: boolean) {
     await Backend.ToggleComplete(id, checked);
@@ -262,6 +276,9 @@ function Inner() {
         onUpdate={handleUpdateTodo}
         onDelete={handleDeleteTodo}
         editTodo={editTodo}
+        defaultContexts={defaultNewTodoFilters.contexts}
+        defaultProjects={defaultNewTodoFilters.projects}
+        defaultTags={defaultNewTodoFilters.tags}
       />
     </div>
   );
@@ -269,9 +286,11 @@ function Inner() {
 
 export default function AppPage() {
   return (
-    <ThemeProvider>
-      <link rel="stylesheet" href="/src/theme/theme.css" />
-      <Inner />
-    </ThemeProvider>
+    <SettingsProvider>
+      <ThemeProvider>
+        <link rel="stylesheet" href="/src/theme/theme.css" />
+        <Inner />
+      </ThemeProvider>
+    </SettingsProvider>
   );
 }

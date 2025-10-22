@@ -1,3 +1,24 @@
+export namespace main {
+	
+	export class FiltersResult {
+	    projects: string[];
+	    contexts: string[];
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FiltersResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.projects = source["projects"];
+	        this.contexts = source["contexts"];
+	        this.tags = source["tags"];
+	    }
+	}
+
+}
+
 export namespace store {
 	
 	export class SearchRequest {
