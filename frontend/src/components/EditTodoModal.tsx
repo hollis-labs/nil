@@ -11,7 +11,7 @@ import { useSettings } from "./SettingsModal";
 import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import { TaskTemplate } from "@/lib/templates";
-import { getActiveSession } from "@/lib/sessionContext";
+import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
 import { Save } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 
@@ -43,6 +43,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [availableContexts, setAvailableContexts] = React.useState<string[]>([]);
   const [availableTags, setAvailableTags] = React.useState<string[]>([]);
   const [showTemplateSaveDialog, setShowTemplateSaveDialog] = React.useState(false);
+  const [mergeContext, setMergeContext] = React.useState(true);
+  const [sessionProfiles, setSessionProfiles] = React.useState<SessionProfile[]>([]);
 
   React.useEffect(() => {
     if (open) {
@@ -71,6 +73,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         setAvailableContexts([]);
         setAvailableTags([]);
       });
+      
+      // Load session profiles
+      setSessionProfiles(getSessionProfiles());
     }
   }, [open]);
 
@@ -221,6 +226,29 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
   };
 
+  const handleContextProfileSelect = (profileId: string) => {
+    const profile = sessionProfiles.find(p => p.id === profileId);
+    if (!profile) return;
+
+    if (mergeContext) {
+      // Merge with existing values
+      setContexts([...new Set([...contexts, ...profile.contexts])]);
+      setProjects([...new Set([...projects, ...profile.projects])]);
+      setTags([...new Set([...tags, ...profile.tags])]);
+      if (profile.priority && !priority) {
+        setPriority(profile.priority);
+      }
+    } else {
+      // Replace existing values
+      setContexts(profile.contexts);
+      setProjects(profile.projects);
+      setTags(profile.tags);
+      if (profile.priority) {
+        setPriority(profile.priority);
+      }
+    }
+  };
+
 
 
   const modalStyle = {
@@ -265,7 +293,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Add Todo'}</div>
-            <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+            <button
+              className="badge info"
+              onClick={() => onOpenChange(false)}
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px'
+              }}
+            >
+              Close
+            </button>
           </div>
         </div>
 
@@ -275,6 +312,79 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           minHeight: 0
         }}>
           <div style={{ padding: '0 20px 40px 20px' }}>
+            {/* Priority/Date chips row */}
+            <div style={{
+              display: 'flex',
+              gap: '8px',
+              marginBottom: '16px',
+              paddingBottom: '8px',
+              borderBottom: '1px solid var(--term-border)',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                type="button"
+                className={`badge ${priority === 'A' ? 'warn' : ''}`}
+                onClick={() => setPriority(priority === 'A' ? '' : 'A')}
+                style={{ flex: '0 0 auto' }}
+              >
+                High
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === 'B' ? 'info' : ''}`}
+                onClick={() => setPriority(priority === 'B' ? '' : 'B')}
+                style={{ flex: '0 0 auto' }}
+              >
+                Medium
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === 'C' ? 'success' : ''}`}
+                onClick={() => setPriority(priority === 'C' ? '' : 'C')}
+                style={{ flex: '0 0 auto' }}
+              >
+                Low
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === '' ? 'success' : ''}`}
+                onClick={() => setPriority('')}
+                style={{ flex: '0 0 auto' }}
+              >
+                None
+              </button>
+              <button
+                type="button"
+                className={`badge ${due ? 'info' : ''}`}
+                onClick={() => {
+                  if (due) {
+                    setDue('');
+                  } else {
+                    const input = document.createElement('input');
+                    input.type = 'date';
+                    input.value = due;
+                    input.style.position = 'absolute';
+                    input.style.opacity = '0';
+                    document.body.appendChild(input);
+                    input.showPicker?.();
+                    input.onchange = (e) => {
+                      setDue((e.target as HTMLInputElement).value);
+                      document.body.removeChild(input);
+                    };
+                    input.onblur = () => {
+                      setTimeout(() => {
+                        if (document.body.contains(input)) {
+                          document.body.removeChild(input);
+                        }
+                      }, 100);
+                    };
+                  }
+                }}
+                style={{ flex: '0 0 auto' }}
+              >
+                {due ? `Due: ${due}` : 'Set Due Date'}
+              </button>
+            </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
@@ -305,32 +415,129 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               recentTags={availableTags}
             />
           </div>
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Priority</label>
-              <select
-                style={{
-                  ...inputStyle,
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  backgroundSize: '16px',
-                  paddingRight: '32px'
-                }}
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-              >
-                <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>None</option>
-                <option value="A" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>A (High)</option>
-                <option value="B" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>B (Medium)</option>
-                <option value="C" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>C (Low)</option>
-              </select>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px'
+          }}>
+            <div>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
+              <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Due Date</label>
-              <input type="date" style={inputStyle} value={due} onChange={(e) => setDue(e.target.value)} placeholder="Optional" />
+
+            <div>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
+              <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context..." />
             </div>
+
+            <div>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
+              <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
+            </div>
+
+            {!isEditMode && (() => {
+              const activeSession = getActiveSession();
+              const hasSessionContext = activeSession && (
+                (activeSession.contexts?.length || 0) > 0 ||
+                (activeSession.projects?.length || 0) > 0 ||
+                (activeSession.tags?.length || 0) > 0 ||
+                activeSession.priority
+              );
+              const hasSearchFilters = defaultContexts.length > 0 || defaultProjects.length > 0 || defaultTags.length > 0;
+
+              // Merge session and search filters for display
+              const displayContexts = [...new Set([...(activeSession?.contexts || []), ...defaultContexts])];
+              const displayProjects = [...new Set([...(activeSession?.projects || []), ...defaultProjects])];
+              const displayTags = [...new Set([...(activeSession?.tags || []), ...defaultTags])];
+
+              return (
+                <div>
+                  <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Session Context</label>
+                  <div style={{
+                    padding: '8px 12px',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--term-border)',
+                    borderRadius: '6px',
+                    minHeight: '38px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      id="use-defaults"
+                      checked={useDefaults}
+                      onChange={toggleUseDefaults}
+                      style={{ cursor: 'pointer', marginTop: '2px', flexShrink: 0 }}
+                    />
+                    <div style={{ fontSize: '11px', flex: 1 }} className="text-dim">
+                      {!hasSessionContext && !hasSearchFilters && <div>No active context</div>}
+                      {useDefaults && (
+                        <>
+                          {displayContexts.length > 0 && <div>@{displayContexts.join(', @')}</div>}
+                          {displayProjects.length > 0 && <div>+{displayProjects.join(', +')}</div>}
+                          {displayTags.length > 0 && <div>#{displayTags.join(', #')}</div>}
+                          {activeSession?.priority && <div>Pri: {activeSession.priority}</div>}
+                        </>
+                      )}
+                      {!useDefaults && (hasSessionContext || hasSearchFilters) && <div>Context disabled</div>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {isEditMode && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', height: '16px' }}>
+                  <label style={{ fontSize: '12px', lineHeight: '16px' }} className="text-dim">Apply Context</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '16px' }}>
+                    <input
+                      type="checkbox"
+                      id="merge-context"
+                      checked={mergeContext}
+                      onChange={(e) => setMergeContext(e.target.checked)}
+                      style={{ 
+                        cursor: 'pointer',
+                        width: '12px',
+                        height: '12px',
+                        margin: 0
+                      }}
+                    />
+                    <label htmlFor="merge-context" style={{ fontSize: '11px', cursor: 'pointer', lineHeight: '16px', margin: 0 }} className="text-dim">
+                      Merge
+                    </label>
+                  </div>
+                </div>
+                <select
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--term-border)',
+                    borderRadius: '6px',
+                    color: 'var(--term-fg)',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    height: '44px',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 8px center',
+                    backgroundSize: '16px',
+                    paddingRight: '32px'
+                  }}
+                  onChange={(e) => e.target.value && handleContextProfileSelect(e.target.value)}
+                  defaultValue=""
+                >
+                  <option value="">Select context profile...</option>
+                  {sessionProfiles.map(profile => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div>
@@ -340,57 +547,13 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               borderRadius: '6px',
               background: 'var(--term-bg)',
               overflow: 'hidden',
-              minHeight: '140px',
-              maxHeight: '200px'
+              minHeight: '190px',
+              maxHeight: '190px'
             }}>
-              <CustomScrollbar style={{ height: '100%', minHeight: '140px' }}>
+              <CustomScrollbar style={{ height: '100%', minHeight: '190px' }}>
                 <EditorContent editor={editor} />
               </CustomScrollbar>
             </div>
-          </div>
-
-          {!isEditMode && (defaultContexts.length > 0 || defaultProjects.length > 0 || defaultTags.length > 0) && (
-            <div style={{
-              padding: '12px',
-              background: 'var(--term-panel)',
-              borderRadius: '6px',
-              border: '1px solid var(--term-border)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="use-defaults"
-                  checked={useDefaults}
-                  onChange={toggleUseDefaults}
-                  style={{ cursor: 'pointer' }}
-                />
-                <label htmlFor="use-defaults" style={{ fontSize: '12px', cursor: 'pointer' }}>
-                  Use active filter context
-                </label>
-              </div>
-              {useDefaults && (
-                <div style={{ fontSize: '11px', marginLeft: '24px' }} className="text-dim">
-                  {defaultContexts.length > 0 && <div>Contexts: {defaultContexts.map(c => `@${c}`).join(', ')}</div>}
-                  {defaultProjects.length > 0 && <div>Projects: {defaultProjects.map(p => `+${p}`).join(', ')}</div>}
-                  {defaultTags.length > 0 && <div>Tags: {defaultTags.map(t => `#${t}`).join(', ')}</div>}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
-            <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context (e.g., work, home)..." />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
-            <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project (e.g., myproject)..." />
-          </div>
-
-          <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
-            <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
           </div>
         </form>
           </div>
@@ -404,28 +567,19 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           padding: '16px 20px 20px 20px',
           borderTop: '1px solid var(--term-border)'
         }}>
-          {isEditMode && onDelete && (
-            <div>
-              {!showDeleteConfirm ? (
-                <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
-              ) : (
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12px', color: 'var(--term-dim)' }}>Confirm delete?</span>
-                  <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }}>Yes, Delete</button>
-                  <button type="button" className="badge" onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
-                </div>
-              )}
-            </div>
-          )}
-          {!isEditMode && (
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }}>Clear</button>
-              <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
-            </div>
-          )}
-          {isEditMode && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {isEditMode && onDelete && !showDeleteConfirm && (
+              <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
+            )}
+            {isEditMode && onDelete && showDeleteConfirm && (
+              <>
+                <span style={{ fontSize: '12px', color: 'var(--term-dim)', marginRight: '4px' }}>Confirm delete?</span>
+                <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }}>Yes, Delete</button>
+              </>
+            )}
             <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }}>Clear</button>
-          )}
+            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
+          </div>
           <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
         </div>
       </div>

@@ -115,7 +115,7 @@ export default function AutocompleteInput({
     background: 'var(--term-bg)',
     border: '1px solid var(--term-border)',
     borderRadius: '6px',
-    minHeight: '40px',
+    minHeight: '44px',
     cursor: 'text',
     position: 'relative',
   };
