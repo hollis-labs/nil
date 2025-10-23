@@ -2,7 +2,7 @@ import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ChevronUp, ChevronDown, Check, Archive, Trash2, Edit3 } from "lucide-react";
 
 export type TodoRow = {
   id: number; title: string; priority?: string;
@@ -61,18 +61,28 @@ type Props = {
   onToggle: (id: number, checked: boolean) => void;
   onOpenNotes: (row: TodoRow) => void;
   onMoveSection: (id: number, section: string) => void;
+  onArchive: (id: number, archived: boolean) => void;
+  onDelete: (id: number) => void;
   showCompleted: boolean;
   onEditTodo: (row: TodoRow) => void;
   viewMode?: ViewMode;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, showCompleted, onEditTodo, viewMode = 'scope' }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope' }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
-    done: true
+    done: false
   });
-  const [openMenu, setOpenMenu] = React.useState<number | null>(null);
+  const [isRadialNavOpen, setIsRadialNavOpen] = React.useState<number | null>(null);
+  const [hoveredRow, setHoveredRow] = React.useState<number | null>(null);
+  const modalOverlayRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (isRadialNavOpen !== null && modalOverlayRef.current) {
+      modalOverlayRef.current.focus();
+    }
+  }, [isRadialNavOpen]);
 
   const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -143,137 +153,207 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     }
   };
 
-  const PriorityMoveButton = ({ row }: { row: TodoRow }) => {
+  const DirectionalMenu = ({ row }: { row: TodoRow }) => {
     const section = row.section || 'anytime';
-    const isOpen = openMenu === row.id;
+    const isOpen = isRadialNavOpen === row.id;
+    const isHovered = hoveredRow === row.id;
+    const autoCloseTimerRef = React.useRef<NodeJS.Timeout | null>(null);
     
-    const getIcon = () => {
-      if (section === 'anytime') return <ChevronUp size={16} />;
-      if (section === 'now') return <ChevronDown size={16} />;
-      return <ChevronsUpDown size={16} />;
-    };
+    const menuItems: any[] = [];
     
-    const getOptionsAbove = () => {
-      if (section === 'anytime') return [{ label: 'Now', value: 'now' }, { label: 'Soon', value: 'soon' }];
-      if (section === 'soon') return [{ label: 'Now', value: 'now' }];
-      return [];
-    };
+    if (section === 'anytime') {
+      menuItems.push({ dir: 'up', label: 'N', section: 'now', delay: 0 });
+      menuItems.push({ dir: 'up', label: 'S', section: 'soon', delay: 1 });
+    } else if (section === 'soon') {
+      menuItems.push({ dir: 'up', label: 'N', section: 'now', delay: 0 });
+      menuItems.push({ dir: 'down', label: 'A', section: 'anytime', delay: 0 });
+    } else if (section === 'now') {
+      menuItems.push({ dir: 'down', label: 'S', section: 'soon', delay: 0 });
+      menuItems.push({ dir: 'down', label: 'A', section: 'anytime', delay: 1 });
+    }
     
-    const getOptionsBelow = () => {
-      if (section === 'now') return [{ label: 'Soon', value: 'soon' }, { label: 'Anytime', value: 'anytime' }];
-      if (section === 'soon') return [{ label: 'Anytime', value: 'anytime' }];
-      return [];
-    };
+    menuItems.push({ dir: 'left', label: <Edit3 size={12} />, action: 'edit', delay: 0 });
+    menuItems.push({ dir: 'left', label: <Check size={12} />, action: 'complete', delay: 1 });
+    menuItems.push({ dir: 'left', label: <Trash2 size={12} />, action: 'delete', delay: 2 });
+    menuItems.push({ dir: 'left', label: <Archive size={12} />, action: 'archive', delay: 3 });
     
     const menuRef = React.useRef<HTMLDivElement>(null);
     
+
+    
     React.useEffect(() => {
-      if (!isOpen) return;
-      
-      const handleClickOutside = (e: MouseEvent) => {
-        if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-          setOpenMenu(null);
+      if (!isOpen) {
+        if (autoCloseTimerRef.current) {
+          clearTimeout(autoCloseTimerRef.current);
+          autoCloseTimerRef.current = null;
         }
+        return;
+      }
+      
+      const startAutoCloseTimer = () => {
+        if (autoCloseTimerRef.current) {
+          clearTimeout(autoCloseTimerRef.current);
+        }
+        autoCloseTimerRef.current = setTimeout(() => {
+          setIsRadialNavOpen(null);
+        }, 3000);
       };
       
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      const resetTimer = () => {
+        startAutoCloseTimer();
+      };
+      
+      startAutoCloseTimer();
+      
+      const menuElement = menuRef.current;
+      if (menuElement) {
+        menuElement.addEventListener('mousemove', resetTimer);
+        menuElement.addEventListener('click', resetTimer);
+      }
+      
+      return () => {
+        if (autoCloseTimerRef.current) {
+          clearTimeout(autoCloseTimerRef.current);
+        }
+        if (menuElement) {
+          menuElement.removeEventListener('mousemove', resetTimer);
+          menuElement.removeEventListener('click', resetTimer);
+        }
+      };
     }, [isOpen]);
     
-    const handleMove = (newSection: string) => {
-      onMoveSection(row.id, newSection);
-      setOpenMenu(null);
+    const handleAction = (item: any) => {
+      if (item.action === 'complete') {
+        onToggle(row.id, true);
+      } else if (item.action === 'archive') {
+        onArchive(row.id, true);
+      } else if (item.action === 'delete') {
+        onDelete(row.id);
+      } else if (item.action === 'edit') {
+        onEditTodo(row);
+      } else if (item.section) {
+        onMoveSection(row.id, item.section);
+      }
+      setIsRadialNavOpen(null);
     };
     
-    const renderMenu = (options: Array<{label: string, value: string}>, position: 'above' | 'below') => {
-      if (options.length === 0) return null;
-      
-      return (
-        <div
-          style={{
-            position: 'absolute',
-            right: 0,
-            [position === 'above' ? 'bottom' : 'top']: '100%',
-            marginTop: position === 'below' ? '4px' : undefined,
-            marginBottom: position === 'above' ? '4px' : undefined,
-            background: 'var(--term-panel)',
-            border: '1px solid var(--term-border)',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            zIndex: 1000,
-            minWidth: '100px',
-            overflow: 'hidden'
-          }}
-        >
-          {options.map((opt, idx) => (
-            <button
-              key={opt.value}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleMove(opt.value);
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 12px',
-                background: 'transparent',
-                border: 'none',
-                borderTop: idx > 0 ? '1px solid var(--term-border)' : 'none',
-                color: 'var(--term-fg)',
-                fontSize: '12px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--term-accent-dim)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      );
+    const getPosition = (dir: string, index: number) => {
+      const spacing = 35;
+      const firstOffset = 32;
+      const offset = firstOffset + (index * spacing);
+      if (dir === 'up') return { bottom: `${offset}px`, left: '50%', transform: 'translateX(-50%)' };
+      if (dir === 'down') return { top: `${offset}px`, left: '50%', transform: 'translateX(-50%)' };
+      if (dir === 'left') return { right: `${offset}px`, top: '50%', transform: 'translateY(-50%)' };
+      return {};
     };
+    
+
+    
+    if (!isHovered && !isOpen) return null;
     
     return (
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: '20px' }} ref={menuRef}>
+      <div
+        data-radial-menu="true"
+        style={{
+          position: 'absolute',
+          right: '19px',
+          top: 'calc(50% - 2px)',
+          transform: 'translateY(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          zIndex: 1100,
+          pointerEvents: isRadialNavOpen !== null && isRadialNavOpen !== row.id ? 'none' : 'auto'
+        }}
+        ref={menuRef}
+      >
+
+        
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setOpenMenu(isOpen ? null : row.id);
+            setIsRadialNavOpen(isOpen ? null : row.id);
           }}
           style={{
-            background: 'var(--term-panel)',
-            border: '1px solid var(--term-border)',
-            borderRadius: '6px',
+            background: 'rgba(15, 19, 26, 0.95)',
+            border: '1px solid var(--term-info)',
+            borderRadius: '50%',
             cursor: 'pointer',
-            padding: '6px',
+            width: '24px',
+            height: '24px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'var(--term-fg)',
-            transition: 'all 0.15s ease',
-            opacity: 0.7
+            color: 'var(--term-info)',
+            transition: 'all 0.2s ease',
+            boxShadow: isOpen ? '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 0 rgba(96, 165, 250, 0.4)' : '0 0 0 0 var(--term-info), 0 0 4px 0 rgba(96, 165, 250, 0.15)',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            position: 'relative',
+            zIndex: 1001
           }}
-          onMouseEnter={(e) => { 
-            e.currentTarget.style.opacity = '1';
-            e.currentTarget.style.borderColor = 'var(--term-accent)';
-          }}
-          onMouseLeave={(e) => { 
-            e.currentTarget.style.opacity = '0.7';
-            e.currentTarget.style.borderColor = 'var(--term-border)';
-          }}
-          title={`Move from ${section}`}
+
+          title="Quick actions"
         >
-          {getIcon()}
+          ⋮
         </button>
         
-        {isOpen && (
-          <>
-            {renderMenu(getOptionsAbove(), 'above')}
-            {renderMenu(getOptionsBelow(), 'below')}
-          </>
-        )}
+        {isOpen && (() => {
+          const grouped: Record<string, any[]> = {};
+          menuItems.forEach(item => {
+            if (!grouped[item.dir]) grouped[item.dir] = [];
+            grouped[item.dir].push(item);
+          });
+          
+
+          
+          return (
+            <>
+              {menuItems.map((item, idx) => {
+                const indexInDir = grouped[item.dir].indexOf(item);
+                
+                return (
+                  <React.Fragment key={`${item.dir}-${item.section || item.action}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAction(item);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        ...getPosition(item.dir, indexInDir),
+                        background: 'rgba(15, 19, 26, 0.95)',
+                        border: '1px solid var(--term-info)',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'var(--term-info)',
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)',
+                        zIndex: 1000
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(15, 19, 26, 0.98)';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 1px rgba(96, 165, 250, 0.5)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(15, 19, 26, 0.95)';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)';
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </>
+          );
+        })()}
       </div>
     );
   };
@@ -287,16 +367,15 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         onDrop={(e) => handleDrop(e, sectionKey)}
         style={{ marginBottom: '20px' }}
       >
-        <div 
-          className="date-header" 
-          style={{ 
-            textDecoration: 'underline', 
-            textUnderlineOffset: '4px',
+        <div
+          className="date-header"
+          style={{
             cursor: canCollapse ? 'pointer' : 'default',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            userSelect: 'none'
+            userSelect: 'none',
+            marginRight: '25px'
           }}
           onClick={() => canCollapse && toggleSection(sectionKey)}
         >
@@ -306,19 +385,41 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         </div>
         {!isCollapsed && (
           <>
-            <div className="separator" />
             {items.length === 0 ? (
               <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
                 Drop items here
               </div>
             ) : (
-              items.map((r) => (
+              items.map((r, idx) => (
                 <div
                   key={r.id}
-                  className="list-row"
+                  className={isRadialNavOpen !== null ? '' : 'list-row'}
                   draggable
                   onDragStart={(e) => handleDragStart(e, r.id)}
-                  style={{ cursor: 'grab' }}
+                  onMouseEnter={() => {
+                    if (isRadialNavOpen === null) {
+                      setHoveredRow(r.id);
+                    }
+                  }}
+                  onMouseLeave={() => setHoveredRow(null)}
+                  onClick={(e) => {
+                    if (!r.completed && (e.target as HTMLElement).tagName !== 'BUTTON') {
+                      if (isRadialNavOpen === null) {
+                        setIsRadialNavOpen(r.id);
+                      }
+                    }
+                  }}
+                  style={{
+                    cursor: r.completed ? 'grab' : 'pointer',
+                    opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
+                    padding: '12px 20px',
+                    marginRight: '25px',
+                    display: 'flex',
+                    gap: '12px',
+                    position: 'relative',
+                    borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+                    borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
+                  }}
                 >
                   <button
                     className={`checkbox ${r.completed ? "checked" : ""}`}
@@ -331,8 +432,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                     </div>
                   </button>
                   <div 
-                    style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, cursor: 'pointer', flex: 1 }}
-                    onClick={() => onEditTodo(r)}
+                    style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                   >
                     <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none' }}>
                       {r.title}{" "}
@@ -348,7 +448,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                     </div>
                   </div>
-                  {!r.completed && <PriorityMoveButton row={r} />}
+                  {!r.completed && <DirectionalMenu row={r} />}
                 </div>
               ))
             )}
@@ -394,15 +494,37 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           ) : (
             dateGroups.map(([key, list], gi) => (
               <div key={key} style={{ marginBottom: '20px' }}>
-                <div className="date-header" style={{ textDecoration: 'underline', textUnderlineOffset: '4px' }}>
+                <div className="date-header" style={{ marginRight: '25px' }}>
                   {fmtDateLabel(key)}
                 </div>
-                <div className="separator" />
-                {list.map((r) => (
+                {list.map((r, idx) => (
                   <div
                     key={r.id}
-                    className="list-row"
-                    style={{ cursor: 'pointer' }}
+                    className={isRadialNavOpen !== null ? '' : 'list-row'}
+                    onMouseEnter={() => {
+                      if (isRadialNavOpen === null) {
+                        setHoveredRow(r.id);
+                      }
+                    }}
+                    onMouseLeave={() => setHoveredRow(null)}
+                    onClick={(e) => {
+                      if (!r.completed && (e.target as HTMLElement).tagName !== 'BUTTON') {
+                        if (isRadialNavOpen === null) {
+                          setIsRadialNavOpen(r.id);
+                        }
+                      }
+                    }}
+                    style={{
+                      cursor: r.completed ? 'default' : 'pointer',
+                      opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
+                      padding: '12px 20px',
+                      marginRight: '25px',
+                      display: 'flex',
+                      gap: '12px',
+                      position: 'relative',
+                      borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+                      borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--term-border)'
+                    }}
                   >
                     <button
                       className={`checkbox ${r.completed ? "checked" : ""}`}
@@ -415,8 +537,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       </div>
                     </button>
                     <div 
-                      style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, cursor: 'pointer', flex: 1 }}
-                      onClick={() => onEditTodo(r)}
+                      style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                     >
                       <div className={`title ${r.title.includes("http") ? "underlined" : ""}`}>
                         {r.title}{" "}
@@ -431,7 +552,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                         {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                       </div>
                     </div>
-                    {!r.completed && <PriorityMoveButton row={r} />}
+                  {!r.completed && <DirectionalMenu row={r} />}
                   </div>
                 ))}
                 {gi < dateGroups.length - 1 && <div className="separator" />}
@@ -456,28 +577,53 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   }
 
   return (
-    <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-      <CustomScrollbar style={{ 
-        height: '450px'
-      }}>
-        <div style={{ paddingBottom: '20px' }}>
-        {renderSection('Now', sections.now, 'now', true)}
-        {renderSection('Soon', sections.soon, 'soon', true)}
-        {renderSection('Anytime', sections.anytime, 'anytime', true)}
-        {sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
+    <>
+      {isRadialNavOpen !== null && (
+        <div
+          ref={modalOverlayRef}
+          onClick={() => setIsRadialNavOpen(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setIsRadialNavOpen(null);
+            }
+          }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 1099,
+            background: 'transparent',
+            cursor: 'default',
+            outline: 'none'
+          }}
+          tabIndex={0}
+        />
+      )}
+      <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <CustomScrollbar style={{ 
+          height: '450px'
+        }}>
+          <div style={{ paddingBottom: '20px' }}>
+          {renderSection('Now', sections.now, 'now', true)}
+          {renderSection('Soon', sections.soon, 'soon', true)}
+          {renderSection('Anytime', sections.anytime, 'anytime', true)}
+          {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
+          </div>
+        </CustomScrollbar>
+        
+        <div className="summary" style={{ 
+          background: 'var(--term-panel)',
+          padding: '16px 0 0',
+          borderTop: '1px solid var(--term-border)',
+          marginTop: '20px'
+        }}>
+          <span>
+            {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
+          </span>
         </div>
-      </CustomScrollbar>
-      
-      <div className="summary" style={{ 
-        background: 'var(--term-panel)',
-        padding: '16px 0 0',
-        borderTop: '1px solid var(--term-border)',
-        marginTop: '20px'
-      }}>
-        <span>
-          {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
-        </span>
       </div>
-    </div>
+    </>
   );
 }

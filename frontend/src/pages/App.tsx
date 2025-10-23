@@ -50,7 +50,7 @@ function Inner() {
       const activeTab = settings.tabs.find(t => t.id === activeTabId);
       const mainParsed = parseQuery(query);
       const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
-      
+
       const merged = {
         keywords: [...mainParsed.keywords],
         projects: [...mainParsed.projects, ...(tabParsed?.projects || [])],
@@ -59,40 +59,63 @@ function Inner() {
         priorities: [...(mainParsed.priority || []), ...(tabParsed?.priority || [])],
         statuses: [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])]
       };
-      
-      const req: any = { 
-        query: merged.keywords.join(" "), 
-        page: 0, 
-        page_size: 500, 
-        sort_by: "created_at", 
+
+      // Use explicit status filters if provided, otherwise let frontend handle filtering
+      // Backend combines multiple statuses with AND (not OR), so we can only use single statuses
+      const statusesToSearch = merged.statuses.length > 0
+        ? merged.statuses
+        : ['open']; // Always fetch at least open items
+
+      const req: any = {
+        query: merged.keywords.join(" "),
+        page: 0,
+        page_size: 500,
+        sort_by: "created_at",
         sort_dir: "desc",
         projects: merged.projects,
         contexts: merged.contexts,
         tags: merged.tags,
-        statuses: merged.statuses,
+        statuses: statusesToSearch,
         priorities: merged.priorities
       };
       const res = await Backend.Search(req);
-      setAllRows(Array.isArray(res) ? res : []);
+      let allResults = Array.isArray(res) ? res : [];
+
+      // If showCompleted is enabled and no explicit status filter, also fetch completed items
+      if (settings.showCompleted && merged.statuses.length === 0) {
+        const completedReq = { ...req, statuses: ['completed'] };
+        const completedRes = await Backend.Search(completedReq);
+        const completedResults = Array.isArray(completedRes) ? completedRes : [];
+        // Merge and deduplicate by id
+        const idsInResults = new Set(allResults.map(r => r.id));
+        const newCompleted = completedResults.filter(r => !idsInResults.has(r.id));
+        allResults = [...allResults, ...newCompleted];
+      }
+
+      setAllRows(allResults);
     } catch (err) {
       console.error("Search failed:", err);
       setAllRows([]);
     }
-  }, [query, activeTabId, settings.tabs]);
+  }, [query, activeTabId, settings.tabs, settings.showCompleted]);
 
   React.useEffect(()=>{ runSearch(); }, [runSearch]);
 
-  // Filter rows based on settings
+  // Filter out archived items (unless explicitly searched for)
+  // TerminalList handles showCompleted filtering internally
   const rows = React.useMemo(() => {
-    let filtered = allRows;
-    
-    // Apply show completed filter
-    if (!settings.showCompleted) {
-      filtered = filtered.filter(r => !r.completed);
+    // Don't filter if user explicitly searched for archived items
+    const activeTab = settings.tabs.find(t => t.id === activeTabId);
+    const mainParsed = parseQuery(query);
+    const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
+    const statuses = [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])];
+
+    if (statuses.includes('archived')) {
+      return allRows; // User wants archived items, show them
     }
-    
-    return filtered;
-  }, [allRows, settings.showCompleted]);
+
+    return allRows.filter(r => !r.archived);
+  }, [allRows, query, activeTabId, settings.tabs]);
 
   async function handleToggle(id: number, checked: boolean) {
     await Backend.ToggleComplete(id, checked);
@@ -103,6 +126,11 @@ function Inner() {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
     await Backend.UpdateTodo({ ...todo, section } as any);
+    runSearch();
+  }
+  
+  async function handleArchive(id: number, archived: boolean) {
+    await Backend.Archive(id, archived);
     runSearch();
   }
   
@@ -157,9 +185,9 @@ function Inner() {
   }
 
   return (
-    <div style={{ height: '100vh', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center' }}>
+    <div style={{ height: '100vh', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', overscrollBehavior: 'none' }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} />
-      
+
       <div style={{ width: '100%', maxWidth: '800px' }}>
         {/* PLANCK Branding */}
         <div style={{ 
@@ -292,7 +320,7 @@ function Inner() {
           </div>
         </div>
 
-        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} />
+        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} onArchive={handleArchive} onDelete={handleDeleteTodo} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} />
         
         <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
       </div>
