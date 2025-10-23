@@ -2,6 +2,7 @@ import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 export type TodoRow = {
   id: number; title: string; priority?: string;
@@ -71,6 +72,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
     done: true
   });
+  const [openMenu, setOpenMenu] = React.useState<number | null>(null);
 
   const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -139,6 +141,141 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       onMoveSection(draggedId, section);
       setDraggedId(null);
     }
+  };
+
+  const PriorityMoveButton = ({ row }: { row: TodoRow }) => {
+    const section = row.section || 'anytime';
+    const isOpen = openMenu === row.id;
+    
+    const getIcon = () => {
+      if (section === 'anytime') return <ChevronUp size={16} />;
+      if (section === 'now') return <ChevronDown size={16} />;
+      return <ChevronsUpDown size={16} />;
+    };
+    
+    const getOptionsAbove = () => {
+      if (section === 'anytime') return [{ label: 'Now', value: 'now' }, { label: 'Soon', value: 'soon' }];
+      if (section === 'soon') return [{ label: 'Now', value: 'now' }];
+      return [];
+    };
+    
+    const getOptionsBelow = () => {
+      if (section === 'now') return [{ label: 'Soon', value: 'soon' }, { label: 'Anytime', value: 'anytime' }];
+      if (section === 'soon') return [{ label: 'Anytime', value: 'anytime' }];
+      return [];
+    };
+    
+    const menuRef = React.useRef<HTMLDivElement>(null);
+    
+    React.useEffect(() => {
+      if (!isOpen) return;
+      
+      const handleClickOutside = (e: MouseEvent) => {
+        if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+          setOpenMenu(null);
+        }
+      };
+      
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+    
+    const handleMove = (newSection: string) => {
+      onMoveSection(row.id, newSection);
+      setOpenMenu(null);
+    };
+    
+    const renderMenu = (options: Array<{label: string, value: string}>, position: 'above' | 'below') => {
+      if (options.length === 0) return null;
+      
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            right: 0,
+            [position === 'above' ? 'bottom' : 'top']: '100%',
+            marginTop: position === 'below' ? '4px' : undefined,
+            marginBottom: position === 'above' ? '4px' : undefined,
+            background: 'var(--term-panel)',
+            border: '1px solid var(--term-border)',
+            borderRadius: '6px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            minWidth: '100px',
+            overflow: 'hidden'
+          }}
+        >
+          {options.map((opt, idx) => (
+            <button
+              key={opt.value}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMove(opt.value);
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 12px',
+                background: 'transparent',
+                border: 'none',
+                borderTop: idx > 0 ? '1px solid var(--term-border)' : 'none',
+                color: 'var(--term-fg)',
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'background 0.15s ease'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--term-accent-dim)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    };
+    
+    return (
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: '20px' }} ref={menuRef}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpenMenu(isOpen ? null : row.id);
+          }}
+          style={{
+            background: 'var(--term-panel)',
+            border: '1px solid var(--term-border)',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            padding: '6px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'var(--term-fg)',
+            transition: 'all 0.15s ease',
+            opacity: 0.7
+          }}
+          onMouseEnter={(e) => { 
+            e.currentTarget.style.opacity = '1';
+            e.currentTarget.style.borderColor = 'var(--term-accent)';
+          }}
+          onMouseLeave={(e) => { 
+            e.currentTarget.style.opacity = '0.7';
+            e.currentTarget.style.borderColor = 'var(--term-border)';
+          }}
+          title={`Move from ${section}`}
+        >
+          {getIcon()}
+        </button>
+        
+        {isOpen && (
+          <>
+            {renderMenu(getOptionsAbove(), 'above')}
+            {renderMenu(getOptionsBelow(), 'below')}
+          </>
+        )}
+      </div>
+    );
   };
 
   const renderSection = (title: string, items: TodoRow[], sectionKey: string, canCollapse = true) => {
@@ -211,6 +348,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                     </div>
                   </div>
+                  {!r.completed && <PriorityMoveButton row={r} />}
                 </div>
               ))
             )}
@@ -293,6 +431,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                         {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                       </div>
                     </div>
+                    {!r.completed && <PriorityMoveButton row={r} />}
                   </div>
                 ))}
                 {gi < dateGroups.length - 1 && <div className="separator" />}
