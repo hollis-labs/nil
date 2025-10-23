@@ -72,7 +72,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none focus:outline-none bg-transparent tiptap-editor",
-        style: "min-height: 120px; max-height: 200px; overflow-y: auto; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px;",
+        style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
       },
     },
   });
@@ -112,9 +112,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) {
-        onOpenChange(false);
-      }
+      // ESC key disabled - users must click Close/Cancel
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && open) {
         e.preventDefault();
         handleSubmit(e as any);
@@ -122,7 +120,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onOpenChange, line, priority, due, tags, contexts, projects]);
+  }, [open, line, priority, due, tags, contexts, projects]);
 
   if (!open) return null;
 
@@ -215,8 +213,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   };
 
   return (
-    <div style={modalStyle}>
-      <div className="terminal-card" style={{ 
+    <>
+      <style>{`
+        .tiptap-editor ul,
+        .tiptap-editor ol {
+          padding-left: 1.2em !important;
+        }
+      `}</style>
+      <div style={modalStyle}>
+        <div className="terminal-card" style={{ 
         width: '720px', 
         maxWidth: '95vw', 
         height: '650px',
@@ -226,7 +231,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Quick Add Todo'}</div>
+            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Quick Add'}</div>
             <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
           </div>
         </div>
@@ -280,13 +285,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Description</label>
-            <div style={{ 
-              border: '1px solid var(--term-border)', 
-              borderRadius: '6px', 
+            <div style={{
+              border: '1px solid var(--term-border)',
+              borderRadius: '6px',
               background: 'var(--term-bg)',
               overflow: 'hidden',
+              maxHeight: '200px'
             }}>
-              <EditorContent editor={editor} />
+              <CustomScrollbar style={{ height: '200px' }}>
+                <EditorContent editor={editor} />
+              </CustomScrollbar>
             </div>
           </div>
 
@@ -371,5 +379,6 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         </div>
       </div>
     </div>
+    </>
   );
 }

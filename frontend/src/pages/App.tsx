@@ -28,16 +28,16 @@ function Inner() {
     const saved = localStorage.getItem('planck.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
   });
-  
+
   React.useEffect(() => {
     localStorage.setItem('planck.viewMode', viewMode);
   }, [viewMode]);
-  
+
   const defaultNewTodoFilters = React.useMemo(() => {
     const activeTab = settings.tabs.find(t => t.id === activeTabId);
     const mainParsed = parseQuery(query);
     const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
-    
+
     return {
       contexts: [...mainParsed.contexts, ...(tabParsed?.contexts || [])],
       projects: [...mainParsed.projects, ...(tabParsed?.projects || [])],
@@ -121,19 +121,19 @@ function Inner() {
     await Backend.ToggleComplete(id, checked);
     runSearch();
   }
-  
+
   async function handleMoveSection(id: number, section: string) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
     await Backend.UpdateTodo({ ...todo, section } as any);
     runSearch();
   }
-  
+
   async function handleArchive(id: number, archived: boolean) {
     await Backend.Archive(id, archived);
     runSearch();
   }
-  
+
   function handleOpenNotes(row: TodoRow) { setNotesTodo(row); setNotesOpen(true); }
   async function handleSaveNotes(md: string) {
     if (!notesTodo) return;
@@ -156,12 +156,12 @@ function Inner() {
     setQuickOpen(false);
     runSearch();
   }
-  
+
   function handleEditTodo(row: TodoRow) {
     setEditTodo(row);
     setQuickOpen(true);
   }
-  
+
   async function handleUpdateTodo(todo: TodoRow) {
     const reparsed = await Backend.CreateTodoFromLine(todo.title);
     const merged = {
@@ -176,7 +176,7 @@ function Inner() {
     setEditTodo(null);
     runSearch();
   }
-  
+
   async function handleDeleteTodo(id: number) {
     await Backend.DeleteTodo(id);
     setQuickOpen(false);
@@ -190,13 +190,13 @@ function Inner() {
 
       <div style={{ width: '100%', maxWidth: '800px' }}>
         {/* PLANCK Branding */}
-        <div style={{ 
+        <div style={{
           marginBottom: '12px',
           display: 'flex',
           alignItems: 'baseline',
           gap: '6px'
         }}>
-          <div style={{ 
+          <div style={{
             fontFamily: '"Courier New", Courier, monospace',
             fontSize: '14px',
             fontWeight: 800,
@@ -205,7 +205,7 @@ function Inner() {
           }}>
             PLANCK
           </div>
-          <div style={{ 
+          <div style={{
             fontSize: '10px',
             color: 'var(--term-dim)',
             fontFamily: 'serif',
@@ -213,7 +213,7 @@ function Inner() {
             opacity: 0.6,
             letterSpacing: '0.02em'
           }}>
-            <span style={{ fontStyle: 'italic' }}>h</span> — the quantum of action
+            <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
           </div>
         </div>
         {/* Search Bar */}
@@ -233,7 +233,7 @@ function Inner() {
             onChange={(e)=>setQuery(e.target.value)}
             onKeyDown={(e)=>{ if(e.key==="Enter") runSearch(); }}
           />
-          <button 
+          <button
             style={{
               padding: '8px',
               background: 'var(--term-panel)',
@@ -258,7 +258,7 @@ function Inner() {
           >
             <Plus size={16} color="var(--term-fg)" />
           </button>
-          <button 
+          <button
             style={{
               padding: '8px',
               background: 'var(--term-panel)',
@@ -272,7 +272,7 @@ function Inner() {
               height: '32px',
               width: '32px'
             }}
-            onClick={()=>setSettingsOpen(true)} 
+            onClick={()=>setSettingsOpen(true)}
             title="Settings"
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--term-accent)';
@@ -297,7 +297,7 @@ function Inner() {
               {tab.label}
             </button>
           ))}
-          
+
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
             <button
               className={`badge ${viewMode === 'scope' ? 'info' : ''}`}
@@ -320,16 +320,16 @@ function Inner() {
           </div>
         </div>
 
-        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} onArchive={handleArchive} onDelete={handleDeleteTodo} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} />
-        
+        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} onArchive={handleArchive} onDelete={handleDeleteTodo} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} closeRadialMenus={quickOpen || notesOpen || settingsOpen || editTodo !== null} />
+
         <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
       </div>
 
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <NotesModal open={notesOpen} onOpenChange={setNotesOpen} todo={notesTodo} onSave={handleSaveNotes} />
-      <EditTodoModal 
-        open={quickOpen} 
-        onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditTodo(null); }} 
+      <EditTodoModal
+        open={quickOpen}
+        onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditTodo(null); }}
         onSubmit={handleQuickAdd}
         onUpdate={handleUpdateTodo}
         onDelete={handleDeleteTodo}

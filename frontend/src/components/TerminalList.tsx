@@ -66,9 +66,10 @@ type Props = {
   showCompleted: boolean;
   onEditTodo: (row: TodoRow) => void;
   viewMode?: ViewMode;
+  closeRadialMenus?: boolean;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope' }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', closeRadialMenus = false }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -83,6 +84,12 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       modalOverlayRef.current.focus();
     }
   }, [isRadialNavOpen]);
+
+  React.useEffect(() => {
+    if (closeRadialMenus) {
+      setIsRadialNavOpen(null);
+    }
+  }, [closeRadialMenus]);
 
   const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
