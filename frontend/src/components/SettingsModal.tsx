@@ -1,12 +1,14 @@
 import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { themePresets, TermTheme } from "@/theme/theme";
+import CustomScrollbar from "@/components/CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Settings = {
   showCompleted: boolean;
   tabs: ScopeTab[];
   dbPath?: string;
+  defaultView?: 'scope' | 'date';
 };
 
 type ScopeTab = {
@@ -27,7 +29,8 @@ const defaultSettings: Settings = {
     { id: '2', label: 'Work', query: '@work' },
     { id: '3', label: 'Home', query: '@home' },
   ],
-  dbPath: './data'
+  dbPath: './data',
+  defaultView: 'scope'
 };
 
 const SettingsContext = React.createContext<{
@@ -66,8 +69,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   const [local, setLocal] = React.useState(settings);
   const [activeTab, setActiveTab] = React.useState<'general' | 'tabs' | 'theme' | 'data'>('general');
   const { theme, setTheme } = useTermTheme();
-  const [localTheme, setLocalTheme] = React.useState(theme);
-  const [customTheme, setCustomTheme] = React.useState(theme);
+  const [localTheme, setLocalTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
+  const [customTheme, setCustomTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
   const [selectedPreset, setSelectedPreset] = React.useState<string>('custom');
   const [draggedTabId, setDraggedTabId] = React.useState<string | null>(null);
 
@@ -75,7 +78,15 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
     if (open) {
       setLocal(settings);
       setActiveTab('general');
-      setLocalTheme(theme);
+      // Ensure theme has all properties by merging with default
+      const fullTheme = { ...themePresets.default, ...theme };
+      console.log('[Settings] Full theme properties:', Object.keys(fullTheme));
+      console.log('[Settings] Scrollbar properties:', {
+        scrollbarBg: fullTheme.scrollbarBg,
+        scrollbarThumb: fullTheme.scrollbarThumb,
+        scrollbarThumbHover: fullTheme.scrollbarThumbHover
+      });
+      setLocalTheme(fullTheme);
       // Check if current theme matches a preset
       const matchingPreset = Object.entries(themePresets).find(([_, preset]) => 
         JSON.stringify(preset) === JSON.stringify(theme)
@@ -83,7 +94,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
       setSelectedPreset(matchingPreset ? matchingPreset[0] : 'custom');
       // If it's custom, save it so we don't lose it
       if (!matchingPreset) {
-        setCustomTheme(theme);
+        setCustomTheme(fullTheme);
       }
     }
   }, [open, settings, theme]);
@@ -220,15 +231,13 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
           </div>
 
           {/* Scrollable Body */}
-          <div style={{ 
+          <CustomScrollbar style={{ 
             flex: 1, 
-            overflowY: 'auto', 
-            padding: '0 20px',
             minHeight: 0
           }}>
-
-          {/* General Settings */}
-          {activeTab === 'general' && (
+            <div style={{ padding: '0 20px' }}>
+              {/* General Settings */}
+              {activeTab === 'general' && (
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Display Options</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
@@ -245,6 +254,31 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               </div>
               <div style={{ marginTop: '12px', fontSize: '11px' }} className="text-dim">
                 When enabled, completed todos will appear in the section lists (grayed out).
+              </div>
+              
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+                  Default View
+                </label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className={`badge ${local.defaultView === 'scope' ? 'success' : ''}`}
+                    onClick={() => setLocal({ ...local, defaultView: 'scope' })}
+                    style={{ padding: '6px 12px' }}
+                  >
+                    Scope (Now/Soon/Anytime)
+                  </button>
+                  <button
+                    className={`badge ${local.defaultView === 'date' ? 'success' : ''}`}
+                    onClick={() => setLocal({ ...local, defaultView: 'date' })}
+                    style={{ padding: '6px 12px' }}
+                  >
+                    Date
+                  </button>
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
+                  Choose which view to show when the app loads
+                </div>
               </div>
               
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', marginTop: '24px' }}>Database Location</h3>
@@ -395,7 +429,41 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
           {/* Theme Settings */}
           {activeTab === 'theme' && (
             <div>
-              <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Color Theme</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Color Theme</h3>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    className="badge warn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      alert('Clearing theme cache...');
+                      console.log('[Settings] CLEARING THEME CACHE');
+                      localStorage.removeItem('todo.term.theme');
+                      alert('Theme cache cleared! Reloading...');
+                      window.location.reload();
+                    }}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    Clear Cache
+                  </button>
+                  <button 
+                    className="badge success"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('[Settings] Setting to DEFAULT theme');
+                      const defaultTheme = themePresets.default;
+                      console.log('[Settings] Default theme:', defaultTheme);
+                      setTheme(defaultTheme);
+                      alert('Theme set to DEFAULT (dark blue). Check the colors!');
+                    }}
+                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                  >
+                    Use Default
+                  </button>
+                </div>
+              </div>
               <div style={{ fontSize: '11px', marginBottom: '16px' }} className="text-dim">
                 Select a theme preset below. Each theme is ready to use.
               </div>
@@ -425,20 +493,57 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                         <span className="badge success" style={{ fontSize: '10px' }}>Active</span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      {Object.entries(preset).slice(0, 5).map(([key, color]) => (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {Object.entries(preset)
+                        .filter(([key]) => !key.startsWith('scrollbar'))
+                        .map(([key, color]) => (
+                          <div
+                            key={key}
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              background: color,
+                              borderRadius: '4px',
+                              border: '1px solid var(--term-border)'
+                            }}
+                            title={`${key}: ${color}`}
+                          />
+                        ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '6px', fontSize: '10px' }} className="text-dim">
+                      <span>Scrollbar:</span>
+                      <div style={{ display: 'flex', gap: '4px' }}>
                         <div
-                          key={key}
                           style={{
-                            width: '32px',
-                            height: '32px',
-                            background: color,
-                            borderRadius: '4px',
+                            width: '20px',
+                            height: '20px',
+                            background: preset.scrollbarBg,
+                            borderRadius: '3px',
                             border: '1px solid var(--term-border)'
                           }}
-                          title={`${key}: ${color}`}
+                          title={`Track: ${preset.scrollbarBg}`}
                         />
-                      ))}
+                        <div
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            background: preset.scrollbarThumb,
+                            borderRadius: '3px',
+                            border: '1px solid var(--term-border)'
+                          }}
+                          title={`Thumb: ${preset.scrollbarThumb}`}
+                        />
+                        <div
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            background: preset.scrollbarThumbHover,
+                            borderRadius: '3px',
+                            border: '1px solid var(--term-border)'
+                          }}
+                          title={`Hover: ${preset.scrollbarThumbHover}`}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -462,40 +567,109 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                     )}
                   </div>
                   {selectedPreset === 'custom' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
-                      {Object.entries(localTheme).map(([key, color]) => (
-                        <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <label style={{ fontSize: '11px', width: '80px', textTransform: 'capitalize' }} className="text-dim">{key}</label>
-                          <input 
-                            type="color" 
-                            value={color} 
-                            onChange={(e)=>{
-                              const newTheme = {...localTheme, [key]: e.target.value};
-                              setLocalTheme(newTheme);
-                              setCustomTheme(newTheme);
-                            }}
-                            style={{ width: '40px', height: '28px', border: '1px solid var(--term-border)', borderRadius: '4px', cursor: 'pointer' }}
-                          />
-                          <input 
-                            value={color}
-                            onChange={(e)=>{
-                              const newTheme = {...localTheme, [key]: e.target.value};
-                              setLocalTheme(newTheme);
-                              setCustomTheme(newTheme);
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: '6px 10px',
-                              background: 'var(--term-bg)',
-                              border: '1px solid var(--term-border)',
-                              borderRadius: '4px',
-                              color: 'var(--term-fg)',
-                              fontSize: '12px',
-                              fontFamily: 'monospace'
-                            }}
-                          />
-                        </div>
-                      ))}
+                    <div style={{ marginTop: '12px' }}>
+                      {/* Base Colors */}
+                      <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px', marginTop: '12px' }} className="text-dim">
+                        Base Colors
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {Object.entries(localTheme)
+                          .filter(([key]) => !key.startsWith('scrollbar'))
+                          .map(([key, color]) => {
+                            if (typeof color !== 'string') return null;
+                            const label = key
+                              .replace(/([A-Z])/g, ' $1')
+                              .replace(/^./, (str) => str.toUpperCase())
+                              .trim();
+                            
+                            return (
+                              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <label style={{ fontSize: '11px', width: '80px' }} className="text-dim">{label}</label>
+                                <input 
+                                  type="color" 
+                                  value={color || '#000000'} 
+                                  onChange={(e)=>{
+                                    const newTheme = {...localTheme, [key]: e.target.value};
+                                    setLocalTheme(newTheme);
+                                    setCustomTheme(newTheme);
+                                  }}
+                                  style={{ width: '40px', height: '28px', border: '1px solid var(--term-border)', borderRadius: '4px', cursor: 'pointer' }}
+                                />
+                                <input 
+                                  value={color || ''}
+                                  onChange={(e)=>{
+                                    const newTheme = {...localTheme, [key]: e.target.value};
+                                    setLocalTheme(newTheme);
+                                    setCustomTheme(newTheme);
+                                  }}
+                                  placeholder="#000000"
+                                  style={{
+                                    flex: 1,
+                                    padding: '6px 10px',
+                                    background: 'var(--term-bg)',
+                                    border: '1px solid var(--term-border)',
+                                    borderRadius: '4px',
+                                    color: 'var(--term-fg)',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace'
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                      </div>
+
+                      {/* Scrollbar Colors */}
+                      <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px', marginTop: '16px' }} className="text-dim">
+                        Scrollbar
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {Object.entries(localTheme)
+                          .filter(([key]) => key.startsWith('scrollbar'))
+                          .map(([key, color]) => {
+                            if (typeof color !== 'string') return null;
+                            const label = key
+                              .replace(/scrollbar/i, '')
+                              .replace(/([A-Z])/g, ' $1')
+                              .replace(/^./, (str) => str.toUpperCase())
+                              .trim();
+                            
+                            return (
+                              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <label style={{ fontSize: '11px', width: '80px' }} className="text-dim">{label}</label>
+                                <input 
+                                  type="color" 
+                                  value={color || '#000000'} 
+                                  onChange={(e)=>{
+                                    const newTheme = {...localTheme, [key]: e.target.value};
+                                    setLocalTheme(newTheme);
+                                    setCustomTheme(newTheme);
+                                  }}
+                                  style={{ width: '40px', height: '28px', border: '1px solid var(--term-border)', borderRadius: '4px', cursor: 'pointer' }}
+                                />
+                                <input 
+                                  value={color || ''}
+                                  onChange={(e)=>{
+                                    const newTheme = {...localTheme, [key]: e.target.value};
+                                    setLocalTheme(newTheme);
+                                    setCustomTheme(newTheme);
+                                  }}
+                                  placeholder="#000000"
+                                  style={{
+                                    flex: 1,
+                                    padding: '6px 10px',
+                                    background: 'var(--term-bg)',
+                                    border: '1px solid var(--term-border)',
+                                    borderRadius: '4px',
+                                    color: 'var(--term-fg)',
+                                    fontSize: '12px',
+                                    fontFamily: 'monospace'
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                      </div>
                     </div>
                   )}
                   {selectedPreset !== 'custom' && (
@@ -576,7 +750,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               </div>
             </div>
           )}
-          </div>
+            </div>
+          </CustomScrollbar>
 
           {/* Fixed Footer */}
           <div style={{ 

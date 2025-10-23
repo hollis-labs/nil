@@ -8,6 +8,9 @@
   --term-warn: #eab308;      /* star */
   --term-info: #60a5fa;      /* dot */
   --term-border: #1f2937;
+  --scrollbar-bg: #0f131a;
+  --scrollbar-thumb: #1f2937;
+  --scrollbar-thumb-hover: #2d3748;
 }
 
 body {
@@ -15,22 +18,77 @@ body {
   color: var(--term-fg);
 }
 
+html {
+  background: var(--term-bg);
+  overflow-y: scroll; /* Force scrollbar to always show */
+}
+
+/* Global scrollbar styles for all elements */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px !important;
+  height: 10px !important;
 }
 ::-webkit-scrollbar-track {
-  background: var(--term-panel);
+  background: var(--scrollbar-bg) !important;
+  border-radius: 0px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--term-accent);
-  border-radius: 4px;
+  background: var(--scrollbar-thumb) !important;
+  border-radius: 5px;
+  border: 2px solid var(--scrollbar-bg) !important;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--term-info);
+  background: var(--scrollbar-thumb-hover) !important;
 }
+::-webkit-scrollbar-corner {
+  background: var(--scrollbar-bg) !important;
+}
+
+/* Firefox scrollbar support */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--term-accent) var(--term-panel);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+}
+
+html {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg) !important;
+}
+
+body {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg) !important;
+}
+
+/* WebKit scrollbar for html and body specifically */
+html::-webkit-scrollbar {
+  width: 10px !important;
+}
+html::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg) !important;
+}
+html::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb) !important;
+  border-radius: 5px;
+  border: 2px solid var(--scrollbar-bg) !important;
+}
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover) !important;
+}
+
+body::-webkit-scrollbar {
+  width: 10px !important;
+}
+body::-webkit-scrollbar-track {
+  background: var(--scrollbar-bg) !important;
+}
+body::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb) !important;
+  border-radius: 5px;
+  border: 2px solid var(--scrollbar-bg) !important;
+}
+body::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover) !important;
 }
 
 .terminal-card {
@@ -89,20 +147,20 @@ a.term-link:hover { opacity: 0.9; }
 }
 .tiptap-editor::-webkit-scrollbar-track,
 .todo-list-scroll::-webkit-scrollbar-track {
-  background: var(--term-panel);
+  background: var(--scrollbar-bg);
   border-radius: 4px;
 }
 .tiptap-editor::-webkit-scrollbar-thumb,
 .todo-list-scroll::-webkit-scrollbar-thumb {
-  background: var(--term-accent);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
 .tiptap-editor::-webkit-scrollbar-thumb:hover,
 .todo-list-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--term-info);
+  background: var(--scrollbar-thumb-hover);
 }
 .tiptap-editor,
 .todo-list-scroll {
   scrollbar-width: thin;
-  scrollbar-color: var(--term-accent) var(--term-panel);
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
 }

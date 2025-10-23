@@ -5,11 +5,14 @@ import NotesModal from "@/components/NotesModal";
 import EditTodoModal from "@/components/EditTodoModal";
 import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
+import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { SlidersVertical, Plus } from "lucide-react";
+import { SlidersVertical, Plus, Calendar, List } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 
 import * as Backend from "../../wailsjs/go/main/App";
+
+type ViewMode = 'scope' | 'date';
 
 function Inner() {
   const [allRows, setAllRows] = React.useState<TodoRow[]>([]);
@@ -21,6 +24,14 @@ function Inner() {
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
   const { settings } = useSettings();
+  const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
+    const saved = localStorage.getItem('planck.viewMode');
+    return (saved as ViewMode) || settings.defaultView || 'scope';
+  });
+  
+  React.useEffect(() => {
+    localStorage.setItem('planck.viewMode', viewMode);
+  }, [viewMode]);
   
   const defaultNewTodoFilters = React.useMemo(() => {
     const activeTab = settings.tabs.find(t => t.id === activeTabId);
@@ -146,7 +157,7 @@ function Inner() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center' }}>
+    <div style={{ height: '100vh', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center' }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} />
       
       <div style={{ width: '100%', maxWidth: '800px' }}>
@@ -246,23 +257,42 @@ function Inner() {
           </button>
         </div>
 
-        {/* Scope Tabs */}
-        {settings.tabs.length > 0 && (
-          <div style={{ marginBottom: '16px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {settings.tabs.map(tab => (
-              <button
-                key={tab.id}
-                className={`badge ${activeTabId === tab.id ? 'success' : ''}`}
-                onClick={() => setActiveTabId(tab.id)}
-                style={{ padding: '6px 12px', fontSize: '12px' }}
-              >
-                {tab.label}
-              </button>
-            ))}
+        {/* Scope Tabs & View Mode Toggle */}
+        <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {settings.tabs.length > 0 && settings.tabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`badge ${activeTabId === tab.id ? 'success' : ''}`}
+              onClick={() => setActiveTabId(tab.id)}
+              style={{ padding: '6px 12px', fontSize: '12px' }}
+            >
+              {tab.label}
+            </button>
+          ))}
+          
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+            <button
+              className={`badge ${viewMode === 'scope' ? 'info' : ''}`}
+              onClick={() => setViewMode('scope')}
+              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              title="Scope View (Now/Soon/Anytime)"
+            >
+              <List size={12} />
+              Scope
+            </button>
+            <button
+              className={`badge ${viewMode === 'date' ? 'info' : ''}`}
+              onClick={() => setViewMode('date')}
+              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+              title="Date View (Due Dates)"
+            >
+              <Calendar size={12} />
+              Date
+            </button>
           </div>
-        )}
+        </div>
 
-        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} />
+        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} />
         
         <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
       </div>
@@ -288,7 +318,6 @@ export default function AppPage() {
   return (
     <SettingsProvider>
       <ThemeProvider>
-        <link rel="stylesheet" href="/src/theme/theme.css" />
         <Inner />
       </ThemeProvider>
     </SettingsProvider>

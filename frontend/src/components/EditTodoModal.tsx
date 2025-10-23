@@ -4,6 +4,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { TodoRow } from "./TerminalList";
 import TagsInput from "./TagsInput";
 import TodoTitleInput from "./TodoTitleInput";
+import CustomScrollbar from "./CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -123,20 +124,29 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     e.preventDefault();
     const notes_md = editor?.getHTML() || "";
     
+    // Strip prefixes from tags/contexts/projects (in case user typed them)
+    const cleanTags = tags.map(t => t.replace(/^#/, ''));
+    const cleanContexts = contexts.map(c => c.replace(/^@/, ''));
+    const cleanProjects = projects.map(p => p.replace(/^\+/, ''));
+    
     if (isEditMode && editTodo && onUpdate) {
       const updated: TodoRow = {
         ...editTodo,
         title: line,
         priority: priority || undefined,
         due_at: due || undefined,
-        tags,
-        contexts,
-        projects,
+        tags: cleanTags,
+        contexts: cleanContexts,
+        projects: cleanProjects,
         notes_md,
       };
       onUpdate(updated);
     } else {
-      const extras: any = { tags, contexts, projects };
+      const extras: any = { 
+        tags: cleanTags, 
+        contexts: cleanContexts, 
+        projects: cleanProjects 
+      };
       if (priority) extras.priority = priority;
       if (due) extras.due = due;
       if (notes_md) extras.notes_md = notes_md;
@@ -197,12 +207,11 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         </div>
 
         {/* Scrollable Body */}
-        <div style={{ 
+        <CustomScrollbar style={{ 
           flex: 1, 
-          overflowY: 'auto', 
-          padding: '0 20px',
           minHeight: 0
         }}>
+          <div style={{ padding: '0 20px' }}>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Task</label>
@@ -300,7 +309,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             <TagsInput tags={tags} onTagsChange={setTags} placeholder="Add tag..." prefix="#" />
           </div>
         </form>
-        </div>
+          </div>
+        </CustomScrollbar>
 
         {/* Fixed Footer */}
         <div style={{ 
