@@ -2,10 +2,17 @@ import * as React from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TodoRow } from "./TerminalList";
-import TagsInput from "./TagsInput";
+import TagsAutocomplete from "./TagsAutocomplete";
+import ProjectsAutocomplete from "./ProjectsAutocomplete";
+import ContextsAutocomplete from "./ContextsAutocomplete";
 import TodoTitleInput from "./TodoTitleInput";
 import CustomScrollbar from "./CustomScrollbar";
 import { useSettings } from "./SettingsModal";
+import TemplatePickerCombobox from "./TemplatePickerCombobox";
+import TemplateSaveDialog from "./TemplateSaveDialog";
+import { TaskTemplate } from "@/lib/templates";
+import { getActiveSession } from "@/lib/sessionContext";
+import { Save } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -35,6 +42,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [availableProjects, setAvailableProjects] = React.useState<string[]>([]);
   const [availableContexts, setAvailableContexts] = React.useState<string[]>([]);
   const [availableTags, setAvailableTags] = React.useState<string[]>([]);
+  const [showTemplateSaveDialog, setShowTemplateSaveDialog] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -95,12 +103,25 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           editor.commands.setContent(editTodo.notes_md || "");
         }
       } else {
+        // Priority order: session context > search filters > default tags
+        const activeSession = getActiveSession();
+
         setLine("");
-        setPriority("");
+        setPriority(activeSession?.priority || "");
         setDue("");
-        setTags(defaultTags);
-        setContexts(defaultContexts);
-        setProjects(defaultProjects);
+
+        // Merge session context with search filters
+        const sessionTags = activeSession?.tags || [];
+        const sessionContexts = activeSession?.contexts || [];
+        const sessionProjects = activeSession?.projects || [];
+
+        const mergedTags = [...new Set([...sessionTags, ...defaultTags])];
+        const mergedContexts = [...new Set([...sessionContexts, ...defaultContexts])];
+        const mergedProjects = [...new Set([...sessionProjects, ...defaultProjects])];
+
+        setTags(mergedTags);
+        setContexts(mergedContexts);
+        setProjects(mergedProjects);
         setUseDefaults(true);
         if (editor) {
           editor.commands.setContent("");
@@ -190,6 +211,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
   };
 
+  const handleTemplateSelect = (template: TaskTemplate) => {
+    // Merge template values with existing ones
+    setContexts([...new Set([...contexts, ...template.contexts])]);
+    setProjects([...new Set([...projects, ...template.projects])]);
+    setTags([...new Set([...tags, ...template.tags])]);
+    if (template.priority && !priority) {
+      setPriority(template.priority);
+    }
+  };
+
 
 
   const modalStyle = {
@@ -243,10 +274,27 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           flex: 1,
           minHeight: 0
         }}>
-          <div style={{ padding: '0 20px' }}>
+          <div style={{ padding: '0 20px 40px 20px' }}>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Task</label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <label style={{ fontSize: '12px' }} className="text-dim">Task</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <TemplatePickerCombobox
+                  onSelect={handleTemplateSelect}
+                  currentValues={{ contexts, projects, tags, priority: priority || undefined }}
+                />
+                <button
+                  type="button"
+                  className="badge"
+                  onClick={() => setShowTemplateSaveDialog(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                >
+                  <Save size={12} />
+                  Save Template
+                </button>
+              </div>
+            </div>
             <TodoTitleInput
               value={line}
               onChange={setLine}
@@ -332,17 +380,17 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
-            <TagsInput tags={contexts} onTagsChange={setContexts} placeholder="Add context (e.g., work, home)..." prefix="@" />
+            <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context (e.g., work, home)..." />
           </div>
 
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
-            <TagsInput tags={projects} onTagsChange={setProjects} placeholder="Add project (e.g., myproject)..." prefix="+" />
+            <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project (e.g., myproject)..." />
           </div>
 
           <div>
             <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
-            <TagsInput tags={tags} onTagsChange={setTags} placeholder="Add tag..." prefix="#" />
+            <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
           </div>
         </form>
           </div>
@@ -381,6 +429,17 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
         </div>
       </div>
+
+      <TemplateSaveDialog
+        open={showTemplateSaveDialog}
+        onOpenChange={setShowTemplateSaveDialog}
+        values={{
+          contexts,
+          projects,
+          tags,
+          priority: (priority as 'A' | 'B' | 'C') || undefined,
+        }}
+      />
     </div>
     </>
   );

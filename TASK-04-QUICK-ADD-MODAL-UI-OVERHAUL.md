@@ -124,7 +124,7 @@ Footer (Fixed)
 - Conditional render based on activeTab
 - Description tab: editor takes full height minus margin
 
-### 5. Description Editor Improvements
+### 5. Description Editor Improvements (DONE!)
 **File**: `frontend/src/components/EditTodoModal.tsx`
 
 **Changes**:

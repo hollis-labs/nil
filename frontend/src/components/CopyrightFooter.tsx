@@ -82,7 +82,7 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
       </div>
       <div className="copyright-modal-text">
         <h3>PLANCK</h3>
-        <p>A quantum-efficient task organizer built for precision planning and minimal friction. Organize your work in discrete, actionable units.</p>
+        <p>Optimize for speed, precision planning, and minimal friction. Organize your work in discrete, actionable units. The quantum of action.</p>
         <div className="copyright-modal-links">
           <a href="https://hollislabs.com" target="_blank" rel="noopener noreferrer">
             Visit Hollis Labs
@@ -96,10 +96,10 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
   );
 };
 
-export const CopyrightFooter: React.FC<CopyrightFooterProps> = ({ 
-  actions, 
-  version, 
-  buildDate 
+export const CopyrightFooter: React.FC<CopyrightFooterProps> = ({
+  actions,
+  version,
+  buildDate
 }) => {
   const [showModal, setShowModal] = React.useState(false);
 
@@ -108,9 +108,9 @@ export const CopyrightFooter: React.FC<CopyrightFooterProps> = ({
       <div className="copyright-footer">
         {version && buildDate && (
           <div className="copyright-footer-version">
-            <span style={{ 
-              fontSize: '0.75rem', 
-              color: 'var(--term-dim)', 
+            <span style={{
+              fontSize: '0.75rem',
+              color: 'var(--term-dim)',
               fontFamily: 'monospace',
               opacity: 0.6
             }}>

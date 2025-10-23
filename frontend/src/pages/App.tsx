@@ -4,11 +4,13 @@ import KeyboardScope from "@/components/KeyboardScope";
 import NotesModal from "@/components/NotesModal";
 import EditTodoModal from "@/components/EditTodoModal";
 import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
+import SessionContextModal from "@/components/SessionContextModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { SlidersVertical, Plus, Calendar, List } from "lucide-react";
+import { Settings, Plus, Calendar, List, Target } from "lucide-react";
 import { parseQuery } from "@/lib/query";
+import { getActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
 
@@ -21,8 +23,10 @@ function Inner() {
   const [notesTodo, setNotesTodo] = React.useState<any>(null);
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [sessionContextOpen, setSessionContextOpen] = React.useState(false);
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
+  const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -32,6 +36,25 @@ function Inner() {
   React.useEffect(() => {
     localStorage.setItem('planck.viewMode', viewMode);
   }, [viewMode]);
+
+  // Update session filter count when component mounts or session changes
+  const updateSessionFilterCount = React.useCallback(() => {
+    const session = getActiveSession();
+    if (!session) {
+      setSessionFilterCount(0);
+      return;
+    }
+    const count =
+      (session.contexts?.length || 0) +
+      (session.projects?.length || 0) +
+      (session.tags?.length || 0) +
+      (session.priority ? 1 : 0);
+    setSessionFilterCount(count);
+  }, []);
+
+  React.useEffect(() => {
+    updateSessionFilterCount();
+  }, [updateSessionFilterCount]);
 
   const defaultNewTodoFilters = React.useMemo(() => {
     const activeTab = settings.tabs.find(t => t.id === activeTabId);
@@ -270,10 +293,11 @@ function Inner() {
               justifyContent: 'center',
               transition: 'all 0.15s ease',
               height: '32px',
-              width: '32px'
+              width: '32px',
+              position: 'relative'
             }}
-            onClick={()=>setSettingsOpen(true)}
-            title="Settings"
+            onClick={()=>setSessionContextOpen(true)}
+            title="Session Context"
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--term-accent)';
             }}
@@ -281,7 +305,27 @@ function Inner() {
               e.currentTarget.style.borderColor = 'var(--term-border)';
             }}
           >
-            <SlidersVertical size={16} color="var(--term-fg)" />
+            <Target size={16} color="var(--term-fg)" />
+            {sessionFilterCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-4px',
+                right: '-4px',
+                background: 'var(--term-accent)',
+                color: '#000',
+                borderRadius: '50%',
+                width: '16px',
+                height: '16px',
+                fontSize: '10px',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid var(--term-bg)'
+              }}>
+                {sessionFilterCount}
+              </span>
+            )}
           </button>
         </div>
 
@@ -320,12 +364,61 @@ function Inner() {
           </div>
         </div>
 
-        <TerminalList rows={rows} onToggle={handleToggle} onOpenNotes={handleOpenNotes} onMoveSection={handleMoveSection} onArchive={handleArchive} onDelete={handleDeleteTodo} showCompleted={settings.showCompleted} onEditTodo={handleEditTodo} viewMode={viewMode} closeRadialMenus={quickOpen || notesOpen || settingsOpen || editTodo !== null} />
+        <TerminalList
+          rows={rows}
+          onToggle={handleToggle}
+          onOpenNotes={handleOpenNotes}
+          onMoveSection={handleMoveSection}
+          onArchive={handleArchive}
+          onDelete={handleDeleteTodo}
+          showCompleted={settings.showCompleted}
+          onEditTodo={handleEditTodo}
+          viewMode={viewMode}
+          closeRadialMenus={quickOpen || notesOpen || settingsOpen || editTodo !== null}
+          settingsButton={
+            <button
+              style={{
+                padding: '8px',
+                background: 'var(--term-panel)',
+                border: '1px solid var(--term-border)',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s ease',
+                height: '32px',
+                width: '32px',
+                position: 'relative',
+                top: '6px',
+                right: '-10px'
+              }}
+              onClick={()=>setSettingsOpen(true)}
+              title="Settings"
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--term-accent)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--term-border)';
+              }}
+            >
+              <Settings size={16} color="var(--term-fg)" />
+            </button>
+          }
+        />
 
         <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
       </div>
 
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SessionContextModal
+        open={sessionContextOpen}
+        onOpenChange={setSessionContextOpen}
+        onSessionChanged={() => {
+          updateSessionFilterCount();
+          runSearch();
+        }}
+      />
       <NotesModal open={notesOpen} onOpenChange={setNotesOpen} todo={notesTodo} onSave={handleSaveNotes} />
       <EditTodoModal
         open={quickOpen}

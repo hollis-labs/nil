@@ -67,9 +67,10 @@ type Props = {
   onEditTodo: (row: TodoRow) => void;
   viewMode?: ViewMode;
   closeRadialMenus?: boolean;
+  settingsButton?: React.ReactNode;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', closeRadialMenus = false }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', closeRadialMenus = false, settingsButton }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -569,15 +570,19 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           </div>
         </CustomScrollbar>
         
-        <div className="summary" style={{ 
+        <div className="summary" style={{
           background: 'var(--term-panel)',
-          padding: '16px 0 0',
+          padding: '16px 20px 0 0',
           borderTop: '1px solid var(--term-border)',
-          marginTop: '20px'
+          marginTop: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
           <span>
             {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
           </span>
+          {settingsButton && <div>{settingsButton}</div>}
         </div>
       </div>
     );
@@ -620,15 +625,19 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           </div>
         </CustomScrollbar>
         
-        <div className="summary" style={{ 
+        <div className="summary" style={{
           background: 'var(--term-panel)',
-          padding: '16px 0 0',
+          padding: '16px 20px 0 0',
           borderTop: '1px solid var(--term-border)',
-          marginTop: '20px'
+          marginTop: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
           <span>
             {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
           </span>
+          {settingsButton && <div>{settingsButton}</div>}
         </div>
       </div>
     </>
