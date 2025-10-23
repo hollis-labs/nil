@@ -168,7 +168,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       <div className="terminal-card" style={{
         width: '720px',
         maxWidth: '95vw',
-        height: 'auto',
+        height: '500px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
@@ -176,226 +176,197 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       }}>
         {/* Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 600 }}>Session Context</div>
-            <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <label style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }} className="text-dim">Profile:</label>
+              <button 
+                className="badge info" 
+                onClick={() => onOpenChange(false)}
+                style={{ 
+                  padding: '6px 12px',
+                  fontSize: '12px'
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <input
+              type="text"
+              style={{
+                width: '100%',
+                padding: '8px 4px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: '1px solid var(--term-border)',
+                borderRadius: '0',
+                color: 'var(--term-fg)',
+                fontSize: '18px',
+                fontWeight: 500,
+                outline: 'none'
+              }}
+              placeholder="Profile name"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+            />
           </div>
         </div>
 
         {/* Scrollable Body */}
-        <CustomScrollbar style={{ flex: 1, minHeight: '400px', maxHeight: '500px' }}>
-          <div style={{ paddingLeft: '20px', marginRight: '30px', paddingBottom: '40px' }}>
+        <CustomScrollbar style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ padding: '0 20px 40px 20px' }}>
+            {/* Priority chips row */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '8px', 
+              marginBottom: '12px',
+              flexWrap: 'wrap'
+            }}>
+              <button
+                type="button"
+                className={`badge ${priority === 'A' ? 'warn' : ''}`}
+                onClick={() => setPriority(priority === 'A' ? '' : 'A')}
+                style={{ flex: '0 0 auto' }}
+              >
+                High
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === 'B' ? 'info' : ''}`}
+                onClick={() => setPriority(priority === 'B' ? '' : 'B')}
+                style={{ flex: '0 0 auto' }}
+              >
+                Medium
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === 'C' ? 'success' : ''}`}
+                onClick={() => setPriority(priority === 'C' ? '' : 'C')}
+                style={{ flex: '0 0 auto' }}
+              >
+                Low
+              </button>
+              <button
+                type="button"
+                className={`badge ${priority === '' ? 'success' : ''}`}
+                onClick={() => setPriority('')}
+                style={{ flex: '0 0 auto' }}
+              >
+                None
+              </button>
+            </div>
+
             {/* Profile Selection */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">
-                Select Profile
-              </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <select
-                  style={{
-                    ...inputStyle,
-                    flex: 1,
-                    appearance: 'none',
-                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 8px center',
-                    backgroundSize: '16px',
-                    paddingRight: '32px'
-                  }}
-                  value={selectedProfileId || ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleSelectProfile(e.target.value);
-                    } else {
-                      handleNewProfile();
-                    }
-                  }}
-                >
-                  <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
-                    New Profile...
-                  </option>
-                  {profiles.map(profile => (
-                    <option key={profile.id} value={profile.id} style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
-                      {profile.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  className="badge success"
-                  onClick={handleApply}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '11px',
-                    borderRadius: '3px',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  Apply
-                </button>
-              </div>
-            </div>
-
-            {/* Profile Name (always shown) */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">
-                Profile Name
-              </label>
-              <input
-                type="text"
-                style={inputStyle}
-                placeholder="e.g., Work Context"
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-              />
-            </div>
-
-            {/* Priority */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '8px', display: 'block' }} className="text-dim">
-                Priority
-              </label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  className={`badge ${priority === 'A' ? 'warn' : ''}`}
-                  onClick={() => setPriority(priority === 'A' ? '' : 'A')}
-                  style={{ flex: 1 }}
-                >
-                  High
-                </button>
-                <button
-                  type="button"
-                  className={`badge ${priority === 'B' ? 'info' : ''}`}
-                  onClick={() => setPriority(priority === 'B' ? '' : 'B')}
-                  style={{ flex: 1 }}
-                >
-                  Medium
-                </button>
-                <button
-                  type="button"
-                  className={`badge ${priority === 'C' ? 'success' : ''}`}
-                  onClick={() => setPriority(priority === 'C' ? '' : 'C')}
-                  style={{ flex: 1 }}
-                >
-                  Low
-                </button>
-                <button
-                  type="button"
-                  className={`badge ${priority === '' ? 'success' : ''}`}
-                  onClick={() => setPriority('')}
-                  style={{ flex: 1 }}
-                >
-                  None
-                </button>
-              </div>
-            </div>
-
-            {/* Contexts */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">
-                Contexts
-              </label>
-              <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context..." />
-            </div>
-
-            {/* Projects */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">
-                Projects
-              </label>
-              <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
-            </div>
-
-            {/* Tags */}
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">
-                Tags
-              </label>
-              <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
-            </div>
-
-            {/* Saved Profiles Table */}
-            {profiles.length > 0 && (
-              <div style={{ marginTop: '24px' }}>
-                <label style={{ fontSize: '12px', marginBottom: '8px', display: 'block', fontWeight: 500 }}>
-                  Saved Profiles
-                </label>
-                <div style={{
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <select
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  background: 'var(--term-bg)',
                   border: '1px solid var(--term-border)',
                   borderRadius: '6px',
-                  overflow: 'hidden'
+                  color: 'var(--term-fg)',
+                  fontSize: '13px',
+                  height: '40px',
+                  appearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 8px center',
+                  backgroundSize: '16px',
+                  paddingRight: '32px'
+                }}
+                value={selectedProfileId || ''}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleSelectProfile(e.target.value);
+                  } else {
+                    handleNewProfile();
+                  }
+                }}
+              >
+                <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
+                  New Profile...
+                </option>
+                {profiles.map(profile => (
+                  <option key={profile.id} value={profile.id} style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="badge success"
+                onClick={handleApply}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  height: '40px',
+                  whiteSpace: 'nowrap',
+                  borderRadius: '6px'
+                }}
+              >
+                Apply
+              </button>
+            </div>
+
+            {/* 2x2 Grid */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr', 
+              gap: '12px',
+              marginBottom: '12px'
+            }}>
+              <div>
+                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
+                <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
+                <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context..." />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
+                <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Summary</label>
+                <div style={{
+                  padding: '8px 12px',
+                  background: 'var(--term-bg)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  minHeight: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-around',
+                  gap: '12px',
+                  flexWrap: 'wrap'
                 }}>
-                  {profiles.map(profile => (
-                    <div
-                      key={profile.id}
-                      style={{
-                        padding: '12px',
-                        borderBottom: '1px solid var(--term-border)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        background: selectedProfileId === profile.id ? 'rgba(122, 162, 247, 0.1)' : 'transparent',
-                      }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, marginBottom: '4px', fontSize: '13px' }}>{profile.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--term-dim)' }}>
-                          {profile.projects.length > 0 && <span>+{profile.projects.join(', +')} </span>}
-                          {profile.contexts.length > 0 && <span>@{profile.contexts.join(', @')} </span>}
-                          {profile.tags.length > 0 && <span>#{profile.tags.join(', #')} </span>}
-                          {profile.priority && <span>pri:{profile.priority}</span>}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectProfile(profile.id)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--term-fg)',
-                            opacity: 0.6,
-                            transition: 'opacity 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; }}
-                          title="Edit"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProfile(profile.id)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--term-fg)',
-                            opacity: 0.6,
-                            transition: 'opacity 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.6'; }}
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                  <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>PRO:</span>
+                    <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{projects.length}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>CON:</span>
+                    <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{contexts.length}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>TAG:</span>
+                    <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{tags.length}</span>
+                  </div>
+                  <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>PRI:</span>
+                    <span style={{ color: 'var(--term-info)', minWidth: '32px', display: 'inline-block' }}>
+                      {priority === 'A' ? 'High' : priority === 'B' ? 'Med' : priority === 'C' ? 'Low' : 'None'}
+                    </span>
+                  </div>
                 </div>
               </div>
-            )}
+            </div>
+
+
           </div>
         </CustomScrollbar>
 
@@ -405,9 +376,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 20px 20px 20px',
-          borderTop: '1px solid var(--term-border)',
-          flexWrap: 'wrap',
-          gap: '8px'
+          borderTop: '1px solid var(--term-border)'
         }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             {selectedProfileId && (
@@ -422,14 +391,15 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
             <button type="button" className="badge" onClick={handleClear}>
               Clear
             </button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
           </div>
           <button
             type="button"
-            className="badge info"
+            className="badge success"
             onClick={handleSaveProfile}
             disabled={!profileName.trim()}
           >
-            Save
+            Save Profile
           </button>
         </div>
       </div>
