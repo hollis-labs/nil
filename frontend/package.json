@@ -18,7 +18,8 @@
     "react": "^18.2.0",
     "react-custom-scrollbars-2": "^4.5.0",
     "react-dom": "^18.2.0",
-    "tippy.js": "^6.3.7"
+    "tippy.js": "^6.3.7",
+    "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
     "@types/node": "^24.9.1",

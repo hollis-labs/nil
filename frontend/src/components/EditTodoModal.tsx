@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { Markdown } from 'tiptap-markdown';
 import { TodoRow } from "./TerminalList";
 import TagsAutocomplete from "./TagsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
@@ -80,12 +81,34 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   }, [open]);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      Markdown.configure({
+        html: true,
+        transformPastedText: true,
+        transformCopiedText: false,
+      })
+    ],
     content: "",
+    parseOptions: {
+      preserveWhitespace: 'full',
+    },
     editorProps: {
       attributes: {
         class: "prose prose-sm max-w-none focus:outline-none bg-transparent tiptap-editor",
         style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
+      },
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData('text/plain');
+        if (text && editor) {
+          // Check if it looks like markdown
+          if (text.match(/^#{1,6}\s|^\*\*|^##|^\-\s|^\*\s|^\d+\.\s/m)) {
+            event.preventDefault();
+            editor.commands.insertContent(text);
+            return true;
+          }
+        }
+        return false;
       },
     },
   });
@@ -277,6 +300,77 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         .tiptap-editor ul,
         .tiptap-editor ol {
           padding-left: 1.2em !important;
+          margin: 0.5em 0;
+        }
+        .tiptap-editor ul li,
+        .tiptap-editor ol li {
+          margin: 0.25em 0;
+        }
+        .tiptap-editor h1 {
+          font-size: 1.5em;
+          font-weight: 600;
+          margin: 0.75em 0 0.5em 0;
+          line-height: 1.3;
+        }
+        .tiptap-editor h2 {
+          font-size: 1.3em;
+          font-weight: 600;
+          margin: 0.65em 0 0.4em 0;
+          line-height: 1.3;
+        }
+        .tiptap-editor h3 {
+          font-size: 1.15em;
+          font-weight: 600;
+          margin: 0.55em 0 0.35em 0;
+          line-height: 1.3;
+        }
+        .tiptap-editor p {
+          margin: 0.5em 0;
+          line-height: 1.5;
+        }
+        .tiptap-editor strong {
+          font-weight: 600;
+          color: var(--term-fg);
+        }
+        .tiptap-editor em {
+          font-style: italic;
+        }
+        .tiptap-editor code {
+          background: var(--term-panel);
+          padding: 0.15em 0.4em;
+          border-radius: 3px;
+          font-size: 0.9em;
+          border: 1px solid var(--term-border);
+        }
+        .tiptap-editor pre {
+          background: var(--term-panel);
+          border: 1px solid var(--term-border);
+          border-radius: 6px;
+          padding: 0.75em;
+          margin: 0.75em 0;
+          overflow-x: auto;
+        }
+        .tiptap-editor pre code {
+          background: transparent;
+          padding: 0;
+          border: none;
+          font-size: 0.9em;
+        }
+        .tiptap-editor blockquote {
+          border-left: 3px solid var(--term-border);
+          padding-left: 1em;
+          margin: 0.75em 0;
+          color: var(--term-dim);
+          font-style: italic;
+        }
+        .tiptap-editor a {
+          color: var(--term-info);
+          text-decoration: underline;
+        }
+        .tiptap-editor hr {
+          border: none;
+          border-top: 1px solid var(--term-border);
+          margin: 1em 0;
         }
       `}</style>
       <div style={modalStyle}>
