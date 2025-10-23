@@ -5,6 +5,7 @@ import { TodoRow } from "./TerminalList";
 import TagsInput from "./TagsInput";
 import TodoTitleInput from "./TodoTitleInput";
 import CustomScrollbar from "./CustomScrollbar";
+import { useSettings } from "./SettingsModal";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -21,7 +22,8 @@ type Props = {
 
 export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [] }: Props) {
   const isEditMode = !!editTodo;
-  
+  const { settings } = useSettings();
+
   const [line, setLine] = React.useState("");
   const [priority, setPriority] = React.useState("");
   const [due, setDue] = React.useState("");
@@ -75,8 +77,11 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     },
   });
 
+  const prevOpenRef = React.useRef(open);
+
   React.useEffect(() => {
-    if (open) {
+    // Only run this effect when modal is first opened (transition from closed to open)
+    if (open && !prevOpenRef.current) {
       setShowDeleteConfirm(false);
       if (isEditMode && editTodo) {
         setLine(editTodo.title);
@@ -93,16 +98,17 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         setLine("");
         setPriority("");
         setDue("");
-        setTags(useDefaults ? defaultTags : []);
-        setContexts(useDefaults ? defaultContexts : []);
-        setProjects(useDefaults ? defaultProjects : []);
+        setTags(defaultTags);
+        setContexts(defaultContexts);
+        setProjects(defaultProjects);
         setUseDefaults(true);
         if (editor) {
           editor.commands.setContent("");
         }
       }
     }
-  }, [open, isEditMode, editTodo, editor, defaultContexts, defaultProjects, defaultTags, useDefaults]);
+    prevOpenRef.current = open;
+  }, [open, isEditMode, editTodo, editor, defaultContexts, defaultProjects, defaultTags]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -123,12 +129,17 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const notes_md = editor?.getHTML() || "";
-    
+
     // Strip prefixes from tags/contexts/projects (in case user typed them)
-    const cleanTags = tags.map(t => t.replace(/^#/, ''));
+    let cleanTags = tags.map(t => t.replace(/^#/, ''));
     const cleanContexts = contexts.map(c => c.replace(/^@/, ''));
     const cleanProjects = projects.map(p => p.replace(/^\+/, ''));
-    
+
+    // Apply default tags if no tags or projects are specified (only for create mode)
+    if (!isEditMode && cleanTags.length === 0 && cleanProjects.length === 0 && settings.defaultTags && settings.defaultTags.length > 0) {
+      cleanTags = [...settings.defaultTags];
+    }
+
     if (isEditMode && editTodo && onUpdate) {
       const updated: TodoRow = {
         ...editTodo,
@@ -142,10 +153,10 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
       };
       onUpdate(updated);
     } else {
-      const extras: any = { 
-        tags: cleanTags, 
-        contexts: cleanContexts, 
-        projects: cleanProjects 
+      const extras: any = {
+        tags: cleanTags,
+        contexts: cleanContexts,
+        projects: cleanProjects
       };
       if (priority) extras.priority = priority;
       if (due) extras.due = due;
@@ -164,6 +175,20 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
       setContexts([]);
       setProjects([]);
       setTags([]);
+    }
+  };
+
+  const handleClear = () => {
+    console.log("Clear button clicked");
+    setLine("");
+    setPriority("");
+    setDue("");
+    setTags([]);
+    setContexts([]);
+    setProjects([]);
+    setUseDefaults(false);
+    if (editor) {
+      editor.commands.clearContent();
     }
   };
 
@@ -333,11 +358,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               )}
             </div>
           )}
-          {!isEditMode && <div />}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
-            <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
-          </div>
+          {!isEditMode && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }}>Clear</button>
+              <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
+            </div>
+          )}
+          {isEditMode && (
+            <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }}>Clear</button>
+          )}
+          <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
         </div>
       </div>
     </div>

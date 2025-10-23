@@ -438,10 +438,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       {r.title}{" "}
                       <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
                         {r.contexts.map((c: string) => `@${c}`).join(" ")}
-                      </span>{" "}
-                      {r.priority === "A" && <span className="badge warn">★</span>}
-                      {r.priority === "B" && <span className="badge info">•</span>}
-                      {!r.completed && r.due_at && <span className="badge info">{new Date(r.due_at).toLocaleDateString()}</span>}
+                      </span>
+                      {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
+                      {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
+                      {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px' }}>{new Date(r.due_at).toLocaleDateString()}</span>}
                     </div>
                     <div className="meta">
                       {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
@@ -543,9 +543,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                         {r.title}{" "}
                         <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
                           {r.contexts.map((c: string) => `@${c}`).join(" ")}
-                        </span>{" "}
-                        {r.priority === "A" && <span className="badge warn">★</span>}
-                        {r.priority === "B" && <span className="badge info">•</span>}
+                        </span>
+                        {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
+                        {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
                       </div>
                       <div className="meta">
                         {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}

@@ -9,6 +9,7 @@ type Settings = {
   tabs: ScopeTab[];
   dbPath?: string;
   defaultView?: 'scope' | 'date';
+  defaultTags?: string[];
 };
 
 type ScopeTab = {
@@ -30,7 +31,8 @@ const defaultSettings: Settings = {
     { id: '3', label: 'Home', query: '@home' },
   ],
   dbPath: './data',
-  defaultView: 'scope'
+  defaultView: 'scope',
+  defaultTags: []
 };
 
 const SettingsContext = React.createContext<{
@@ -278,6 +280,25 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
                   Choose which view to show when the app loads
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+                  Default Tags
+                </label>
+                <input
+                  type="text"
+                  style={inputStyle}
+                  value={(local.defaultTags || []).join(', ')}
+                  onChange={(e) => {
+                    const tags = e.target.value.split(',').map(t => t.trim().replace(/^#/, '')).filter(t => t);
+                    setLocal({ ...local, defaultTags: tags });
+                  }}
+                  placeholder="e.g., inbox, review (comma-separated)"
+                />
+                <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
+                  These tags will be automatically added to new todos when no tags or projects are specified
                 </div>
               </div>
               
