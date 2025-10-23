@@ -80,7 +80,11 @@ function Inner() {
         contexts: [...mainParsed.contexts, ...(tabParsed?.contexts || [])],
         tags: [...mainParsed.tags, ...(tabParsed?.tags || [])],
         priorities: [...(mainParsed.priority || []), ...(tabParsed?.priority || [])],
-        statuses: [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])]
+        statuses: [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])],
+        negativeKeywords: [...mainParsed.negativeKeywords, ...(tabParsed?.negativeKeywords || [])],
+        negativeProjects: [...mainParsed.negativeProjects, ...(tabParsed?.negativeProjects || [])],
+        negativeContexts: [...mainParsed.negativeContexts, ...(tabParsed?.negativeContexts || [])],
+        negativeTags: [...mainParsed.negativeTags, ...(tabParsed?.negativeTags || [])]
       };
 
       // Use explicit status filters if provided, otherwise let frontend handle filtering
@@ -113,6 +117,43 @@ function Inner() {
         const idsInResults = new Set(allResults.map(r => r.id));
         const newCompleted = completedResults.filter(r => !idsInResults.has(r.id));
         allResults = [...allResults, ...newCompleted];
+      }
+
+      // Client-side filtering for negative keywords
+      if (merged.negativeKeywords.length > 0 || merged.negativeProjects.length > 0 || 
+          merged.negativeContexts.length > 0 || merged.negativeTags.length > 0) {
+        allResults = allResults.filter(todo => {
+          // Check negative keywords
+          for (const kw of merged.negativeKeywords) {
+            const kwLower = kw.toLowerCase();
+            if (todo.title?.toLowerCase().includes(kwLower) || 
+                todo.notes_md?.toLowerCase().includes(kwLower)) {
+              return false;
+            }
+          }
+          // Check negative projects
+          if (merged.negativeProjects.length > 0 && todo.projects) {
+            const todoProjects = todo.projects.map((p: any) => p.toLowerCase());
+            if (merged.negativeProjects.some(np => todoProjects.includes(np.toLowerCase()))) {
+              return false;
+            }
+          }
+          // Check negative contexts
+          if (merged.negativeContexts.length > 0 && todo.contexts) {
+            const todoContexts = todo.contexts.map((c: any) => c.toLowerCase());
+            if (merged.negativeContexts.some(nc => todoContexts.includes(nc.toLowerCase()))) {
+              return false;
+            }
+          }
+          // Check negative tags
+          if (merged.negativeTags.length > 0 && todo.tags) {
+            const todoTags = todo.tags.map((t: any) => t.toLowerCase());
+            if (merged.negativeTags.some(nt => todoTags.includes(nt.toLowerCase()))) {
+              return false;
+            }
+          }
+          return true;
+        });
       }
 
       setAllRows(allResults);

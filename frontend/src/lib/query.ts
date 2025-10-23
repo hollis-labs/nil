@@ -3,6 +3,10 @@ export type ParsedQuery = {
   tags: string[];
   contexts: string[];
   projects: string[];
+  negativeKeywords: string[];
+  negativeTags: string[];
+  negativeContexts: string[];
+  negativeProjects: string[];
   flags: { completed?: boolean; archived?: boolean; status?: string[] };
   priority?: string[];
   due?: { op: ':' | '<=' | '>='; date: string }[];
@@ -10,11 +14,28 @@ export type ParsedQuery = {
 };
 
 export function parseQuery(input: string): ParsedQuery {
-  const out: ParsedQuery = { keywords: [], tags: [], contexts: [], projects: [], flags: {} };
+  const out: ParsedQuery = { 
+    keywords: [], 
+    tags: [], 
+    contexts: [], 
+    projects: [], 
+    negativeKeywords: [],
+    negativeTags: [],
+    negativeContexts: [],
+    negativeProjects: [],
+    flags: {} 
+  };
   const tokens = input.match(/"[^"]+"|\S+/g) ?? [];
   for (const tok of tokens) {
     const t = tok.replace(/^"|"$/g, "");
-    if (t.startsWith("#")) out.tags.push(t.slice(1));
+    
+    // Handle negative filters
+    if (t.startsWith("-#")) out.negativeTags.push(t.slice(2));
+    else if (t.startsWith("-@")) out.negativeContexts.push(t.slice(2));
+    else if (t.startsWith("-+")) out.negativeProjects.push(t.slice(2));
+    else if (t.startsWith("-") && t !== "-completed") out.negativeKeywords.push(t.slice(1));
+    // Handle positive filters
+    else if (t.startsWith("#")) out.tags.push(t.slice(1));
     else if (t.startsWith("@")) out.contexts.push(t.slice(1));
     else if (t.startsWith("+")) out.projects.push(t.slice(1));
     else if (/^pri(or(ity)?)?:[A-Z]$/i.test(t)) (out.priority ||= []).push(t.split(":")[1].toUpperCase());
