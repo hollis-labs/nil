@@ -40,16 +40,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     if (open) {
       Backend.GetFilters().then((result: any) => {
         console.log("GetFilters result:", result);
-        
+
         if (result && typeof result === 'object') {
           const projects = result.projects || [];
           const contexts = result.contexts || [];
           const tags = result.tags || [];
-          
+
           setAvailableProjects(projects);
           setAvailableContexts(contexts);
           setAvailableTags(tags);
-          
+
           console.log("Loaded filters:", { projects, contexts, tags });
         } else {
           console.warn("Unexpected GetFilters result format:", result);
@@ -162,7 +162,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
       onSubmit(line, extras);
     }
   }
-  
+
   const toggleUseDefaults = () => {
     setUseDefaults(!useDefaults);
     if (!useDefaults) {
@@ -221,24 +221,26 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         }
       `}</style>
       <div style={modalStyle}>
-        <div className="terminal-card" style={{ 
-        width: '720px', 
-        maxWidth: '95vw', 
+        <div className="terminal-card" style={{
+        width: '720px',
+        maxWidth: '95vw',
         height: '650px',
+        maxHeight: '650px',
         display: 'flex',
-        flexDirection: 'column'
+        flexDirection: 'column',
+        overflow: 'hidden'
       }}>
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Quick Add'}</div>
+            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Add Todo'}</div>
             <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
           </div>
         </div>
 
         {/* Scrollable Body */}
-        <CustomScrollbar style={{ 
-          flex: 1, 
+        <CustomScrollbar style={{
+          flex: 1,
           minHeight: 0
         }}>
           <div style={{ padding: '0 20px' }}>
@@ -258,7 +260,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Priority</label>
-              <select 
+              <select
                 style={{
                   ...inputStyle,
                   appearance: 'none',
@@ -268,7 +270,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                   backgroundSize: '16px',
                   paddingRight: '32px'
                 }}
-                value={priority} 
+                value={priority}
                 onChange={(e) => setPriority(e.target.value)}
               >
                 <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>None</option>
@@ -290,20 +292,21 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               borderRadius: '6px',
               background: 'var(--term-bg)',
               overflow: 'hidden',
+              minHeight: '140px',
               maxHeight: '200px'
             }}>
-              <CustomScrollbar style={{ height: '200px' }}>
+              <CustomScrollbar style={{ height: '100%', minHeight: '140px' }}>
                 <EditorContent editor={editor} />
               </CustomScrollbar>
             </div>
           </div>
 
           {!isEditMode && (defaultContexts.length > 0 || defaultProjects.length > 0 || defaultTags.length > 0) && (
-            <div style={{ 
-              padding: '12px', 
-              background: 'var(--term-panel)', 
-              borderRadius: '6px', 
-              border: '1px solid var(--term-border)' 
+            <div style={{
+              padding: '12px',
+              background: 'var(--term-panel)',
+              borderRadius: '6px',
+              border: '1px solid var(--term-border)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <input
@@ -346,12 +349,12 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         </CustomScrollbar>
 
         {/* Fixed Footer */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 20px 20px 20px',
-          borderTop: '1px solid var(--term-border)' 
+          borderTop: '1px solid var(--term-border)'
         }}>
           {isEditMode && onDelete && (
             <div>

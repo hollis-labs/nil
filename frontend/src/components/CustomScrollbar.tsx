@@ -58,8 +58,9 @@ export default function CustomScrollbar({
       autoHideDuration={autoHideDuration}
       renderThumbVertical={renderThumb}
       renderTrackVertical={renderTrack}
-      renderThumbHorizontal={renderThumb}
-      renderTrackHorizontal={renderTrack}
+      renderView={(props) => (
+        <div {...props} style={{ ...props.style, overflowX: 'hidden', overflowY: 'scroll' }} />
+      )}
     >
       {children}
     </Scrollbars>
