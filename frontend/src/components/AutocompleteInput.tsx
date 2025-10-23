@@ -222,7 +222,12 @@ export default function AutocompleteInput({
           {filteredSuggestions.map((item, index) => (
             <button
               key={item}
-              onClick={() => addValue(item)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                addValue(item);
+              }}
               style={itemStyle(index === selectedIndex)}
               onMouseEnter={() => setSelectedIndex(index)}
             >
