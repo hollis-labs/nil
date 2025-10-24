@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -30,6 +31,9 @@ func main() {
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		Debug: options.Debug{
+			OpenInspectorOnStartup: os.Getenv("DEBUG") == "1",
 		},
 		Frameless: true,
 		Mac: &mac.Options{
