@@ -379,10 +379,12 @@ function Inner() {
             <button
               className="badge warn"
               onMouseDown={async (e) => {
+                console.log('Remove Tutorial - mousedown');
                 e.stopPropagation();
                 e.preventDefault();
               }}
               onClick={async (e) => {
+                console.log('Remove Tutorial - click');
                 e.stopPropagation();
                 e.preventDefault();
                 if (confirm('Remove all tutorial todos?')) {
@@ -640,10 +642,12 @@ function Inner() {
                   pointerEvents: 'auto'
                 }}
                 onMouseDown={(e) => {
+                  console.log('Power button - mousedown');
                   e.stopPropagation();
                   e.preventDefault();
                 }}
                 onClick={(e) => {
+                  console.log('Power button - click');
                   e.stopPropagation();
                   e.preventDefault();
                   if (confirm('Quit PLANCK?')) {
