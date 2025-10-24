@@ -450,20 +450,48 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               <button
                 type="button"
                 className={`badge ${due ? 'info' : ''}`}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
+                  console.log('Date chip clicked! due value:', due, 'truthy?', !!due);
                   if (due) {
+                    console.log('Clearing due date');
                     setDue('');
                   } else {
+                    console.log('Creating date picker input');
                     const input = document.createElement('input');
                     input.type = 'date';
                     input.value = due;
                     input.style.position = 'absolute';
-                    input.style.opacity = '0';
+                    input.style.top = e.currentTarget.getBoundingClientRect().top + 'px';
+                    input.style.left = e.currentTarget.getBoundingClientRect().left + 'px';
+                    input.style.width = e.currentTarget.getBoundingClientRect().width + 'px';
+                    input.style.height = e.currentTarget.getBoundingClientRect().height + 'px';
+                    input.style.opacity = '0.01';
+                    input.style.zIndex = '9999';
+                    input.style.cursor = 'pointer';
                     document.body.appendChild(input);
-                    input.showPicker?.();
+                    
+                    input.focus();
+                    
+                    requestAnimationFrame(() => {
+                      try {
+                        console.log('Attempting showPicker, available?', !!input.showPicker);
+                        if (input.showPicker) {
+                          input.showPicker();
+                        } else {
+                          input.click();
+                        }
+                      } catch (err) {
+                        console.error('Date picker error:', err);
+                      }
+                    });
+                    
                     input.onchange = (e) => {
+                      console.log('Date selected:', (e.target as HTMLInputElement).value);
                       setDue((e.target as HTMLInputElement).value);
-                      document.body.removeChild(input);
+                      if (document.body.contains(input)) {
+                        document.body.removeChild(input);
+                      }
                     };
                     input.onblur = () => {
                       setTimeout(() => {

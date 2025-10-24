@@ -89,6 +89,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   React.useEffect(() => {
     if (closeRadialMenus) {
       setIsRadialNavOpen(null);
+      setHoveredRow(null);
     }
   }, [closeRadialMenus]);
 
@@ -98,48 +99,48 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   const sections = React.useMemo(() => {
     if (!rows || !Array.isArray(rows)) return { now: [], soon: [], anytime: [], done: [] };
-    
+
     const today = ymd();
     const now: TodoRow[] = [];
     const soon: TodoRow[] = [];
     const anytime: TodoRow[] = [];
     const done: TodoRow[] = [];
-    
+
     for (const r of rows) {
       if (r.completed) {
         done.push(r);
         continue;
       }
-      
+
       const section = r.section || 'anytime';
       if (section === 'now') now.push(r);
       else if (section === 'soon') soon.push(r);
       else anytime.push(r);
     }
-    
-    const sortFn = (a: TodoRow, b: TodoRow) => 
-      (a.priority||'Z').localeCompare(b.priority||'Z') || 
+
+    const sortFn = (a: TodoRow, b: TodoRow) =>
+      (a.priority||'Z').localeCompare(b.priority||'Z') ||
       (b.created_at||'').localeCompare(a.created_at||'');
-    
+
     [now, soon, anytime, done].forEach(list => list.sort(sortFn));
-    
+
     return { now, soon, anytime, done };
   }, [rows]);
 
   const dateGroups = React.useMemo(() => {
     const map: Record<string, TodoRow[]> = {};
     const withDates = rows.filter(r => !r.completed && r.due_at);
-    
+
     for (const r of withDates) {
       const key = ymd(r.due_at);
       (map[key] ||= []).push(r);
     }
-    
-    Object.values(map).forEach(list => list.sort((a,b) => 
-      (a.priority||'Z').localeCompare(b.priority||'Z') || 
+
+    Object.values(map).forEach(list => list.sort((a,b) =>
+      (a.priority||'Z').localeCompare(b.priority||'Z') ||
       (b.created_at||'').localeCompare(a.created_at||'')
     ));
-    
+
     return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
   }, [rows]);
 
@@ -166,9 +167,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     const isOpen = isRadialNavOpen === row.id;
     const isHovered = hoveredRow === row.id;
     const autoCloseTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-    
+
     const menuItems: any[] = [];
-    
+
     if (section === 'anytime') {
       menuItems.push({ dir: 'up', label: 'N', section: 'now', delay: 0 });
       menuItems.push({ dir: 'up', label: 'S', section: 'soon', delay: 1 });
@@ -179,16 +180,16 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       menuItems.push({ dir: 'down', label: 'S', section: 'soon', delay: 0 });
       menuItems.push({ dir: 'down', label: 'A', section: 'anytime', delay: 1 });
     }
-    
+
     menuItems.push({ dir: 'left', label: <Edit3 size={12} />, action: 'edit', delay: 0 });
     menuItems.push({ dir: 'left', label: <Check size={12} />, action: 'complete', delay: 1 });
     menuItems.push({ dir: 'left', label: <Trash2 size={12} />, action: 'delete', delay: 2 });
     menuItems.push({ dir: 'left', label: <Archive size={12} />, action: 'archive', delay: 3 });
-    
-    const menuRef = React.useRef<HTMLDivElement>(null);
-    
 
-    
+    const menuRef = React.useRef<HTMLDivElement>(null);
+
+
+
     React.useEffect(() => {
       if (!isOpen) {
         if (autoCloseTimerRef.current) {
@@ -197,7 +198,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         }
         return;
       }
-      
+
       const startAutoCloseTimer = () => {
         if (autoCloseTimerRef.current) {
           clearTimeout(autoCloseTimerRef.current);
@@ -206,19 +207,19 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           setIsRadialNavOpen(null);
         }, 3000);
       };
-      
+
       const resetTimer = () => {
         startAutoCloseTimer();
       };
-      
+
       startAutoCloseTimer();
-      
+
       const menuElement = menuRef.current;
       if (menuElement) {
         menuElement.addEventListener('mousemove', resetTimer);
         menuElement.addEventListener('click', resetTimer);
       }
-      
+
       return () => {
         if (autoCloseTimerRef.current) {
           clearTimeout(autoCloseTimerRef.current);
@@ -229,7 +230,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         }
       };
     }, [isOpen]);
-    
+
     const handleAction = (item: any) => {
       if (item.action === 'complete') {
         onToggle(row.id, true);
@@ -244,7 +245,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       }
       setIsRadialNavOpen(null);
     };
-    
+
     const getPosition = (dir: string, index: number) => {
       const spacing = 35;
       const firstOffset = 32;
@@ -254,11 +255,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       if (dir === 'left') return { right: `${offset}px`, top: '50%', transform: 'translateY(-50%)' };
       return {};
     };
-    
 
-    
-    if (!isHovered && !isOpen) return null;
-    
+
+
     return (
       <div
         data-radial-menu="true"
@@ -270,12 +269,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           display: 'flex',
           alignItems: 'center',
           zIndex: 1100,
-          pointerEvents: isRadialNavOpen !== null && isRadialNavOpen !== row.id ? 'none' : 'auto'
+          opacity: (!isHovered && !isOpen) ? 0 : 1,
+          pointerEvents: (!isHovered && !isOpen) || (isRadialNavOpen !== null && isRadialNavOpen !== row.id) ? 'none' : 'auto',
+          transition: 'opacity 0.15s ease'
         }}
         ref={menuRef}
       >
 
-        
+
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -304,21 +305,21 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         >
           ⋮
         </button>
-        
+
         {isOpen && (() => {
           const grouped: Record<string, any[]> = {};
           menuItems.forEach(item => {
             if (!grouped[item.dir]) grouped[item.dir] = [];
             grouped[item.dir].push(item);
           });
-          
 
-          
+
+
           return (
             <>
               {menuItems.map((item, idx) => {
                 const indexInDir = grouped[item.dir].indexOf(item);
-                
+
                 return (
                   <React.Fragment key={`${item.dir}-${item.section || item.action}`}>
                     <button
@@ -368,7 +369,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   const renderSection = (title: string, items: TodoRow[], sectionKey: string, canCollapse = true) => {
     const isCollapsed = collapsedSections[sectionKey];
-    
+
     return (
       <div
         onDragOver={handleDragOver}
@@ -401,7 +402,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
               items.map((r, idx) => (
                 <div
                   key={r.id}
-                  className={isRadialNavOpen !== null ? '' : 'list-row'}
+                  className="list-row"
                   draggable
                   onDragStart={(e) => handleDragStart(e, r.id)}
                   onMouseEnter={() => {
@@ -411,10 +412,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                   }}
                   onMouseLeave={() => setHoveredRow(null)}
                   onClick={(e) => {
-                    if (!r.completed && (e.target as HTMLElement).tagName !== 'BUTTON') {
-                      if (isRadialNavOpen === null) {
-                        setIsRadialNavOpen(r.id);
-                      }
+                    const target = e.target as HTMLElement;
+                    const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
+                    const isCheckboxClick = target.closest('.checkbox');
+
+                    if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
+                      e.preventDefault();
+                      setHoveredRow(null);
+                      onEditTodo(r);
                     }
                   }}
                   style={{
@@ -431,7 +436,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                 >
                   <button
                     className={`checkbox ${r.completed ? "checked" : ""}`}
-                    onClick={() => onToggle(r.id, !r.completed)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggle(r.id, !r.completed);
+                    }}
                     aria-label={r.completed ? "Uncheck" : "Check"}
                     style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
                   >
@@ -439,7 +447,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       <div className="mark" />
                     </div>
                   </button>
-                  <div 
+                  <div
                     style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                   >
                     <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none' }}>
@@ -447,8 +455,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                       <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
                         {r.contexts.map((c: string) => `@${c}`).join(" ")}
                       </span>
-                      {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
-                      {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
+                      {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
+                      {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
+                      {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
                       {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px' }}>{new Date(r.due_at).toLocaleDateString()}</span>}
                     </div>
                     <div className="meta">
@@ -491,7 +500,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   if (viewMode === 'date') {
     return (
       <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <CustomScrollbar style={{ 
+        <CustomScrollbar style={{
           height: '450px'
         }}>
           <div style={{ paddingBottom: '20px' }}>
@@ -508,7 +517,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                 {list.map((r, idx) => (
                   <div
                     key={r.id}
-                    className={isRadialNavOpen !== null ? '' : 'list-row'}
+                    className="list-row"
                     onMouseEnter={() => {
                       if (isRadialNavOpen === null) {
                         setHoveredRow(r.id);
@@ -516,10 +525,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                     }}
                     onMouseLeave={() => setHoveredRow(null)}
                     onClick={(e) => {
-                      if (!r.completed && (e.target as HTMLElement).tagName !== 'BUTTON') {
-                        if (isRadialNavOpen === null) {
-                          setIsRadialNavOpen(r.id);
-                        }
+                      const target = e.target as HTMLElement;
+                      const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
+                      const isCheckboxClick = target.closest('.checkbox');
+
+                      if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
+                        e.preventDefault();
+                        setHoveredRow(null);
+                        onEditTodo(r);
                       }
                     }}
                     style={{
@@ -536,7 +549,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                   >
                     <button
                       className={`checkbox ${r.completed ? "checked" : ""}`}
-                      onClick={() => onToggle(r.id, !r.completed)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggle(r.id, !r.completed);
+                      }}
                       aria-label={r.completed ? "Uncheck" : "Check"}
                       style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
                     >
@@ -544,7 +560,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                         <div className="mark" />
                       </div>
                     </button>
-                    <div 
+                    <div
                       style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                     >
                       <div className={`title ${r.title.includes("http") ? "underlined" : ""}`}>
@@ -553,7 +569,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                           {r.contexts.map((c: string) => `@${c}`).join(" ")}
                         </span>
                         {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
-                        {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
+                        {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>⁙</span>}
+                        {r.priority === "C" && <span style={{ color: 'var(--term-accent)', marginLeft: '6px' }}>•</span>}
                       </div>
                       <div className="meta">
                         {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
@@ -569,7 +586,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           )}
           </div>
         </CustomScrollbar>
-        
+
         <div className="summary" style={{
           background: 'var(--term-panel)',
           padding: '16px 20px 0 0',
@@ -614,7 +631,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         />
       )}
       <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <CustomScrollbar style={{ 
+        <CustomScrollbar style={{
           height: '450px'
         }}>
           <div style={{ paddingBottom: '20px' }}>
@@ -624,7 +641,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
           </div>
         </CustomScrollbar>
-        
+
         <div className="summary" style={{
           background: 'var(--term-panel)',
           padding: '16px 20px 0 0',

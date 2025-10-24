@@ -13,7 +13,7 @@ import ContextsAutocomplete from "./ContextsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import TagsAutocomplete from "./TagsAutocomplete";
 import CustomScrollbar from "./CustomScrollbar";
-import { Trash2, Edit3, Plus } from "lucide-react";
+import { Trash2, Edit3, Plus, Copy } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -30,6 +30,9 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
   const [tags, setTags] = React.useState<string[]>([]);
   const [priority, setPriority] = React.useState<'A' | 'B' | 'C' | ''>('');
   const [isNewProfile, setIsNewProfile] = React.useState(false);
+  const [statusMessage, setStatusMessage] = React.useState<string>('');
+  const [showStatus, setShowStatus] = React.useState(false);
+  const [useAsFilterTab, setUseAsFilterTab] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -50,6 +53,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       setTags(active.tags);
       setPriority(active.priority || '');
       setSelectedProfileId(active.profileId || null);
+      setUseAsFilterTab(active.useAsFilterTab || false);
 
       if (active.profileId) {
         const profile = getSessionProfiles().find(p => p.id === active.profileId);
@@ -83,6 +87,14 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
     setIsNewProfile(true);
   };
 
+  const showStatusMessage = (message: string) => {
+    setStatusMessage(message);
+    setShowStatus(true);
+    setTimeout(() => {
+      setShowStatus(false);
+    }, 2000);
+  };
+
   const handleApply = () => {
     setActiveSession({
       profileId: selectedProfileId || undefined,
@@ -90,9 +102,13 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       projects,
       tags,
       priority: priority || undefined,
+      useAsFilterTab,
     });
     onSessionChanged?.();
-    onOpenChange(false);
+    showStatusMessage('Settings applied');
+    setTimeout(() => {
+      onOpenChange(false);
+    }, 500);
   };
 
   const handleClear = () => {
@@ -131,6 +147,46 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
     }
 
     loadProfiles();
+    showStatusMessage('Settings saved');
+  };
+
+  const handleSaveAndApply = () => {
+    if (!profileName.trim()) return;
+
+    if (selectedProfileId && !isNewProfile) {
+      updateSessionProfile(selectedProfileId, {
+        name: profileName.trim(),
+        contexts,
+        projects,
+        tags,
+        priority: priority || undefined,
+      });
+    } else {
+      const newProfile = saveSessionProfile({
+        name: profileName.trim(),
+        contexts,
+        projects,
+        tags,
+        priority: priority || undefined,
+      });
+      setSelectedProfileId(newProfile.id);
+      setIsNewProfile(false);
+    }
+
+    loadProfiles();
+    setActiveSession({
+      profileId: selectedProfileId || undefined,
+      contexts,
+      projects,
+      tags,
+      priority: priority || undefined,
+      useAsFilterTab,
+    });
+    onSessionChanged?.();
+    showStatusMessage('Settings saved & applied');
+    setTimeout(() => {
+      onOpenChange(false);
+    }, 500);
   };
 
   const handleDeleteProfile = (profileId: string) => {
@@ -139,6 +195,19 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       handleNewProfile();
     }
     loadProfiles();
+  };
+
+  const handleClone = () => {
+    setProfileName(profileName ? `${profileName} (copy)` : '');
+    setSelectedProfileId(null);
+    setIsNewProfile(true);
+    setTimeout(() => {
+      const input = document.querySelector('input[placeholder="Profile name"]') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
   };
 
   if (!open) return null;
@@ -164,6 +233,19 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
   };
 
   return (
+    <>
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
+      `}</style>
     <div style={modalStyle}>
       <div className="terminal-card" style={{
         width: '720px',
@@ -177,12 +259,11 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         {/* Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ marginBottom: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
-              <label style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }} className="text-dim">Profile:</label>
-              <button 
-                className="badge info" 
+            <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'flex-end', marginBottom: '1px' }}>
+              <button
+                className="badge info"
                 onClick={() => onOpenChange(false)}
-                style={{ 
+                style={{
                   padding: '6px 12px',
                   fontSize: '12px'
                 }}
@@ -190,11 +271,12 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 Close
               </button>
             </div>
+            <label style={{ fontSize: '12px', marginLeft: '3px', textTransform: 'uppercase', letterSpacing: '0.5px' }} className="text-dim">Profile:</label>
             <input
               type="text"
               style={{
                 width: '100%',
-                padding: '8px 4px',
+                padding: '4px 4px',
                 background: 'transparent',
                 border: 'none',
                 borderBottom: '1px solid var(--term-border)',
@@ -215,9 +297,9 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         <CustomScrollbar style={{ flex: 1, minHeight: 0 }}>
           <div style={{ padding: '0 20px 40px 20px' }}>
             {/* Priority chips row */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '8px', 
+            <div style={{
+              display: 'flex',
+              gap: '8px',
               marginBottom: '12px',
               flexWrap: 'wrap'
             }}>
@@ -253,6 +335,25 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
               >
                 None
               </button>
+              <div style={{ 
+                marginLeft: 'auto', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px',
+                paddingLeft: '16px',
+                borderLeft: '1px solid var(--term-border)'
+              }}>
+                <input
+                  type="checkbox"
+                  id="use-as-filter-tab"
+                  checked={useAsFilterTab}
+                  onChange={(e) => setUseAsFilterTab(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <label htmlFor="use-as-filter-tab" style={{ fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }} className="text-dim">
+                  Use as filter tab
+                </label>
+              </div>
             </div>
 
             {/* Profile Selection */}
@@ -309,9 +410,9 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
             </div>
 
             {/* 2x2 Grid */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr', 
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
               gap: '12px',
               marginBottom: '12px'
             }}>
@@ -376,8 +477,28 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 20px 20px 20px',
-          borderTop: '1px solid var(--term-border)'
+          borderTop: '1px solid var(--term-border)',
+          position: 'relative'
         }}>
+          {showStatus && (
+            <div style={{
+              position: 'absolute',
+              top: '-30px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '6px 12px',
+              background: 'var(--term-success)',
+              color: 'var(--term-bg)',
+              borderRadius: '4px',
+              fontSize: '12px',
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              animation: 'fadeIn 0.2s ease-in-out'
+            }}>
+              {statusMessage}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: '8px' }}>
             {selectedProfileId && (
               <button
@@ -388,21 +509,43 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 Delete
               </button>
             )}
+            {selectedProfileId && (
+              <button
+                type="button"
+                className="badge info"
+                onClick={handleClone}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Copy size={14} />
+                Clone
+              </button>
+            )}
             <button type="button" className="badge" onClick={handleClear}>
               Clear
             </button>
             <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
           </div>
-          <button
-            type="button"
-            className="badge success"
-            onClick={handleSaveProfile}
-            disabled={!profileName.trim()}
-          >
-            Save Profile
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              className="badge info"
+              onClick={handleSaveProfile}
+              disabled={!profileName.trim()}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="badge success"
+              onClick={handleSaveAndApply}
+              disabled={!profileName.trim()}
+            >
+              Save & Apply
+            </button>
+          </div>
         </div>
       </div>
     </div>
+    </>
   );
 }

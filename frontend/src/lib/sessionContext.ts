@@ -14,6 +14,7 @@ export type ActiveSession = {
   projects: string[];
   tags: string[];
   priority?: 'A' | 'B' | 'C';
+  useAsFilterTab?: boolean;
 };
 
 const PROFILES_KEY = 'planck.sessionProfiles';

@@ -10,7 +10,7 @@ import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { Settings, Plus, Calendar, List, Target } from "lucide-react";
 import { parseQuery } from "@/lib/query";
-import { getActiveSession } from "@/lib/sessionContext";
+import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
 
@@ -27,6 +27,7 @@ function Inner() {
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
   const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
+  const [sessionAsFilter, setSessionAsFilter] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -42,6 +43,7 @@ function Inner() {
     const session = getActiveSession();
     if (!session) {
       setSessionFilterCount(0);
+      setSessionAsFilter(false);
       return;
     }
     const count =
@@ -50,6 +52,7 @@ function Inner() {
       (session.tags?.length || 0) +
       (session.priority ? 1 : 0);
     setSessionFilterCount(count);
+    setSessionAsFilter(session.useAsFilterTab || false);
   }, []);
 
   React.useEffect(() => {
@@ -70,16 +73,35 @@ function Inner() {
 
   const runSearch = React.useCallback(async () => {
     try {
-      const activeTab = settings.tabs.find(t => t.id === activeTabId);
+      const session = getActiveSession();
+      const sessionAsFilter = session?.useAsFilterTab ? session : null;
+
+      const activeTab = sessionAsFilter ? null : settings.tabs.find(t => t.id === activeTabId);
       const mainParsed = parseQuery(query);
       const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
 
       const merged = {
         keywords: [...mainParsed.keywords],
-        projects: [...mainParsed.projects, ...(tabParsed?.projects || [])],
-        contexts: [...mainParsed.contexts, ...(tabParsed?.contexts || [])],
-        tags: [...mainParsed.tags, ...(tabParsed?.tags || [])],
-        priorities: [...(mainParsed.priority || []), ...(tabParsed?.priority || [])],
+        projects: [
+          ...mainParsed.projects, 
+          ...(tabParsed?.projects || []),
+          ...(sessionAsFilter?.projects || [])
+        ],
+        contexts: [
+          ...mainParsed.contexts, 
+          ...(tabParsed?.contexts || []),
+          ...(sessionAsFilter?.contexts || [])
+        ],
+        tags: [
+          ...mainParsed.tags, 
+          ...(tabParsed?.tags || []),
+          ...(sessionAsFilter?.tags || [])
+        ],
+        priorities: [
+          ...(mainParsed.priority || []), 
+          ...(tabParsed?.priority || []),
+          ...(sessionAsFilter?.priority ? [sessionAsFilter.priority] : [])
+        ],
         statuses: [...(mainParsed.flags.status || []), ...(tabParsed?.flags.status || [])],
         negativeKeywords: [...mainParsed.negativeKeywords, ...(tabParsed?.negativeKeywords || [])],
         negativeProjects: [...mainParsed.negativeProjects, ...(tabParsed?.negativeProjects || [])],
@@ -248,9 +270,21 @@ function Inner() {
     runSearch();
   }
 
+  function handleClearAll() {
+    if (!quickOpen && !notesOpen && !settingsOpen && !sessionContextOpen) {
+      setQuery("");
+      const session = getActiveSession();
+      if (session?.useAsFilterTab) {
+        setActiveSession({ ...session, useAsFilterTab: false });
+        updateSessionFilterCount();
+        runSearch();
+      }
+    }
+  }
+
   return (
     <div style={{ height: '100vh', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', overscrollBehavior: 'none' }}>
-      <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} />
+      <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
 
       <div style={{ width: '100%', maxWidth: '800px' }}>
         {/* PLANCK Branding */}
@@ -325,8 +359,8 @@ function Inner() {
           <button
             style={{
               padding: '8px',
-              background: 'var(--term-panel)',
-              border: '1px solid var(--term-border)',
+              background: sessionAsFilter ? 'var(--term-accent)' : 'var(--term-panel)',
+              border: sessionAsFilter ? '1px solid var(--term-accent)' : '1px solid var(--term-border)',
               borderRadius: '6px',
               cursor: 'pointer',
               display: 'flex',
@@ -338,15 +372,19 @@ function Inner() {
               position: 'relative'
             }}
             onClick={()=>setSessionContextOpen(true)}
-            title="Session Context"
+            title={sessionAsFilter ? "Session Context (Active Filter)" : "Session Context"}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--term-accent)';
+              if (!sessionAsFilter) {
+                e.currentTarget.style.borderColor = 'var(--term-accent)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--term-border)';
+              if (!sessionAsFilter) {
+                e.currentTarget.style.borderColor = 'var(--term-border)';
+              }
             }}
           >
-            <Target size={16} color="var(--term-fg)" />
+            <Target size={16} color={sessionAsFilter ? '#000' : 'var(--term-fg)'} />
             {sessionFilterCount > 0 && (
               <span style={{
                 position: 'absolute',
@@ -372,12 +410,28 @@ function Inner() {
 
         {/* Scope Tabs & View Mode Toggle */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {sessionAsFilter && (
+            <button
+              className="badge warn"
+              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              title="Session Context Filter Active"
+            >
+              <Target size={12} />
+              Session Filter
+            </button>
+          )}
           {settings.tabs.length > 0 && settings.tabs.map(tab => (
             <button
               key={tab.id}
-              className={`badge ${activeTabId === tab.id ? 'success' : ''}`}
-              onClick={() => setActiveTabId(tab.id)}
-              style={{ padding: '6px 12px', fontSize: '12px' }}
+              className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
+              onClick={() => !sessionAsFilter && setActiveTabId(tab.id)}
+              style={{ 
+                padding: '6px 12px', 
+                fontSize: '12px',
+                opacity: sessionAsFilter ? 0.4 : 1,
+                cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
+              }}
+              disabled={sessionAsFilter}
             >
               {tab.label}
             </button>
@@ -415,7 +469,7 @@ function Inner() {
           showCompleted={settings.showCompleted}
           onEditTodo={handleEditTodo}
           viewMode={viewMode}
-          closeRadialMenus={quickOpen || notesOpen || settingsOpen || editTodo !== null}
+          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null}
           settingsButton={
             <button
               style={{
