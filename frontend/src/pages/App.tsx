@@ -325,9 +325,11 @@ function Inner() {
             gap: '6px',
             cursor: 'grab',
             userSelect: 'none',
-            borderBottom: '1px solid var(--term-border)'
-          }}
-          data-wails-drag
+            borderBottom: '1px solid var(--term-border)',
+            // @ts-ignore
+            '--wails-draggable': 'drag',
+            WebkitAppRegion: 'drag'
+          } as any}
         >
           <div style={{
             fontFamily: '"Courier New", Courier, monospace',
@@ -350,7 +352,13 @@ function Inner() {
           </div>
         </div>
         
-        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
+        <div style={{ 
+          flex: 1, 
+          overflow: 'auto', 
+          padding: '20px',
+          // @ts-ignore
+          WebkitAppRegion: 'no-drag'
+        } as any}>
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <SearchAutocomplete
