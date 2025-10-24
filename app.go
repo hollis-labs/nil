@@ -131,36 +131,123 @@ func (a *App) HasDemoData() (bool, error) {
 	return len(results) > 0, nil
 }
 
+type todoWithMeta struct {
+	line    string
+	section string
+	notes   string
+}
+
 func (a *App) SeedDemoData() error {
 	if a.Store == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	demoTodos := []string{
-		"(A) Welcome to Planck - your quantum todo manager! +tutorial @getting-started",
-		"(A) Try searching with keywords, like 'welcome' or 'syntax' +tutorial @getting-started",
-		"(B) Use +project tags to organize by project +tutorial @organization",
-		"(B) Use @context tags for location or tool (like @home @computer @phone) +tutorial @organization",
-		"(B) Use #hashtags for flexible categorization #learning #productivity +tutorial",
-		"(C) Set priorities with (A) (B) (C) at the start of your todo +tutorial @organization",
-		"Add due dates with due:2025-12-31 for deadlines +tutorial @time-management",
-		"Add threshold dates with t:2025-11-01 to hide tasks until ready +tutorial @time-management",
-		"Combine filters: search for '+work @office pri:A' to find high-priority office work +tutorial @advanced",
-		"Use negative filters: search '-meeting' to exclude todos with 'meeting' +tutorial @advanced",
-		"(A) Click the target icon to set Session Context - temporary filters for focus mode +tutorial @features",
-		"Use tabs (configure in Settings) to create saved filter views +tutorial @features",
-		"Switch between Scope view (Now/Soon/Anytime) and Date view (calendar) +tutorial @features",
-		"Press ⌘N to quickly add new todos from anywhere in the app +tutorial @shortcuts",
-		"Click the ⚙️ Settings button to customize themes, tabs, and preferences +tutorial @features",
-		"Right-click todos for quick actions: archive, delete, move sections +tutorial @features",
-		"(A) Store your database in iCloud Drive to sync across devices! +tutorial @sync #icloud",
-		"Export to todo.txt format via Settings → Import/Export +tutorial @backup",
-		"x Completed todos look like this - they're marked with 'x' in todo.txt format +tutorial @getting-started",
-		"This is a note-taking example - click any todo to add detailed markdown notes +tutorial @features",
+	// Tutorial todos organized by section with markdown notes
+	demos := []todoWithMeta{
+		// NOW section - Top priorities to start
+		{
+			line:    "(A) Welcome to Planck! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
+			section: "now",
+			notes:   "# Welcome!\n\nPlanck is a todo.txt task manager.\n\n**Quick Start:**\n- Click any todo to view/edit notes\n- Press ⌘N to add todos\n- Right-click for actions\n- Search with +project @context #tag",
+		},
+		{
+			line:    "(A) Learn todo.txt syntax - (A)=high +project @context #tag due:2025-10-25 +tutorial @getting-started #now",
+			section: "now",
+			notes:   "# Todo.txt Format\n\nFormat: `(A) Title +project @context #tag due:2025-12-31`\n\n**Priority:** (A), (B), (C)\n**+project** - Group related tasks\n**@context** - Location/tool (@home, @computer)\n**#tag** - Flexible labels\n**due:YYYY-MM-DD** - Deadlines",
+		},
+		{
+			line:    "(A) Try search: type keywords, +project, @context, #tag, pri:A due:2025-10-26 +tutorial @getting-started #now",
+			section: "now",
+			notes:   "# Search Power\n\n**Examples:**\n- `welcome` - keyword search\n- `+tutorial` - project filter\n- `#now` - tag filter\n- `pri:A` - priority\n- `+work -meeting` - exclude with minus\n\nTry searching for `#now` right now!",
+		},
+
+		// SOON section
+		{
+			line:    "(B) Explore Now/Soon/Anytime scope views due:2025-10-28 +tutorial @features #soon",
+			section: "soon",
+			notes:   "# Scope Views\n\n**Now** - Current focus (3-5 items)\n**Soon** - Upcoming tasks\n**Anytime** - Backlog\n\nRight-click any todo → Move to... → Pick section",
+		},
+		{
+			line:    "(B) Set Session Context (🎯 icon) for focused work due:2025-10-30 +tutorial @features #soon",
+			section: "soon",
+			notes:   "# Session Context\n\nTemporary filter for deep work!\n\n1. Click 🎯 icon\n2. Select filters (e.g., +work @computer)\n3. Check \"Use as Filter Tab\"\n4. Work on just those tasks\n\nGreat for: focus blocks, errands, end-of-day priority items",
+		},
+		{
+			line:    "(B) Create custom tabs in Settings for saved views due:2025-11-05 +tutorial @features #soon",
+			section: "soon",
+			notes:   "# Tabs\n\nSave common searches as tabs!\n\n**Examples:**\n- Work: `+work`\n- Today: `due<=today`\n- Urgent: `#urgent`\n\nSettings ⚙️ → Tabs section → Add Tab",
+		},
+		{
+			line:    "(B) Use due:YYYY-MM-DD and t:YYYY-MM-DD (threshold) dates due:2025-11-08 +tutorial @time-management #soon",
+			section: "soon",
+			notes:   "# Dates\n\n**due:** - Deadline\n**t:** - Hide until (threshold)\n\nExample: `Buy gifts due:2025-12-20 t:2025-12-01` hides until December\n\nSwitch between Scope and Date views with buttons",
+		},
+
+		// ANYTIME section
+		{
+			line:    "(C) Sync with iCloud Drive across devices due:2025-12-01 +tutorial @sync #icloud #anytime",
+			section: "anytime",
+			notes:   "# iCloud Sync\n\n1. Create folder: `~/Library/Mobile Documents/com~apple~CloudDocs/Planck`\n2. Settings → Database Location → Change\n3. Paste path, restart\n4. On other devices: Use Existing Database\n\nWorks with Dropbox/Google Drive too!",
+		},
+		{
+			line:    "Keyboard shortcuts: ⌘N=new, Esc=clear +tutorial @shortcuts #anytime",
+			section: "anytime",
+			notes:   "# Shortcuts\n\n- **⌘N** - Quick add\n- **Esc** - Clear/close\n- **Enter** - Search\n\nMore coming soon!",
+		},
+		{
+			line:    "Customize themes in Settings ⚙️ +tutorial @settings #anytime",
+			section: "anytime",
+			notes:   "# Themes\n\n20+ themes available!\n\n- Catppuccin (4 variants)\n- Gruvbox\n- Tokyo Night\n- Nord\n- Dracula\n- Solarized\n\nSettings → Theme section",
+		},
+		{
+			line:    "Right-click for Complete, Edit, Notes, Move, Archive, Delete +tutorial @features #anytime",
+			section: "anytime",
+			notes:   "# Right-Click Menu\n\n- Complete/Uncomplete\n- Edit todo\n- Add markdown notes\n- Move to Now/Soon/Anytime\n- Archive (hide completed)\n- Delete\n\nTry it on this todo!",
+		},
+		{
+			line:    "Export/import todo.txt in Settings due:2025-12-15 +tutorial @backup #anytime",
+			section: "anytime",
+			notes:   "# Import & Export\n\nSettings → Import/Export section\n\n**Export** - Backup as todo.txt\n**Import** - Migrate from other apps\n\nStandard todo.txt format works everywhere!",
+		},
+		{
+			line:    "Priority tips: (A)=critical (B)=important (C)=nice-to-have +tutorial @organization #anytime",
+			section: "anytime",
+			notes:   "# Priorities\n\n**(A)** - Must do\n**(B)** - Should do (use most)\n**(C)** - Could do\n**None** - Someday/maybe\n\nDon't overuse (A)!",
+		},
+		{
+			line:    "Negative filters with minus: +work -meeting excludes meetings +tutorial @advanced #anytime",
+			section: "anytime",
+			notes:   "# Exclude with Minus\n\n`+work -meeting` - work, no meetings\n`pri:A -#waiting` - priority A, not waiting\n`@computer -+personal` - computer work tasks\n\nCombine any filters!",
+		},
+		{
+			line:    "Add markdown notes to any todo (like this one!) +tutorial @features #anytime",
+			section: "anytime",
+			notes:   "# Markdown Support\n\n**Formatting:**\n- Headers: # ## ###\n- **Bold**, *italic*\n- Lists: - item\n- Links: [text](url)\n- Code: `inline` or blocks\n\nClick any todo to add notes!",
+		},
+		{
+			line:    "x Completed format: checkmark or 'x' prefix in todo.txt +tutorial @getting-started #anytime",
+			section: "anytime",
+			notes:   "# Completed Todos\n\nThis one is done!\n\nFormat: `x 2025-10-23 Task name`\n\nToggle with checkbox or Settings → Show Completed",
+		},
+		{
+			line:    "Try the Date view (calendar icon) vs Scope view due:2025-11-10 +tutorial @features #anytime",
+			section: "anytime",
+			notes:   "# View Modes\n\n**Scope** - Groups by Now/Soon/Anytime\n**Date** - Groups by due dates\n\nToggle with buttons near tabs",
+		},
+		{
+			line:    "Create your first real todo with ⌘N now! due:2025-10-24 +tutorial @shortcuts #anytime",
+			section: "anytime",
+			notes:   "# Practice Time\n\nPress ⌘N and try:\n\n`(A) Call dentist @phone due:2025-10-25`\n`Buy groceries @errands #personal`\n`(B) Review report +work @computer`\n\nUse what you learned!",
+		},
+		{
+			line:    "Remove all tutorial data with header button when ready +tutorial @getting-started #anytime",
+			section: "anytime",
+			notes:   "# Clean Up\n\nWhen comfortable:\n\n1. Click \"Remove Tutorial\" button in header\n2. All tutorial todos deleted\n3. Your todos stay!\n4. Start fresh\n\nGood luck! 🚀",
+		},
 	}
 
-	for _, line := range demoTodos {
-		p := parse.ParseLine(line)
+	for _, demo := range demos {
+		p := parse.ParseLine(demo.line)
 		todo := &store.Todo{
 			Title:     p.Title,
 			Priority:  p.Priority,
@@ -169,7 +256,9 @@ func (a *App) SeedDemoData() error {
 			Tags:      append(p.Tags, demoDataTag),
 			DueAt:     p.Due,
 			Threshold: p.Thresh,
-			Source:    line,
+			Source:    demo.line,
+			NotesMD:   demo.notes,
+			Section:   demo.section,
 		}
 		_, err := a.Store.CreateTodo(a.ctx, todo)
 		if err != nil {
