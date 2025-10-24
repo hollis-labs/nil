@@ -292,30 +292,43 @@ function Inner() {
   }
 
   return (
-    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', overscrollBehavior: 'none' }}>
+    <div style={{ 
+      height: '100vh', 
+      overflow: 'hidden', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      justifyContent: 'flex-start', 
+      alignItems: 'center', 
+      overscrollBehavior: 'none',
+      padding: '10px'
+    }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
-      
-      {/* Draggable title bar */}
-      <div style={{
-        width: '100%',
-        height: '40px',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 9999,
-        // @ts-ignore
-        '--wails-draggable': 'drag'
-      }} data-wails-drag />
 
-      <div style={{ width: '100%', maxWidth: '800px', padding: '24px', paddingTop: '64px' }}>
-        {/* PLANCK Branding */}
-        <div style={{
-          marginBottom: '12px',
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: '6px'
-        }}>
+      <div style={{ 
+        width: '100%', 
+        maxWidth: '800px', 
+        height: '100%',
+        background: 'var(--term-bg)',
+        borderRadius: '12px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* PLANCK Branding - Draggable */}
+        <div 
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: '6px',
+            cursor: 'grab',
+            userSelect: 'none',
+            borderBottom: '1px solid var(--term-border)'
+          }}
+          data-wails-drag
+        >
           <div style={{
             fontFamily: '"Courier New", Courier, monospace',
             fontSize: '14px',
@@ -336,6 +349,8 @@ function Inner() {
             <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
           </div>
         </div>
+        
+        <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <SearchAutocomplete
@@ -514,7 +529,8 @@ function Inner() {
           }
         />
 
-        <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
+          <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
+        </div>
       </div>
 
       <WelcomeDialog 
