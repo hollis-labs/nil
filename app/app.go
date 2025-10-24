@@ -2,21 +2,38 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
+	"todo/internal/config"
 	"todo/internal/parse"
 	"todo/internal/store"
 )
 
 type App struct {
-	ctx   context.Context
-	Store *store.Store
+	ctx        context.Context
+	Store      *store.Store
+	needsSetup bool
 }
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
-	// Data dir can be adjusted; for dev, use ./data
-	s, err := store.Open(ctx, "./data")
+
+	// Load config
+	cfg, err := config.Load()
+	if err != nil {
+		panic(err)
+	}
+
+	// If no database path configured, signal setup needed
+	if cfg.DatabasePath == "" {
+		a.needsSetup = true
+		return
+	}
+
+	// Open database
+	s, err := store.Open(ctx, cfg.DatabasePath)
 	if err != nil {
 		panic(err)
 	}

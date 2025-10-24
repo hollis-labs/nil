@@ -292,10 +292,23 @@ function Inner() {
   }
 
   return (
-    <div style={{ height: '100vh', overflow: 'hidden', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', overscrollBehavior: 'none' }}>
+    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'center', overscrollBehavior: 'none' }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
+      
+      {/* Draggable title bar */}
+      <div style={{
+        width: '100%',
+        height: '40px',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 9999,
+        // @ts-ignore
+        '--wails-draggable': 'drag'
+      }} data-wails-drag />
 
-      <div style={{ width: '100%', maxWidth: '800px' }}>
+      <div style={{ width: '100%', maxWidth: '800px', padding: '24px', paddingTop: '64px' }}>
         {/* PLANCK Branding */}
         <div style={{
           marginBottom: '12px',
