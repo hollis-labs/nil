@@ -71,11 +71,14 @@ function Inner() {
   React.useEffect(() => {
     // Check if database is set up
     Backend.NeedsSetup().then((needs: boolean) => {
+      console.log('NeedsSetup:', needs);
       if (needs) {
         // Fresh install - always show alpha warning first
+        console.log('Showing alpha warning');
         setShowAlphaWarning(true);
       } else {
         // Database exists, check demo data
+        console.log('Database exists, checking demo data');
         (Backend as any).HasDemoData?.().then((has: boolean) => {
           setHasDemoData(has);
           if (!has) {
@@ -83,6 +86,10 @@ function Inner() {
           }
         });
       }
+    }).catch(err => {
+      console.error('Error checking setup:', err);
+      // On error, assume fresh install
+      setShowAlphaWarning(true);
     });
   }, []);
 
@@ -648,19 +655,22 @@ function Inner() {
       <AlphaWarning
         open={showAlphaWarning}
         onComplete={() => {
+          console.log('Alpha warning completed');
           setShowAlphaWarning(false);
           // After warning, show welcome dialog for database setup
           setShowWelcome(true);
         }}
       />
       
-      <WelcomeDialog 
-        open={showWelcome} 
-        onComplete={() => { 
-          setShowWelcome(false);
-          setShowDemoPrompt(true);
-        }} 
-      />
+      {!showAlphaWarning && (
+        <WelcomeDialog 
+          open={showWelcome} 
+          onComplete={() => { 
+            setShowWelcome(false);
+            setShowDemoPrompt(true);
+          }} 
+        />
+      )}
       
       {/* Demo Data Prompt */}
       {showDemoPrompt && (
