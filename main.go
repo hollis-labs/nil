@@ -21,9 +21,9 @@ func main() {
 	err := wails.Run(&options.App{
 		Title:     "PLANCK",
 		Width:     800,
-		Height:    870,
+		Height:    830,
 		MinWidth:  800,
-		MinHeight: 750,
+		MinHeight: 830,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -40,8 +40,8 @@ func main() {
 			TitleBar: &mac.TitleBar{
 				TitlebarAppearsTransparent: true,
 				HideTitle:                  true,
-				HideTitleBar:               false,
-				FullSizeContent:            true,
+				HideTitleBar:               true,
+				FullSizeContent:            false,
 				UseToolbar:                 false,
 				HideToolbarSeparator:       true,
 			},

@@ -92,7 +92,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
       });
       setLocalTheme(fullTheme);
       // Check if current theme matches a preset
-      const matchingPreset = Object.entries(themePresets).find(([_, preset]) => 
+      const matchingPreset = Object.entries(themePresets).find(([_, preset]) =>
         JSON.stringify(preset) === JSON.stringify(theme)
       );
       setSelectedPreset(matchingPreset ? matchingPreset[0] : 'custom');
@@ -100,7 +100,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
       if (!matchingPreset) {
         setCustomTheme(fullTheme);
       }
-      
+
       // Load database path
       (Backend as any).GetDatabasePath?.().then((path: string) => {
         setDatabasePath(path);
@@ -215,15 +215,15 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   return (
     <>
       <div style={modalStyle} onClick={() => onOpenChange(false)}>
-        <div 
-          className="terminal-card" 
-          style={{ 
-            width: '700px', 
-            maxWidth: '95vw', 
+        <div
+          className="terminal-card"
+          style={{
+            width: '700px',
+            maxWidth: '95vw',
             height: '650px',
             display: 'flex',
             flexDirection: 'column'
-          }} 
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Fixed Header */}
@@ -243,8 +243,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
           </div>
 
           {/* Scrollable Body */}
-          <CustomScrollbar style={{ 
-            flex: 1, 
+          <CustomScrollbar style={{
+            flex: 1,
             minHeight: 0
           }}>
             <div style={{ padding: '0 20px' }}>
@@ -267,14 +267,14 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               <div style={{ marginTop: '12px', fontSize: '11px' }} className="text-dim">
                 When enabled, completed todos will appear in the section lists (grayed out).
               </div>
-              
+
               <div style={{ marginTop: '20px' }}>
                 <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
                   Default View
                 </label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
-                    className={`badge ${local.defaultView === 'scope' ? 'success' : ''}`}
+                    className={`badge ${local.defaultView === 'scope' ? 'success' : 'info'}`}
                     onClick={() => setLocal({ ...local, defaultView: 'scope' })}
                     style={{ padding: '6px 12px' }}
                   >
@@ -311,7 +311,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   These tags will be automatically added to new todos when no tags or projects are specified
                 </div>
               </div>
-              
+
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', marginTop: '24px' }}>Database Location</h3>
               <div style={{ marginBottom: '8px' }}>
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '6px' }} className="text-dim">
@@ -398,11 +398,11 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   </div>
                 )}
               </div>
-              
+
               <details style={{ marginTop: '12px' }}>
-                <summary style={{ 
-                  fontSize: '12px', 
-                  cursor: 'pointer', 
+                <summary style={{
+                  fontSize: '12px',
+                  cursor: 'pointer',
                   padding: '8px',
                   background: 'var(--term-panel)',
                   borderRadius: '4px',
@@ -411,11 +411,11 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 }}>
                   💡 Cloud Sync Setup (Dropbox, iCloud, Google Drive)
                 </summary>
-                <div style={{ 
-                  fontSize: '11px', 
-                  padding: '12px', 
-                  background: 'var(--term-panel)', 
-                  borderRadius: '4px', 
+                <div style={{
+                  fontSize: '11px',
+                  padding: '12px',
+                  background: 'var(--term-panel)',
+                  borderRadius: '4px',
                   border: '1px solid var(--term-border)',
                   lineHeight: '1.6'
                 }} className="text-dim">
@@ -442,8 +442,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Scope Filter Tabs</h3>
-                <button 
-                  className="badge success" 
+                <button
+                  className="badge success"
                   onClick={addTab}
                   disabled={local.tabs.length >= 6}
                   style={{ opacity: local.tabs.length >= 6 ? 0.5 : 1 }}
@@ -458,17 +458,17 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {local.tabs.map((tab, idx) => (
-                  <div 
+                  <div
                     key={tab.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, tab.id)}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, tab.id)}
                     onDragEnd={handleDragEnd}
-                    style={{ 
-                      padding: '12px', 
-                      background: draggedTabId === tab.id ? 'var(--term-panel)' : 'var(--term-bg)', 
-                      border: `1px solid ${draggedTabId === tab.id ? 'var(--term-accent)' : 'var(--term-border)'}`, 
+                    style={{
+                      padding: '12px',
+                      background: draggedTabId === tab.id ? 'var(--term-panel)' : 'var(--term-bg)',
+                      border: `1px solid ${draggedTabId === tab.id ? 'var(--term-accent)' : 'var(--term-border)'}`,
                       borderRadius: '6px',
                       cursor: 'move',
                       opacity: draggedTabId === tab.id ? 0.5 : 1,
@@ -477,7 +477,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   >
                     <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
-                        <div style={{ 
+                        <div style={{
                           cursor: 'grab',
                           padding: '4px',
                           color: 'var(--term-dim)',
@@ -534,7 +534,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Color Theme</h3>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <button 
+                  <button
                     className="badge warn"
                     onClick={(e) => {
                       e.preventDefault();
@@ -549,7 +549,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   >
                     Clear Cache
                   </button>
-                  <button 
+                  <button
                     className="badge success"
                     onClick={(e) => {
                       e.preventDefault();
@@ -569,7 +569,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               <div style={{ fontSize: '11px', marginBottom: '16px' }} className="text-dim">
                 Select a theme preset below. Each theme is ready to use.
               </div>
-              
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {Object.entries(themePresets).map(([name, preset]) => (
                   <div
@@ -649,7 +649,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                     </div>
                   </div>
                 ))}
-                
+
                 {/* Custom Theme */}
                 <div
                   style={{
@@ -683,13 +683,13 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                               .replace(/([A-Z])/g, ' $1')
                               .replace(/^./, (str) => str.toUpperCase())
                               .trim();
-                            
+
                             return (
                               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <label style={{ fontSize: '11px', width: '80px' }} className="text-dim">{label}</label>
-                                <input 
-                                  type="color" 
-                                  value={color || '#000000'} 
+                                <input
+                                  type="color"
+                                  value={color || '#000000'}
                                   onChange={(e)=>{
                                     const newTheme = {...localTheme, [key]: e.target.value};
                                     setLocalTheme(newTheme);
@@ -697,7 +697,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                                   }}
                                   style={{ width: '40px', height: '28px', border: '1px solid var(--term-border)', borderRadius: '4px', cursor: 'pointer' }}
                                 />
-                                <input 
+                                <input
                                   value={color || ''}
                                   onChange={(e)=>{
                                     const newTheme = {...localTheme, [key]: e.target.value};
@@ -735,13 +735,13 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                               .replace(/([A-Z])/g, ' $1')
                               .replace(/^./, (str) => str.toUpperCase())
                               .trim();
-                            
+
                             return (
                               <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <label style={{ fontSize: '11px', width: '80px' }} className="text-dim">{label}</label>
-                                <input 
-                                  type="color" 
-                                  value={color || '#000000'} 
+                                <input
+                                  type="color"
+                                  value={color || '#000000'}
                                   onChange={(e)=>{
                                     const newTheme = {...localTheme, [key]: e.target.value};
                                     setLocalTheme(newTheme);
@@ -749,7 +749,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                                   }}
                                   style={{ width: '40px', height: '28px', border: '1px solid var(--term-border)', borderRadius: '4px', cursor: 'pointer' }}
                                 />
-                                <input 
+                                <input
                                   value={color || ''}
                                   onChange={(e)=>{
                                     const newTheme = {...localTheme, [key]: e.target.value};
@@ -799,7 +799,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               <div style={{ fontSize: '11px', marginBottom: '16px' }} className="text-dim">
                 Import and export your todos in todo.txt format.
               </div>
-              
+
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button
                   className="badge info"
@@ -822,8 +822,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 >
                   Export to todo.txt
                 </button>
-                
-                <label 
+
+                <label
                   htmlFor="import-file"
                   className="badge success"
                   style={{ flex: 1, padding: '10px 16px', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -856,12 +856,12 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
           </CustomScrollbar>
 
           {/* Fixed Footer */}
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'flex-end', 
-            gap: '8px', 
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '8px',
             padding: '16px 20px 20px 20px',
-            borderTop: '1px solid var(--term-border)' 
+            borderTop: '1px solid var(--term-border)'
           }}>
             <button className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
             <button className="badge success" onClick={handleSave}>Save Settings</button>

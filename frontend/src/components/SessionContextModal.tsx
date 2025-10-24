@@ -250,7 +250,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       <div className="terminal-card" style={{
         width: '720px',
         maxWidth: '95vw',
-        height: '500px',
+        height: '250px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',

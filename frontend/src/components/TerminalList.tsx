@@ -119,8 +119,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     }
 
     const sortFn = (a: TodoRow, b: TodoRow) =>
-      (a.priority||'Z').localeCompare(b.priority||'Z') ||
-      (b.created_at||'').localeCompare(a.created_at||'');
+        (a.priority||'Z').localeCompare(b.priority||'Z') ||
+        (b.created_at||'').localeCompare(a.created_at||'');
 
     [now, soon, anytime, done].forEach(list => list.sort(sortFn));
 
@@ -137,8 +137,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     }
 
     Object.values(map).forEach(list => list.sort((a,b) =>
-      (a.priority||'Z').localeCompare(b.priority||'Z') ||
-      (b.created_at||'').localeCompare(a.created_at||'')
+        (a.priority||'Z').localeCompare(b.priority||'Z') ||
+        (b.created_at||'').localeCompare(a.created_at||'')
     ));
 
     return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
@@ -259,111 +259,112 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
 
     return (
-      <div
-        data-radial-menu="true"
-        style={{
-          position: 'absolute',
-          right: '19px',
-          top: 'calc(50% - 2px)',
-          transform: 'translateY(-50%)',
-          display: 'flex',
-          alignItems: 'center',
-          zIndex: 1100,
-          opacity: (!isHovered && !isOpen) ? 0 : 1,
-          pointerEvents: (!isHovered && !isOpen) || (isRadialNavOpen !== null && isRadialNavOpen !== row.id) ? 'none' : 'auto',
-          transition: 'opacity 0.15s ease'
-        }}
-        ref={menuRef}
-      >
-
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsRadialNavOpen(isOpen ? null : row.id);
-          }}
-          style={{
-            background: 'rgba(15, 19, 26, 0.95)',
-            border: '1px solid var(--term-info)',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            width: '24px',
-            height: '24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--term-info)',
-            transition: 'all 0.2s ease',
-            boxShadow: isOpen ? '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 0 rgba(96, 165, 250, 0.4)' : '0 0 0 0 var(--term-info), 0 0 4px 0 rgba(96, 165, 250, 0.15)',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            position: 'relative',
-            zIndex: 1001
-          }}
-
-          title="Quick actions"
+        <div
+            data-radial-menu="true"
+            style={{
+              position: 'absolute',
+              right: '19px',
+              top: 'calc(50% - 2px)',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              zIndex: 1100,
+              opacity: (!isHovered && !isOpen) ? 0 : 1,
+              pointerEvents: (!isHovered && !isOpen) || (isRadialNavOpen !== null && isRadialNavOpen !== row.id) ? 'none' : 'auto',
+              transition: 'opacity 0.15s ease'
+            }}
+            ref={menuRef}
         >
-          ⋮
-        </button>
-
-        {isOpen && (() => {
-          const grouped: Record<string, any[]> = {};
-          menuItems.forEach(item => {
-            if (!grouped[item.dir]) grouped[item.dir] = [];
-            grouped[item.dir].push(item);
-          });
 
 
+          <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsRadialNavOpen(isOpen ? null : row.id);
+              }}
+              style={{
+                background: 'var(--term-bgAlt)',
+                border: '1px solid var(--term-info)',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                width: '24px',
+                height: '24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--term-info)',
+                transition: 'all 0.2s ease',
+                boxShadow: isOpen ? '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 0 rgba(96, 165, 250, 0.4)' : '0 0 0 0 var(--term-info), 0 0 4px 0 rgba(96, 165, 250, 0.15)',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                position: 'relative',
+                zIndex: 1001
+              }}
 
-          return (
-            <>
-              {menuItems.map((item, idx) => {
-                const indexInDir = grouped[item.dir].indexOf(item);
+              title="Quick actions"
+          >
+            ⋮
+          </button>
 
-                return (
-                  <React.Fragment key={`${item.dir}-${item.section || item.action}`}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAction(item);
-                      }}
-                      style={{
-                        position: 'absolute',
-                        ...getPosition(item.dir, indexInDir),
-                        background: 'rgba(15, 19, 26, 0.95)',
-                        border: '1px solid var(--term-info)',
-                        borderRadius: '50%',
-                        width: '24px',
-                        height: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'var(--term-info)',
-                        fontSize: '10px',
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)',
-                        zIndex: 1000
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(15, 19, 26, 0.98)';
-                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 1px rgba(96, 165, 250, 0.5)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(15, 19, 26, 0.95)';
-                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)';
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  </React.Fragment>
-                );
-              })}
-            </>
-          );
-        })()}
-      </div>
+          {isOpen && (() => {
+            const grouped: Record<string, any[]> = {};
+            menuItems.forEach(item => {
+              if (!grouped[item.dir]) grouped[item.dir] = [];
+              grouped[item.dir].push(item);
+            });
+
+
+
+            return (
+                <>
+                  {menuItems.map((item, idx) => {
+                    const indexInDir = grouped[item.dir].indexOf(item);
+
+                    return (
+                        <React.Fragment key={`${item.dir}-${item.section || item.action}`}>
+                          <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAction(item);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                ...getPosition(item.dir, indexInDir),
+                                background: 'var(--term-bgAlt)',
+                                border: '1px solid var(--term-info)',
+                                borderRadius: '50%',
+                                width: '24px',
+                                height: '24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'var(--term-info)',
+                                fontSize: '10px',
+                                fontWeight: 'bold',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)',
+                                zIndex: 1000
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--term-bg)';
+                                e.currentTarget.style.color = 'var(--term-fg)';
+                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 1px rgba(96, 165, 250, 0.5)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'var(--term-bgAlt)';
+                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)';
+                              }}
+                          >
+                            {item.label}
+                          </button>
+                        </React.Fragment>
+                    );
+                  })}
+                </>
+            );
+          })()}
+        </div>
     );
   };
 
@@ -371,115 +372,121 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     const isCollapsed = collapsedSections[sectionKey];
 
     return (
-      <div
-        onDragOver={handleDragOver}
-        onDrop={(e) => handleDrop(e, sectionKey)}
-        style={{ marginBottom: '20px' }}
-      >
         <div
-          className="date-header"
-          style={{
-            cursor: canCollapse ? 'pointer' : 'default',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            userSelect: 'none',
-            marginRight: '25px'
-          }}
-          onClick={() => canCollapse && toggleSection(sectionKey)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, sectionKey)}
+            style={{ marginBottom: '20px' }}
         >
-          {canCollapse && <span>{isCollapsed ? '▸' : '▾'}</span>}
-          <span>{title}</span>
-          <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({items.length})</span>
-        </div>
-        {!isCollapsed && (
-          <>
-            {items.length === 0 ? (
-              <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
-                Drop items here
-              </div>
-            ) : (
-              items.map((r, idx) => (
-                <div
-                  key={r.id}
-                  className="list-row"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, r.id)}
-                  onMouseEnter={() => {
-                    if (isRadialNavOpen === null) {
-                      setHoveredRow(r.id);
-                    }
-                  }}
-                  onMouseLeave={() => setHoveredRow(null)}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
-                    const isCheckboxClick = target.closest('.checkbox');
-
-                    if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
-                      e.preventDefault();
-                      setHoveredRow(null);
-                      onEditTodo(r);
-                    }
-                  }}
-                  style={{
-                    cursor: r.completed ? 'grab' : 'pointer',
-                    opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
-                    padding: '12px 20px',
-                    marginRight: '25px',
-                    display: 'flex',
-                    gap: '12px',
-                    position: 'relative',
-                    borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
-                    borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
-                  }}
-                >
-                  <button
-                    className={`checkbox ${r.completed ? "checked" : ""}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggle(r.id, !r.completed);
-                    }}
-                    aria-label={r.completed ? "Uncheck" : "Check"}
-                    style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
-                  >
-                    <div className={`checkbox ${r.completed ? "checked" : ""}`}>
-                      <div className="mark" />
+          <div
+              className="date-header"
+              style={{
+                cursor: canCollapse ? 'pointer' : 'default',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                userSelect: 'none',
+                marginRight: '25px'
+              }}
+              onClick={() => canCollapse && toggleSection(sectionKey)}
+          >
+            {canCollapse && <span>{isCollapsed ? '▸' : '▾'}</span>}
+            <span>{title}</span>
+            <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({items.length})</span>
+          </div>
+          {!isCollapsed && (
+              <>
+                {items.length === 0 ? (
+                    <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
+                      Drop items here
                     </div>
-                  </button>
-                  <div
-                    style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
-                  >
-                    <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none' }}>
-                      {r.title}{" "}
-                      <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
+                ) : (
+                    items.map((r, idx) => (
+                        <div
+                            key={r.id}
+                            className="list-row"
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, r.id)}
+                            onMouseEnter={() => {
+                              if (isRadialNavOpen === null) {
+                                setHoveredRow(r.id);
+                              }
+                            }}
+                            onMouseLeave={() => setHoveredRow(null)}
+                            onClick={(e) => {
+                              const target = e.target as HTMLElement;
+                              const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
+                              const isCheckboxClick = target.closest('.checkbox');
+
+                              if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
+                                e.preventDefault();
+                                setHoveredRow(null);
+                                onEditTodo(r);
+                              }
+                            }}
+                            style={{
+                              cursor: r.completed ? 'grab' : 'pointer',
+                              opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
+                              padding: '12px 20px',
+                              marginRight: '25px',
+                              display: 'flex',
+                              gap: '12px',
+                              position: 'relative',
+                              borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+                              borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
+                            }}
+                        >
+                          <button
+                              className={`checkbox ${r.completed ? "checked" : ""}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggle(r.id, !r.completed);
+                              }}
+                              aria-label={r.completed ? "Uncheck" : "Check"}
+                              style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
+                          >
+                            <div className={`checkbox ${r.completed ? "checked" : ""}`}>
+                              <div className="mark" />
+                            </div>
+                          </button>
+                          <div
+                              style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
+                          >
+                            <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none' }}>
+                              {r.title}{" "}
+                              <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
                         {r.contexts.map((c: string) => `@${c}`).join(" ")}
                       </span>
-                      {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
-                      {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
-                      {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
-                      {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px' }}>{new Date(r.due_at).toLocaleDateString()}</span>}
-                    </div>
-                    <div className="meta">
-                      {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
-                      {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
-                    </div>
-                  </div>
-                  {!r.completed && <DirectionalMenu row={r} />}
-                </div>
-              ))
-            )}
-          </>
-        )}
-      </div>
+                              {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
+                              {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
+                              {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
+                              {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px' }}>{new Date(r.due_at).toLocaleDateString()}</span>}
+                            </div>
+                            <div className="meta">
+                              {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
+                              {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
+                            </div>
+                          </div>
+                          {!r.completed && <DirectionalMenu row={r} />}
+                        </div>
+                    ))
+                )}
+              </>
+          )}
+        </div>
     );
   };
 
   if (!rows || rows.length === 0) {
     return (
-      <div className="terminal-card" style={{ padding: '20px', height: '450px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px' }}>
-          No todos yet. Press <kbd style={{
+        <div className="terminal-card" style={{
+          padding: '20px',
+          height: '450px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px' }}>
+            No todos yet. Press <kbd style={{
             padding: '2px 6px',
             background: 'var(--term-panel)',
             border: '1px solid var(--term-border)',
@@ -487,8 +494,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
             fontSize: '11px',
             fontFamily: 'monospace'
           }}>⌘N</kbd> to create one.
+          </div>
         </div>
-      </div>
     );
   }
 
@@ -499,164 +506,169 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   if (viewMode === 'date') {
     return (
-      <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <CustomScrollbar style={{
-          height: '450px'
-        }}>
-          <div style={{ paddingBottom: '20px' }}>
-          {dateGroups.length === 0 ? (
-            <div style={{ textAlign: 'center', color: 'var(--term-dim)', padding: '40px 20px' }}>
-              No todos with due dates.
-            </div>
-          ) : (
-            dateGroups.map(([key, list], gi) => (
-              <div key={key} style={{ marginBottom: '20px' }}>
-                <div className="date-header" style={{ marginRight: '25px' }}>
-                  {fmtDateLabel(key)}
-                </div>
-                {list.map((r, idx) => (
-                  <div
-                    key={r.id}
-                    className="list-row"
-                    onMouseEnter={() => {
-                      if (isRadialNavOpen === null) {
-                        setHoveredRow(r.id);
-                      }
-                    }}
-                    onMouseLeave={() => setHoveredRow(null)}
-                    onClick={(e) => {
-                      const target = e.target as HTMLElement;
-                      const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
-                      const isCheckboxClick = target.closest('.checkbox');
+        <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <CustomScrollbar style={{
+            height: '450px'
+          }}>
+            <div style={{ paddingBottom: '20px' }}>
+              {dateGroups.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--term-dim)', padding: '40px 20px' }}>
+                    No todos with due dates.
+                  </div>
+              ) : (
+                  dateGroups.map(([key, list], gi) => (
+                      <div key={key} style={{ marginBottom: '20px' }}>
+                        <div className="date-header" style={{ marginRight: '25px' }}>
+                          {fmtDateLabel(key)}
+                        </div>
+                        {list.map((r, idx) => (
+                            <div
+                                key={r.id}
+                                className="list-row"
+                                onMouseEnter={() => {
+                                  if (isRadialNavOpen === null) {
+                                    setHoveredRow(r.id);
+                                  }
+                                }}
+                                onMouseLeave={() => setHoveredRow(null)}
+                                onClick={(e) => {
+                                  const target = e.target as HTMLElement;
+                                  const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
+                                  const isCheckboxClick = target.closest('.checkbox');
 
-                      if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
-                        e.preventDefault();
-                        setHoveredRow(null);
-                        onEditTodo(r);
-                      }
-                    }}
-                    style={{
-                      cursor: r.completed ? 'default' : 'pointer',
-                      opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
-                      padding: '12px 20px',
-                      marginRight: '25px',
-                      display: 'flex',
-                      gap: '12px',
-                      position: 'relative',
-                      borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
-                      borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--term-border)'
-                    }}
-                  >
-                    <button
-                      className={`checkbox ${r.completed ? "checked" : ""}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggle(r.id, !r.completed);
-                      }}
-                      aria-label={r.completed ? "Uncheck" : "Check"}
-                      style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
-                    >
-                      <div className={`checkbox ${r.completed ? "checked" : ""}`}>
-                        <div className="mark" />
-                      </div>
-                    </button>
-                    <div
-                      style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
-                    >
-                      <div className={`title ${r.title.includes("http") ? "underlined" : ""}`}>
-                        {r.title}{" "}
-                        <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
+                                  if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
+                                    e.preventDefault();
+                                    setHoveredRow(null);
+                                    onEditTodo(r);
+                                  }
+                                }}
+                                style={{
+                                  cursor: r.completed ? 'default' : 'pointer',
+                                  opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
+                                  padding: '12px 20px',
+                                  marginRight: '25px',
+                                  display: 'flex',
+                                  gap: '12px',
+                                  position: 'relative',
+                                  borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+                                  borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--term-border)'
+                                }}
+                            >
+                              <button
+                                  className={`checkbox ${r.completed ? "checked" : ""}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onToggle(r.id, !r.completed);
+                                  }}
+                                  aria-label={r.completed ? "Uncheck" : "Check"}
+                                  style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
+                              >
+                                <div className={`checkbox ${r.completed ? "checked" : ""}`}>
+                                  <div className="mark" />
+                                </div>
+                              </button>
+                              <div
+                                  style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
+                              >
+                                <div className={`title ${r.title.includes("http") ? "underlined" : ""}`}>
+                                  {r.title}{" "}
+                                  <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
                           {r.contexts.map((c: string) => `@${c}`).join(" ")}
                         </span>
-                        {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
-                        {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>⁙</span>}
-                        {r.priority === "C" && <span style={{ color: 'var(--term-accent)', marginLeft: '6px' }}>•</span>}
+                                  {r.priority === "A" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>★</span>}
+                                  {r.priority === "B" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>⁙</span>}
+                                  {r.priority === "C" && <span style={{ color: 'var(--term-accent)', marginLeft: '6px' }}>•</span>}
+                                </div>
+                                <div className="meta">
+                                  {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
+                                  {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
+                                </div>
+                              </div>
+                              {!r.completed && <DirectionalMenu row={r} />}
+                            </div>
+                        ))}
+                        {gi < dateGroups.length - 1 && <div className="separator" />}
                       </div>
-                      <div className="meta">
-                        {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
-                        {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
-                      </div>
-                    </div>
-                  {!r.completed && <DirectionalMenu row={r} />}
-                  </div>
-                ))}
-                {gi < dateGroups.length - 1 && <div className="separator" />}
-              </div>
-            ))
-          )}
-          </div>
-        </CustomScrollbar>
+                  ))
+              )}
+            </div>
+          </CustomScrollbar>
 
-        <div className="summary" style={{
-          background: 'var(--term-panel)',
-          padding: '16px 20px 0 0',
-          borderTop: '1px solid var(--term-border)',
-          marginTop: '20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
-        }}>
+          <div className="summary" style={{
+            background: 'var(--term-panel)',
+            padding: '16px 20px 0 0',
+            borderTop: '1px solid var(--term-border)',
+            marginTop: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
           <span>
             {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
           </span>
-          {settingsButton && <div>{settingsButton}</div>}
+            {settingsButton && <div>{settingsButton}</div>}
+          </div>
         </div>
-      </div>
     );
   }
 
   return (
-    <>
-      {isRadialNavOpen !== null && (
-        <div
-          ref={modalOverlayRef}
-          onClick={() => setIsRadialNavOpen(null)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              setIsRadialNavOpen(null);
-            }
-          }}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1099,
-            background: 'transparent',
-            cursor: 'default',
-            outline: 'none'
-          }}
-          tabIndex={0}
-        />
-      )}
-      <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <CustomScrollbar style={{
-          height: '450px'
-        }}>
-          <div style={{ paddingBottom: '20px' }}>
-          {renderSection('Now', sections.now, 'now', true)}
-          {renderSection('Soon', sections.soon, 'soon', true)}
-          {renderSection('Anytime', sections.anytime, 'anytime', true)}
-          {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
-          </div>
-        </CustomScrollbar>
-
-        <div className="summary" style={{
-          background: 'var(--term-panel)',
-          padding: '16px 20px 0 0',
-          borderTop: '1px solid var(--term-border)',
-          marginTop: '20px',
+      <>
+        {isRadialNavOpen !== null && (
+            <div
+                ref={modalOverlayRef}
+                onClick={() => setIsRadialNavOpen(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setIsRadialNavOpen(null);
+                  }
+                }}
+                style={{
+                  position: 'fixed',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 1099,
+                  background: 'transparent',
+                  cursor: 'default',
+                  outline: 'none'
+                }}
+                tabIndex={0}
+            />
+        )}
+        <div className="terminal-card" style={{
+          padding: '20px',
+          position: 'relative',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+          flexDirection: 'column'
         }}>
+          <CustomScrollbar style={{
+            height: '450px'
+          }}>
+            <div style={{ paddingBottom: '20px' }}>
+              {renderSection('Now', sections.now, 'now', true)}
+              {renderSection('Soon', sections.soon, 'soon', true)}
+              {renderSection('Anytime', sections.anytime, 'anytime', true)}
+              {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
+            </div>
+          </CustomScrollbar>
+
+          <div className="summary" style={{
+            background: 'var(--term-panel)',
+            padding: '16px 20px 0 0',
+            borderTop: '1px solid var(--term-border)',
+            marginTop: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
           <span>
             {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
           </span>
-          {settingsButton && <div>{settingsButton}</div>}
+            {settingsButton && <div>{settingsButton}</div>}
+          </div>
         </div>
-      </div>
-    </>
+      </>
   );
 }

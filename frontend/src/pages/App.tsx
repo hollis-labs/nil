@@ -9,6 +9,7 @@ import SearchAutocomplete from "@/components/SearchAutocomplete";
 import WelcomeDialog from "@/components/WelcomeDialog";
 import HelpModal from "@/components/HelpModal";
 import AlphaWarning from "@/components/AlphaWarning";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -38,6 +39,8 @@ function Inner() {
   const [hasDemoData, setHasDemoData] = React.useState(false);
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [showAlphaWarning, setShowAlphaWarning] = React.useState(false);
+  const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
+  const [confirmQuit, setConfirmQuit] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -118,22 +121,22 @@ function Inner() {
       const merged = {
         keywords: [...mainParsed.keywords],
         projects: [
-          ...mainParsed.projects, 
+          ...mainParsed.projects,
           ...(tabParsed?.projects || []),
           ...(sessionAsFilter?.projects || [])
         ],
         contexts: [
-          ...mainParsed.contexts, 
+          ...mainParsed.contexts,
           ...(tabParsed?.contexts || []),
           ...(sessionAsFilter?.contexts || [])
         ],
         tags: [
-          ...mainParsed.tags, 
+          ...mainParsed.tags,
           ...(tabParsed?.tags || []),
           ...(sessionAsFilter?.tags || [])
         ],
         priorities: [
-          ...(mainParsed.priority || []), 
+          ...(mainParsed.priority || []),
           ...(tabParsed?.priority || []),
           ...(sessionAsFilter?.priority ? [sessionAsFilter.priority] : [])
         ],
@@ -177,13 +180,13 @@ function Inner() {
       }
 
       // Client-side filtering for negative keywords
-      if (merged.negativeKeywords.length > 0 || merged.negativeProjects.length > 0 || 
+      if (merged.negativeKeywords.length > 0 || merged.negativeProjects.length > 0 ||
           merged.negativeContexts.length > 0 || merged.negativeTags.length > 0) {
         allResults = allResults.filter(todo => {
           // Check negative keywords
           for (const kw of merged.negativeKeywords) {
             const kwLower = kw.toLowerCase();
-            if (todo.title?.toLowerCase().includes(kwLower) || 
+            if (todo.title?.toLowerCase().includes(kwLower) ||
                 todo.notes_md?.toLowerCase().includes(kwLower)) {
               return false;
             }
@@ -318,92 +321,79 @@ function Inner() {
   }
 
   return (
-    <div style={{ 
-      width: '100vw',
-      height: '100vh', 
-      overflow: 'hidden', 
-      display: 'flex', 
+    <div style={{
+      width: '800px',
+      height: '830px',
+      overflow: 'hidden',
+      display: 'flex',
       flexDirection: 'column',
-      padding: '10px',
-      boxSizing: 'border-box'
+      padding: '16',
+      background: 'var(--term-bg)',
+      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2)',
+      border: '2px solid var(--term-border, 1.2)',
     }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
 
-      <div style={{ 
+      <div style={{
         width: '100%',
         height: '100%',
-        background: 'var(--term-bg)',
-        borderRadius: '12px',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
+        padding: '10px',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column'
-      }}>
+      }} >
         {/* PLANCK Branding - Draggable */}
-        <div 
-          style={{
-            padding: '16px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            cursor: 'grab',
-            userSelect: 'none',
-            borderBottom: '1px solid var(--term-border)',
-            // @ts-ignore
-            '--wails-draggable': 'drag',
-            WebkitAppRegion: 'drag'
-          } as any}
-        >
-          <div style={{
-            fontFamily: '"Courier New", Courier, monospace',
-            fontSize: '14px',
-            fontWeight: 800,
-            letterSpacing: '0.12em',
-            color: 'var(--term-accent)',
-          }}>
-            PLANCK
+        <div style={{ position: 'relative', borderBottom: '1px solid var(--term-border)' }}>
+          <div
+            style={{
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'grab',
+              userSelect: 'none',
+              // @ts-ignore
+              '--wails-draggable': 'drag',
+              WebkitAppRegion: 'drag'
+            } as any}
+          >
+            <div style={{
+              fontFamily: '"Courier New", Courier, monospace',
+              fontSize: '14px',
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              color: 'var(--term-accent)',
+            }}>
+              PLANCK
+            </div>
+            <div style={{
+              fontSize: '10px',
+              color: 'var(--term-dim)',
+              fontFamily: 'serif',
+              fontStyle: 'italic',
+              opacity: 0.6,
+              letterSpacing: '0.02em'
+            }}>
+              <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
+            </div>
           </div>
-          <div style={{
-            fontSize: '10px',
-            color: 'var(--term-dim)',
-            fontFamily: 'serif',
-            fontStyle: 'italic',
-            opacity: 0.6,
-            letterSpacing: '0.02em'
-          }}>
-            <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
-          </div>
-          
+
           {hasDemoData && (
             <button
               className="badge warn"
-              onMouseDown={async (e) => {
-                console.log('Remove Tutorial - mousedown');
+              onClick={(e) => {
                 e.stopPropagation();
-                e.preventDefault();
-              }}
-              onClick={async (e) => {
-                console.log('Remove Tutorial - click');
-                e.stopPropagation();
-                e.preventDefault();
-                if (confirm('Remove all tutorial todos?')) {
-                  try {
-                    await (Backend as any).RemoveDemoData?.();
-                    setHasDemoData(false);
-                    runSearch();
-                  } catch (err) {
-                    console.error('Failed to remove demo data:', err);
-                    alert('Failed to remove demo data');
-                  }
-                }
+                setConfirmRemoveDemo(true);
               }}
               style={{
-                marginLeft: 'auto',
+                position: 'absolute',
+                right: '20px',
+                top: '50%',
+                transform: 'translateY(-50%)',
                 fontSize: '11px',
                 padding: '4px 8px',
                 cursor: 'pointer',
-                pointerEvents: 'auto',
+                zIndex: 1000,
                 // @ts-ignore
                 WebkitAppRegion: 'no-drag'
               } as any}
@@ -412,13 +402,14 @@ function Inner() {
             </button>
           )}
         </div>
-        
-        <div 
+
+        <div
           className="custom-scrollbar"
-          style={{ 
-            flex: 1, 
-            overflow: 'auto', 
-            padding: '20px',
+          style={{
+            flex: 1,
+            scrollbar: 'none',
+            overflow: 'hidden',
+            padding: '10px',
             // @ts-ignore
             WebkitAppRegion: 'no-drag'
           } as any}>
@@ -523,8 +514,8 @@ function Inner() {
               key={tab.id}
               className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
               onClick={() => !sessionAsFilter && setActiveTabId(tab.id)}
-              style={{ 
-                padding: '6px 12px', 
+              style={{
+                padding: '6px 12px',
                 fontSize: '12px',
                 opacity: sessionAsFilter ? 0.4 : 1,
                 cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
@@ -647,12 +638,9 @@ function Inner() {
                   e.preventDefault();
                 }}
                 onClick={(e) => {
-                  console.log('Power button - click');
                   e.stopPropagation();
                   e.preventDefault();
-                  if (confirm('Quit PLANCK?')) {
-                    Quit();
-                  }
+                  setConfirmQuit(true);
                 }}
                 title="Quit PLANCK"
                 onMouseEnter={(e) => {
@@ -681,17 +669,17 @@ function Inner() {
           setShowWelcome(true);
         }}
       />
-      
+
       {!showAlphaWarning && (
-        <WelcomeDialog 
-          open={showWelcome} 
-          onComplete={() => { 
+        <WelcomeDialog
+          open={showWelcome}
+          onComplete={() => {
             setShowWelcome(false);
             setShowDemoPrompt(true);
-          }} 
+          }}
         />
       )}
-      
+
       {/* Demo Data Prompt */}
       {showDemoPrompt && (
         <div style={{
@@ -749,6 +737,38 @@ function Inner() {
       )}
       <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <ConfirmDialog
+        open={confirmRemoveDemo}
+        title="Remove Tutorial Data"
+        message="Are you sure you want to remove all tutorial todos? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={async () => {
+          setConfirmRemoveDemo(false);
+          try {
+            await Backend.RemoveDemoData();
+            setHasDemoData(false);
+            runSearch();
+          } catch (err) {
+            console.error('Failed to remove demo data:', err);
+          }
+        }}
+        onCancel={() => setConfirmRemoveDemo(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmQuit}
+        title="Quit PLANCK"
+        message="Are you sure you want to quit PLANCK?"
+        confirmText="Quit"
+        cancelText="Cancel"
+        onConfirm={() => {
+          setConfirmQuit(false);
+          Quit();
+        }}
+        onCancel={() => setConfirmQuit(false)}
+      />
       <SessionContextModal
         open={sessionContextOpen}
         onOpenChange={setSessionContextOpen}

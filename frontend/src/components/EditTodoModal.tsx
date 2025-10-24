@@ -74,7 +74,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         setAvailableContexts([]);
         setAvailableTags([]);
       });
-      
+
       // Load session profiles
       setSessionProfiles(getSessionProfiles());
     }
@@ -272,8 +272,6 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
   };
 
-
-
   const modalStyle = {
     position: 'fixed' as const,
     inset: 0,
@@ -403,9 +401,12 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         {/* Scrollable Body */}
         <CustomScrollbar style={{
           flex: 1,
-          minHeight: 0
+          minHeight: 0,
+
         }}>
-          <div style={{ padding: '8px 20px 40px 20px' }}>
+          <div style={{
+            padding: '8px 20px 40px 20px'
+          }}>
             {/* Priority/Date chips row */}
             <div style={{
               display: 'flex',
@@ -471,9 +472,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     input.style.zIndex = '9999';
                     input.style.cursor = 'pointer';
                     document.body.appendChild(input);
-                    
+
                     input.focus();
-                    
+
                     requestAnimationFrame(() => {
                       try {
                         console.log('Attempting showPicker, available?', !!input.showPicker);
@@ -486,7 +487,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                         console.error('Date picker error:', err);
                       }
                     });
-                    
+
                     input.onchange = (e) => {
                       console.log('Date selected:', (e.target as HTMLInputElement).value);
                       setDue((e.target as HTMLInputElement).value);
@@ -621,7 +622,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                       id="merge-context"
                       checked={mergeContext}
                       onChange={(e) => setMergeContext(e.target.checked)}
-                      style={{ 
+                      style={{
                         cursor: 'pointer',
                         width: '12px',
                         height: '12px',
@@ -670,10 +671,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               borderRadius: '6px',
               background: 'var(--term-bg)',
               overflow: 'hidden',
-              minHeight: '190px',
-              maxHeight: '190px'
+              minHeight: '200px',
+              maxHeight: '200px',
+              paddingTop: '4px'
             }}>
-              <CustomScrollbar style={{ height: '100%', minHeight: '190px' }}>
+              <CustomScrollbar style={{
+                height: '50',
+                minHeight: '200px',
+                maxHeight: '200px'
+              }}>
                 <EditorContent editor={editor} />
               </CustomScrollbar>
             </div>

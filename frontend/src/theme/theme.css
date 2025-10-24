@@ -1,5 +1,6 @@
 :root {
   --term-bg: #0b0e14;
+  --term-bgAlt: #ffd700;
   --term-panel: #0f131a;
   --term-fg: #e6edf3;
   --term-dim: #8b949e;
@@ -25,8 +26,9 @@ html {
 
 /* Global scrollbar styles for all elements */
 ::-webkit-scrollbar {
-  width: 10px !important;
-  height: 10px !important;
+  width: 0 !important;
+  height: 0 !important;
+  display: none;
 }
 ::-webkit-scrollbar-track {
   background: var(--scrollbar-bg) !important;
@@ -103,29 +105,30 @@ body::-webkit-scrollbar-thumb:hover {
 a.term-link { color: var(--term-accent); text-decoration: underline; text-underline-offset: 2px; }
 a.term-link:hover { opacity: 0.9; }
 
-.badge { 
-  font-size: 11px; 
-  padding: 4px 8px; 
-  border-radius: 999px; 
-  background: #111827; 
-  border: 1px solid var(--term-border); 
-  color: var(--term-dim);
+.badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--term-bgAlt);
+  border: 1px solid var(--term-accent);
+  color: var(--term-fg);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 .badge:hover {
-  background: #1a2332;
+  background: var(--term-bg);
   border-color: var(--term-accent);
 }
 .badge.warn { color: var(--term-warn); border-color: var(--term-warn); }
 .badge.info { color: var(--term-info); border-color: var(--term-info); }
 .badge.success { color: var(--term-success); border-color: var(--term-success); }
 
+
 .checkbox {
   width: 16px; height: 16px;
   border-radius: 4px; border: 1px solid var(--term-border);
   display: inline-flex; align-items:center; justify-content:center;
-  background: #0b0f16;
+  background: var(--term-bgAlt);
 }
 .checkbox.checked { border-color: var(--term-success); background: #0f1a13; }
 .checkbox .mark { width: 10px; height: 10px; border-radius: 2px; background: var(--term-success); display:none; }
@@ -164,3 +167,4 @@ a.term-link:hover { opacity: 0.9; }
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
 }
+
