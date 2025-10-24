@@ -24,7 +24,7 @@ if [ $? -eq 0 ]; then
     
     # Create zip for easy sharing
     cd build/bin
-    zip -r ../../PLANCK-macOS.zip todo-app.app
+    zip -r ../../PLANCK-macOS.zip PLANCK.app
     cd ../..
     
     echo -e "${GREEN}✅ Created PLANCK-macOS.zip${NC}"
@@ -48,7 +48,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
             echo -e "${GREEN}✅ Windows build successful!${NC}"
             
             cd build/bin
-            zip ../../PLANCK-Windows.zip todo-app.exe
+            zip ../../PLANCK-Windows.zip planck.exe
             cd ../..
             
             echo -e "${GREEN}✅ Created PLANCK-Windows.zip${NC}"

@@ -17,6 +17,7 @@ import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
+import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
 
@@ -379,6 +380,7 @@ function Inner() {
               className="badge warn"
               onClick={async (e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 if (confirm('Remove all tutorial todos?')) {
                   try {
                     await (Backend as any).RemoveDemoData?.();
@@ -394,6 +396,7 @@ function Inner() {
                 marginLeft: 'auto',
                 fontSize: '11px',
                 padding: '4px 8px',
+                cursor: 'pointer',
                 // @ts-ignore
                 WebkitAppRegion: 'no-drag'
               } as any}
@@ -626,12 +629,12 @@ function Inner() {
                   height: '32px',
                   width: '32px',
                   position: 'relative',
-                  top: '6px',
-                  right: '-10px'
+                  top: '6px'
                 }}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   if (confirm('Quit PLANCK?')) {
-                    (window as any).runtime?.Quit();
+                    Quit();
                   }
                 }}
                 title="Quit PLANCK"

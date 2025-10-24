@@ -24,6 +24,7 @@ export default function HelpModal({ open, onOpenChange }: Props) {
       onClick={() => onOpenChange(false)}
     >
       <div
+        className="custom-scrollbar"
         style={{
           background: 'var(--term-bg)',
           border: '1px solid var(--term-border)',
