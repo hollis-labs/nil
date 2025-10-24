@@ -5,6 +5,7 @@ import NotesModal from "@/components/NotesModal";
 import EditTodoModal from "@/components/EditTodoModal";
 import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
 import SessionContextModal from "@/components/SessionContextModal";
+import SearchAutocomplete from "@/components/SearchAutocomplete";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -316,20 +317,10 @@ function Inner() {
         </div>
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <input
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              background: 'var(--term-panel)',
-              border: '1px solid var(--term-border)',
-              borderRadius: '6px',
-              color: 'var(--term-fg)',
-              fontSize: '13px'
-            }}
-            placeholder="Search… e.g. review #work +todoapp @home pri:A"
+          <SearchAutocomplete
             value={query}
-            onChange={(e)=>setQuery(e.target.value)}
-            onKeyDown={(e)=>{ if(e.key==="Enter") runSearch(); }}
+            onChange={setQuery}
+            onSearch={runSearch}
           />
           <button
             style={{
