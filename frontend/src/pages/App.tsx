@@ -69,16 +69,13 @@ function Inner() {
   }, [updateSessionFilterCount]);
 
   React.useEffect(() => {
-    // Check if user has seen alpha warning
-    const hasSeenWarning = localStorage.getItem('planck.alpha-warning-seen');
-    if (!hasSeenWarning) {
-      setShowAlphaWarning(true);
-      return;
-    }
-
+    // Check if database is set up
     Backend.NeedsSetup().then((needs: boolean) => {
-      setShowWelcome(needs);
-      if (!needs) {
+      if (needs) {
+        // Fresh install - always show alpha warning first
+        setShowAlphaWarning(true);
+      } else {
+        // Database exists, check demo data
         (Backend as any).HasDemoData?.().then((has: boolean) => {
           setHasDemoData(has);
           if (!has) {
@@ -651,20 +648,9 @@ function Inner() {
       <AlphaWarning
         open={showAlphaWarning}
         onComplete={() => {
-          localStorage.setItem('planck.alpha-warning-seen', 'true');
           setShowAlphaWarning(false);
-          // Now check for setup
-          Backend.NeedsSetup().then((needs: boolean) => {
-            setShowWelcome(needs);
-            if (!needs) {
-              (Backend as any).HasDemoData?.().then((has: boolean) => {
-                setHasDemoData(has);
-                if (!has) {
-                  setShowDemoPrompt(true);
-                }
-              });
-            }
-          });
+          // After warning, show welcome dialog for database setup
+          setShowWelcome(true);
         }}
       />
       
