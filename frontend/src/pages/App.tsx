@@ -7,10 +7,12 @@ import SettingsModal, { useSettings, SettingsProvider } from "@/components/Setti
 import SessionContextModal from "@/components/SessionContextModal";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
 import WelcomeDialog from "@/components/WelcomeDialog";
+import HelpModal from "@/components/HelpModal";
+import AlphaWarning from "@/components/AlphaWarning";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Calendar, List, Target } from "lucide-react";
+import { Settings, Plus, Calendar, List, Target, Power, HelpCircle } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
 
@@ -33,6 +35,8 @@ function Inner() {
   const [showWelcome, setShowWelcome] = React.useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = React.useState(false);
   const [hasDemoData, setHasDemoData] = React.useState(false);
+  const [helpOpen, setHelpOpen] = React.useState(false);
+  const [showAlphaWarning, setShowAlphaWarning] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -65,6 +69,13 @@ function Inner() {
   }, [updateSessionFilterCount]);
 
   React.useEffect(() => {
+    // Check if user has seen alpha warning
+    const hasSeenWarning = localStorage.getItem('planck.alpha-warning-seen');
+    if (!hasSeenWarning) {
+      setShowAlphaWarning(true);
+      return;
+    }
+
     Backend.NeedsSetup().then((needs: boolean) => {
       setShowWelcome(needs);
       if (!needs) {
@@ -542,34 +553,94 @@ function Inner() {
           viewMode={viewMode}
           closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null}
           settingsButton={
-            <button
-              style={{
-                padding: '8px',
-                background: 'var(--term-panel)',
-                border: '1px solid var(--term-border)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s ease',
-                height: '32px',
-                width: '32px',
-                position: 'relative',
-                top: '6px',
-                right: '-10px'
-              }}
-              onClick={()=>setSettingsOpen(true)}
-              title="Settings"
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--term-accent)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--term-border)';
-              }}
-            >
-              <Settings size={16} color="var(--term-fg)" />
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                style={{
+                  padding: '8px',
+                  background: 'var(--term-panel)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease',
+                  height: '32px',
+                  width: '32px',
+                  position: 'relative',
+                  top: '6px'
+                }}
+                onClick={()=>setHelpOpen(true)}
+                title="Help & Guide"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-border)';
+                }}
+              >
+                <HelpCircle size={16} color="var(--term-fg)" />
+              </button>
+              <button
+                style={{
+                  padding: '8px',
+                  background: 'var(--term-panel)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease',
+                  height: '32px',
+                  width: '32px',
+                  position: 'relative',
+                  top: '6px'
+                }}
+                onClick={()=>setSettingsOpen(true)}
+                title="Settings"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-border)';
+                }}
+              >
+                <Settings size={16} color="var(--term-fg)" />
+              </button>
+              <button
+                style={{
+                  padding: '8px',
+                  background: 'var(--term-panel)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.15s ease',
+                  height: '32px',
+                  width: '32px',
+                  position: 'relative',
+                  top: '6px',
+                  right: '-10px'
+                }}
+                onClick={() => {
+                  if (confirm('Quit PLANCK?')) {
+                    (window as any).runtime?.Quit();
+                  }
+                }}
+                title="Quit PLANCK"
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-accent)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--term-border)';
+                }}
+              >
+                <Power size={16} color="var(--term-fg)" />
+              </button>
+            </div>
           }
         />
 
@@ -577,6 +648,26 @@ function Inner() {
         </div>
       </div>
 
+      <AlphaWarning
+        open={showAlphaWarning}
+        onComplete={() => {
+          localStorage.setItem('planck.alpha-warning-seen', 'true');
+          setShowAlphaWarning(false);
+          // Now check for setup
+          Backend.NeedsSetup().then((needs: boolean) => {
+            setShowWelcome(needs);
+            if (!needs) {
+              (Backend as any).HasDemoData?.().then((has: boolean) => {
+                setHasDemoData(has);
+                if (!has) {
+                  setShowDemoPrompt(true);
+                }
+              });
+            }
+          });
+        }}
+      />
+      
       <WelcomeDialog 
         open={showWelcome} 
         onComplete={() => { 
@@ -640,6 +731,7 @@ function Inner() {
           </div>
         </div>
       )}
+      <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <SessionContextModal
         open={sessionContextOpen}

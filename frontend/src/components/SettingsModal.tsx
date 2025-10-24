@@ -238,7 +238,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               <TabButton name="general" label="General" />
               <TabButton name="tabs" label="Scope Tabs" />
               <TabButton name="theme" label="Theme" />
-              <TabButton name="data" label="Import/Export" />
+              {/* <TabButton name="data" label="Import/Export" /> */}
             </div>
           </div>
 
