@@ -6,6 +6,7 @@ import EditTodoModal from "@/components/EditTodoModal";
 import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
 import SessionContextModal from "@/components/SessionContextModal";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
+import WelcomeDialog from "@/components/WelcomeDialog";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -29,6 +30,7 @@ function Inner() {
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
   const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
   const [sessionAsFilter, setSessionAsFilter] = React.useState(false);
+  const [showWelcome, setShowWelcome] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -59,6 +61,12 @@ function Inner() {
   React.useEffect(() => {
     updateSessionFilterCount();
   }, [updateSessionFilterCount]);
+
+  React.useEffect(() => {
+    Backend.NeedsSetup().then((needs: boolean) => {
+      setShowWelcome(needs);
+    });
+  }, []);
 
   const defaultNewTodoFilters = React.useMemo(() => {
     const activeTab = settings.tabs.find(t => t.id === activeTabId);
@@ -496,6 +504,13 @@ function Inner() {
         <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
       </div>
 
+      <WelcomeDialog 
+        open={showWelcome} 
+        onComplete={() => { 
+          setShowWelcome(false); 
+          runSearch();
+        }} 
+      />
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <SessionContextModal
         open={sessionContextOpen}

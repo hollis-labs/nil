@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 
+	"todo-app/config"
 	"todo-app/parse"
 	"todo-app/store"
 )
 
 type App struct {
-	ctx   context.Context
-	Store *store.Store
+	ctx        context.Context
+	Store      *store.Store
+	needsSetup bool
 }
 
 func NewApp() *App {
@@ -19,11 +23,80 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	s, err := store.Open(ctx, "./data")
+
+	// Load config
+	cfg, err := config.Load()
+	if err != nil {
+		panic(err)
+	}
+
+	// If no database path configured, signal setup needed
+	if cfg.DatabasePath == "" {
+		a.needsSetup = true
+		return
+	}
+
+	// Open database
+	s, err := store.Open(ctx, cfg.DatabasePath)
 	if err != nil {
 		panic(err)
 	}
 	a.Store = s
+}
+
+// NeedsSetup returns true if the app needs initial database configuration
+func (a *App) NeedsSetup() bool {
+	return a.needsSetup
+}
+
+// GetDatabasePath returns the current configured database path
+func (a *App) GetDatabasePath() (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	if cfg.DatabasePath == "" {
+		return config.GetDefaultDatabasePath(), nil
+	}
+	return cfg.DatabasePath, nil
+}
+
+// GetDefaultDatabasePath returns the OS-appropriate default path
+func (a *App) GetDefaultDatabasePath() string {
+	return config.GetDefaultDatabasePath()
+}
+
+// SetDatabasePath validates and saves the database path, then opens the database
+func (a *App) SetDatabasePath(path string) error {
+	// Validate path exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("directory does not exist: %s", path)
+	}
+
+	// Check if writable
+	testFile := path + "/.planck-write-test"
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		return fmt.Errorf("directory not writable: %s", path)
+	}
+	os.Remove(testFile)
+
+	// Save config
+	cfg := &config.Config{DatabasePath: path}
+	if err := config.Save(cfg); err != nil {
+		return err
+	}
+
+	// Open database if we have a context
+	if a.ctx != nil {
+		s, err := store.Open(a.ctx, path)
+		if err != nil {
+			return err
+		}
+		a.Store = s
+		a.needsSetup = false
+	}
+
+	return nil
 }
 
 func (a *App) CreateTodoFromLine(line string) (*store.Todo, error) {

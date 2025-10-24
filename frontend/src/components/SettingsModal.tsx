@@ -75,6 +75,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   const [customTheme, setCustomTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
   const [selectedPreset, setSelectedPreset] = React.useState<string>('custom');
   const [draggedTabId, setDraggedTabId] = React.useState<string | null>(null);
+  const [databasePath, setDatabasePath] = React.useState<string>('');
+  const [changingDbPath, setChangingDbPath] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -98,6 +100,14 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
       if (!matchingPreset) {
         setCustomTheme(fullTheme);
       }
+      
+      // Load database path
+      (Backend as any).GetDatabasePath?.().then((path: string) => {
+        setDatabasePath(path);
+      }).catch((err: any) => {
+        console.error('Failed to load database path:', err);
+        setDatabasePath('./data'); // fallback
+      });
     }
   }, [open, settings, theme]);
 
@@ -307,15 +317,86 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 <label style={{ fontSize: '12px', display: 'block', marginBottom: '6px' }} className="text-dim">
                   Current Database Path
                 </label>
-                <div style={{
-                  ...inputStyle,
-                  background: 'var(--term-panel)',
-                  opacity: 0.7,
-                  fontFamily: 'monospace',
-                  fontSize: '12px'
-                }}>
-                  ./data/todo.db
-                </div>
+                {!changingDbPath ? (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: 'var(--term-panel)',
+                      border: '1px solid var(--term-border)',
+                      borderRadius: '6px',
+                      fontFamily: 'monospace',
+                      fontSize: '12px',
+                      color: 'var(--term-fg)',
+                      opacity: 0.8
+                    }}>
+                      {databasePath || 'Loading...'}
+                    </div>
+                    <button
+                      type="button"
+                      className="badge info"
+                      onClick={() => setChangingDbPath(true)}
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      Change Location
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          background: 'var(--term-bg)',
+                          border: '1px solid var(--term-border)',
+                          borderRadius: '6px',
+                          color: 'var(--term-fg)',
+                          fontSize: '12px',
+                          fontFamily: 'monospace'
+                        }}
+                        placeholder="Paste new database directory path..."
+                        defaultValue={databasePath}
+                        id="new-db-path-input"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className="badge success"
+                        onClick={async () => {
+                          const input = document.getElementById('new-db-path-input') as HTMLInputElement;
+                          const newPath = input?.value?.trim();
+                          if (newPath) {
+                            try {
+                              await (Backend as any).SetDatabasePath(newPath);
+                              alert('Database location updated! Please restart Planck for changes to take effect.');
+                              setDatabasePath(newPath);
+                              setChangingDbPath(false);
+                            } catch (err: any) {
+                              alert(`Error: ${err.message || err}`);
+                            }
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        className="badge"
+                        onClick={() => setChangingDbPath(false)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '11px', marginTop: '8px', color: 'var(--term-dim)' }}>
+                      Paste the full path to the directory where you want to store the database.
+                      <br />
+                      For iCloud: <code style={{ fontSize: '10px' }}>~/Library/Mobile Documents/com~apple~CloudDocs/Planck</code>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <details style={{ marginTop: '12px' }}>

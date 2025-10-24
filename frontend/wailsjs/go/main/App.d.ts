@@ -11,11 +11,19 @@ export function DeleteTodo(arg1:number):Promise<void>;
 
 export function ExportTodoTxt():Promise<string>;
 
+export function GetDatabasePath():Promise<string>;
+
+export function GetDefaultDatabasePath():Promise<string>;
+
 export function GetFilters():Promise<main.FiltersResult>;
 
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
+export function NeedsSetup():Promise<boolean>;
+
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
+
+export function SetDatabasePath(arg1:string):Promise<void>;
 
 export function ToggleComplete(arg1:number,arg2:boolean):Promise<void>;
 

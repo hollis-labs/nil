@@ -18,6 +18,14 @@ export function ExportTodoTxt() {
   return window['go']['main']['App']['ExportTodoTxt']();
 }
 
+export function GetDatabasePath() {
+  return window['go']['main']['App']['GetDatabasePath']();
+}
+
+export function GetDefaultDatabasePath() {
+  return window['go']['main']['App']['GetDefaultDatabasePath']();
+}
+
 export function GetFilters() {
   return window['go']['main']['App']['GetFilters']();
 }
@@ -26,8 +34,16 @@ export function ImportTodoTxt(arg1) {
   return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
 
+export function NeedsSetup() {
+  return window['go']['main']['App']['NeedsSetup']();
+}
+
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
+}
+
+export function SetDatabasePath(arg1) {
+  return window['go']['main']['App']['SetDatabasePath'](arg1);
 }
 
 export function ToggleComplete(arg1, arg2) {
