@@ -53,7 +53,8 @@ html {
 }
 
 html {
-  scrollbar-width: thin !important;
+  /*<!-- DISABLE APP SIDEBAR: SET WIDTH TO NONE -->*/
+  scrollbar-width: none !important;
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg) !important;
 }
 

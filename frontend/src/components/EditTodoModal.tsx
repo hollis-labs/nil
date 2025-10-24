@@ -375,8 +375,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         <div className="terminal-card" style={{
         width: '720px',
         maxWidth: '95vw',
-        height: '650px',
-        maxHeight: '650px',
+        height: '750px',
+        maxHeight: '750px',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden'
@@ -398,14 +398,28 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
         </div>
 
-        {/* Scrollable Body */}
-        <CustomScrollbar style={{
+        {/* Modal Body - NO SCROLLBAR 
+            FIX: CustomScrollbar component was causing content to auto-scroll/jump when TipTap 
+            markdown elements changed (e.g. typing # for headings, - for bullets).
+            Solution: 
+            1. Removed CustomScrollbar wrapper (no scrollbar needed with 750px height)
+            2. Added overflow: 'hidden' to prevent scrolling
+            3. Added position: 'relative' to both outer and inner divs to anchor content in place
+            4. Added height: '100%' to inner div to lock positioning
+            This prevents the "jump to top" bug when typing markdown in the description editor.
+        */}
+        <div style={{
           flex: 1,
           minHeight: 0,
-
+          overflow: 'hidden',
+          overflowAnchor: 'none',
+          position: 'relative',
         }}>
           <div style={{
-            padding: '8px 20px 40px 20px'
+            padding: '8px 20px 40px 20px',
+            overflowAnchor: 'none',
+            height: '100%',
+            position: 'relative',
           }}>
             {/* Priority/Date chips row */}
             <div style={{
@@ -671,14 +685,14 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               borderRadius: '6px',
               background: 'var(--term-bg)',
               overflow: 'hidden',
-              minHeight: '200px',
-              maxHeight: '200px',
+              minHeight: '300px',
+              maxHeight: '300px',
               paddingTop: '4px'
             }}>
               <CustomScrollbar style={{
                 height: '50',
-                minHeight: '200px',
-                maxHeight: '200px'
+                minHeight: '300px',
+                maxHeight: '300px'
               }}>
                 <EditorContent editor={editor} />
               </CustomScrollbar>
@@ -686,7 +700,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
         </form>
           </div>
-        </CustomScrollbar>
+        </div>
 
         {/* Fixed Footer */}
         <div style={{
