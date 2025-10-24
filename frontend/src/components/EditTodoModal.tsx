@@ -405,7 +405,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           flex: 1,
           minHeight: 0
         }}>
-          <div style={{ padding: '0 20px 40px 20px' }}>
+          <div style={{ padding: '8px 20px 40px 20px' }}>
             {/* Priority/Date chips row */}
             <div style={{
               display: 'flex',
@@ -413,7 +413,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               marginBottom: '16px',
               paddingBottom: '8px',
               borderBottom: '1px solid var(--term-border)',
-              flexWrap: 'wrap'
+              flexWrap: 'wrap',
+              paddingTop: '4px'
             }}>
               <button
                 type="button"

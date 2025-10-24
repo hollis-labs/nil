@@ -378,6 +378,10 @@ function Inner() {
           {hasDemoData && (
             <button
               className="badge warn"
+              onMouseDown={async (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
               onClick={async (e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -397,6 +401,7 @@ function Inner() {
                 fontSize: '11px',
                 padding: '4px 8px',
                 cursor: 'pointer',
+                pointerEvents: 'auto',
                 // @ts-ignore
                 WebkitAppRegion: 'no-drag'
               } as any}
@@ -406,13 +411,15 @@ function Inner() {
           )}
         </div>
         
-        <div style={{ 
-          flex: 1, 
-          overflow: 'auto', 
-          padding: '20px',
-          // @ts-ignore
-          WebkitAppRegion: 'no-drag'
-        } as any}>
+        <div 
+          className="custom-scrollbar"
+          style={{ 
+            flex: 1, 
+            overflow: 'auto', 
+            padding: '20px',
+            // @ts-ignore
+            WebkitAppRegion: 'no-drag'
+          } as any}>
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <SearchAutocomplete
@@ -629,10 +636,16 @@ function Inner() {
                   height: '32px',
                   width: '32px',
                   position: 'relative',
-                  top: '6px'
+                  top: '6px',
+                  pointerEvents: 'auto'
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   if (confirm('Quit PLANCK?')) {
                     Quit();
                   }
