@@ -30,6 +30,10 @@ export function GetFilters() {
   return window['go']['main']['App']['GetFilters']();
 }
 
+export function HasDemoData() {
+  return window['go']['main']['App']['HasDemoData']();
+}
+
 export function ImportTodoTxt(arg1) {
   return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
@@ -38,8 +42,16 @@ export function NeedsSetup() {
   return window['go']['main']['App']['NeedsSetup']();
 }
 
+export function RemoveDemoData() {
+  return window['go']['main']['App']['RemoveDemoData']();
+}
+
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
+}
+
+export function SeedDemoData() {
+  return window['go']['main']['App']['SeedDemoData']();
 }
 
 export function SetDatabasePath(arg1) {

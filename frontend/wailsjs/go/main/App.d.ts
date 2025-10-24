@@ -17,11 +17,17 @@ export function GetDefaultDatabasePath():Promise<string>;
 
 export function GetFilters():Promise<main.FiltersResult>;
 
+export function HasDemoData():Promise<boolean>;
+
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
 export function NeedsSetup():Promise<boolean>;
 
+export function RemoveDemoData():Promise<void>;
+
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
+
+export function SeedDemoData():Promise<void>;
 
 export function SetDatabasePath(arg1:string):Promise<void>;
 

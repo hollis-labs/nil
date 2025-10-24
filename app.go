@@ -114,6 +114,96 @@ func (a *App) CreateTodoFromLine(line string) (*store.Todo, error) {
 	return a.Store.CreateTodo(a.ctx, t)
 }
 
+const demoDataTag = "planck-demo"
+
+func (a *App) HasDemoData() (bool, error) {
+	if a.Store == nil {
+		return false, nil
+	}
+	req := store.SearchRequest{
+		Tags:     []string{demoDataTag},
+		PageSize: 1,
+	}
+	results, err := a.Store.Search(a.ctx, req)
+	if err != nil {
+		return false, err
+	}
+	return len(results) > 0, nil
+}
+
+func (a *App) SeedDemoData() error {
+	if a.Store == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	demoTodos := []string{
+		"(A) Welcome to Planck - your quantum todo manager! +tutorial @getting-started",
+		"(A) Try searching with keywords, like 'welcome' or 'syntax' +tutorial @getting-started",
+		"(B) Use +project tags to organize by project +tutorial @organization",
+		"(B) Use @context tags for location or tool (like @home @computer @phone) +tutorial @organization",
+		"(B) Use #hashtags for flexible categorization #learning #productivity +tutorial",
+		"(C) Set priorities with (A) (B) (C) at the start of your todo +tutorial @organization",
+		"Add due dates with due:2025-12-31 for deadlines +tutorial @time-management",
+		"Add threshold dates with t:2025-11-01 to hide tasks until ready +tutorial @time-management",
+		"Combine filters: search for '+work @office pri:A' to find high-priority office work +tutorial @advanced",
+		"Use negative filters: search '-meeting' to exclude todos with 'meeting' +tutorial @advanced",
+		"(A) Click the target icon to set Session Context - temporary filters for focus mode +tutorial @features",
+		"Use tabs (configure in Settings) to create saved filter views +tutorial @features",
+		"Switch between Scope view (Now/Soon/Anytime) and Date view (calendar) +tutorial @features",
+		"Press ⌘N to quickly add new todos from anywhere in the app +tutorial @shortcuts",
+		"Click the ⚙️ Settings button to customize themes, tabs, and preferences +tutorial @features",
+		"Right-click todos for quick actions: archive, delete, move sections +tutorial @features",
+		"(A) Store your database in iCloud Drive to sync across devices! +tutorial @sync #icloud",
+		"Export to todo.txt format via Settings → Import/Export +tutorial @backup",
+		"x Completed todos look like this - they're marked with 'x' in todo.txt format +tutorial @getting-started",
+		"This is a note-taking example - click any todo to add detailed markdown notes +tutorial @features",
+	}
+
+	for _, line := range demoTodos {
+		p := parse.ParseLine(line)
+		todo := &store.Todo{
+			Title:     p.Title,
+			Priority:  p.Priority,
+			Projects:  p.Projects,
+			Contexts:  p.Contexts,
+			Tags:      append(p.Tags, demoDataTag),
+			DueAt:     p.Due,
+			Threshold: p.Thresh,
+			Source:    line,
+		}
+		_, err := a.Store.CreateTodo(a.ctx, todo)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *App) RemoveDemoData() error {
+	if a.Store == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	req := store.SearchRequest{
+		Tags:     []string{demoDataTag},
+		PageSize: 500,
+	}
+	results, err := a.Store.Search(a.ctx, req)
+	if err != nil {
+		return err
+	}
+
+	for _, todo := range results {
+		err = a.Store.DeleteTodo(a.ctx, int64(todo.ID))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (a *App) UpdateTodo(t store.Todo) error {
 	return a.Store.UpdateTodo(a.ctx, &t)
 }

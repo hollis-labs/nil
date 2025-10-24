@@ -31,6 +31,8 @@ function Inner() {
   const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
   const [sessionAsFilter, setSessionAsFilter] = React.useState(false);
   const [showWelcome, setShowWelcome] = React.useState(false);
+  const [showDemoPrompt, setShowDemoPrompt] = React.useState(false);
+  const [hasDemoData, setHasDemoData] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -65,6 +67,14 @@ function Inner() {
   React.useEffect(() => {
     Backend.NeedsSetup().then((needs: boolean) => {
       setShowWelcome(needs);
+      if (!needs) {
+        (Backend as any).HasDemoData?.().then((has: boolean) => {
+          setHasDemoData(has);
+          if (!has) {
+            setShowDemoPrompt(true);
+          }
+        });
+      }
     });
   }, []);
 
@@ -293,20 +303,18 @@ function Inner() {
 
   return (
     <div style={{ 
+      width: '100vw',
       height: '100vh', 
       overflow: 'hidden', 
       display: 'flex', 
-      flexDirection: 'column', 
-      justifyContent: 'flex-start', 
-      alignItems: 'center', 
-      overscrollBehavior: 'none',
-      padding: '10px'
+      flexDirection: 'column',
+      padding: '10px',
+      boxSizing: 'border-box'
     }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
 
       <div style={{ 
-        width: '100%', 
-        maxWidth: '800px', 
+        width: '100%',
         height: '100%',
         background: 'var(--term-bg)',
         borderRadius: '12px',
@@ -321,7 +329,7 @@ function Inner() {
           style={{
             padding: '16px 20px',
             display: 'flex',
-            alignItems: 'baseline',
+            alignItems: 'center',
             gap: '6px',
             cursor: 'grab',
             userSelect: 'none',
@@ -350,6 +358,34 @@ function Inner() {
           }}>
             <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
           </div>
+          
+          {hasDemoData && (
+            <button
+              className="badge warn"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm('Remove all tutorial todos?')) {
+                  try {
+                    await (Backend as any).RemoveDemoData?.();
+                    setHasDemoData(false);
+                    runSearch();
+                  } catch (err) {
+                    console.error('Failed to remove demo data:', err);
+                    alert('Failed to remove demo data');
+                  }
+                }
+              }}
+              style={{
+                marginLeft: 'auto',
+                fontSize: '11px',
+                padding: '4px 8px',
+                // @ts-ignore
+                WebkitAppRegion: 'no-drag'
+              } as any}
+            >
+              Remove Tutorial
+            </button>
+          )}
         </div>
         
         <div style={{ 
@@ -544,10 +580,66 @@ function Inner() {
       <WelcomeDialog 
         open={showWelcome} 
         onComplete={() => { 
-          setShowWelcome(false); 
-          runSearch();
+          setShowWelcome(false);
+          setShowDemoPrompt(true);
         }} 
       />
+      
+      {/* Demo Data Prompt */}
+      {showDemoPrompt && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: 'var(--term-bg)',
+            border: '1px solid var(--term-border)',
+            borderRadius: '12px',
+            padding: '32px',
+            maxWidth: '500px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+          }}>
+            <h2 style={{ margin: '0 0 16px 0', color: 'var(--term-accent)', fontSize: '20px' }}>
+              Welcome to Planck!
+            </h2>
+            <p style={{ margin: '0 0 24px 0', color: 'var(--term-fg)', lineHeight: '1.6' }}>
+              Would you like to add tutorial todos? They'll teach you todo.txt syntax and show off all the features.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button
+                className="badge"
+                onClick={() => {
+                  setShowDemoPrompt(false);
+                  runSearch();
+                }}
+              >
+                No Thanks
+              </button>
+              <button
+                className="badge success"
+                onClick={async () => {
+                  try {
+                    await (Backend as any).SeedDemoData?.();
+                    setHasDemoData(true);
+                    setShowDemoPrompt(false);
+                    runSearch();
+                  } catch (err) {
+                    console.error('Failed to seed demo data:', err);
+                    alert('Failed to add demo data');
+                  }
+                }}
+              >
+                Yes, Add Tutorial
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
       <SessionContextModal
         open={sessionContextOpen}
