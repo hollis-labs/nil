@@ -46,6 +46,10 @@ export function RemoveDemoData() {
   return window['go']['main']['App']['RemoveDemoData']();
 }
 
+export function Restart() {
+  return window['go']['main']['App']['Restart']();
+}
+
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
 }

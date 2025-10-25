@@ -25,6 +25,8 @@ export function NeedsSetup():Promise<boolean>;
 
 export function RemoveDemoData():Promise<void>;
 
+export function Restart():Promise<void>;
+
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
 
 export function SeedDemoData():Promise<void>;

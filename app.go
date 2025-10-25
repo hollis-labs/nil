@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"todo-app/config"
@@ -379,5 +380,28 @@ func (a *App) ImportTodoTxt(content string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// Restart restarts the application
+func (a *App) Restart() error {
+	// Get the executable path
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("failed to get executable path: %w", err)
+	}
+
+	// Start a new instance
+	cmd := exec.Command(executable, os.Args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to restart: %w", err)
+	}
+
+	// Exit current process
+	os.Exit(0)
 	return nil
 }

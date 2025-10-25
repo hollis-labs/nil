@@ -39,7 +39,7 @@ export default function CustomScrollbar({
         {...props}
         style={{
           ...trackStyle,
-          backgroundColor: theme.scrollbarBg || theme.panel,
+          backgroundColor: 'transparent',
           right: '2px',
           bottom: '2px',
           top: '2px',

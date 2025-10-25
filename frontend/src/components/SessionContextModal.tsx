@@ -33,6 +33,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
   const [statusMessage, setStatusMessage] = React.useState<string>('');
   const [showStatus, setShowStatus] = React.useState(false);
   const [useAsFilterTab, setUseAsFilterTab] = React.useState(false);
+  const [comboboxOpen, setComboboxOpen] = React.useState(false);
+  const [comboboxSearch, setComboboxSearch] = React.useState('');
 
   React.useEffect(() => {
     if (open) {
@@ -153,6 +155,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
   const handleSaveAndApply = () => {
     if (!profileName.trim()) return;
 
+    let profileId = selectedProfileId;
+
     if (selectedProfileId && !isNewProfile) {
       updateSessionProfile(selectedProfileId, {
         name: profileName.trim(),
@@ -169,13 +173,14 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         tags,
         priority: priority || undefined,
       });
+      profileId = newProfile.id;
       setSelectedProfileId(newProfile.id);
       setIsNewProfile(false);
     }
 
     loadProfiles();
     setActiveSession({
-      profileId: selectedProfileId || undefined,
+      profileId: profileId || undefined,
       contexts,
       projects,
       tags,
@@ -390,41 +395,92 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
 
             {/* Profile Selection */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <select
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  background: 'var(--term-bg)',
-                  border: '1px solid var(--term-border)',
-                  borderRadius: '6px',
-                  color: 'var(--term-fg)',
-                  fontSize: '13px',
-                  height: '40px',
-                  appearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 8px center',
-                  backgroundSize: '16px',
-                  paddingRight: '32px'
-                }}
-                value={selectedProfileId || ''}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleSelectProfile(e.target.value);
-                  } else {
-                    handleNewProfile();
-                  }
-                }}
-              >
-                <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)', opacity: 0.8 }}>
-                  New Profile...
-                </option>
-                {profiles.map(profile => (
-                  <option key={profile.id} value={profile.id} style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ flex: 1, position: 'relative' }}>
+                <input
+                  type="text"
+                  value={comboboxSearch}
+                  onChange={(e) => setComboboxSearch(e.target.value)}
+                  onFocus={(e) => {
+                    setComboboxOpen(true);
+                    e.currentTarget.style.borderColor = 'var(--term-accent)';
+                  }}
+                  onBlur={(e) => {
+                    setTimeout(() => setComboboxOpen(false), 200);
+                    e.currentTarget.style.borderColor = 'var(--term-border)';
+                  }}
+                  placeholder={selectedProfileId ? profiles.find(p => p.id === selectedProfileId)?.name || 'New Profile...' : 'New Profile...'}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--term-border)',
+                    borderRadius: '6px',
+                    color: 'var(--term-fg)',
+                    fontSize: '13px',
+                    height: '40px',
+                    outline: 'none'
+                  }}
+                />
+                {comboboxOpen && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    marginTop: '4px',
+                    background: 'var(--term-panel)',
+                    border: '1px solid var(--term-border)',
+                    borderRadius: '6px',
+                    maxHeight: '200px',
+                    overflowY: 'auto',
+                    zIndex: 1000,
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <div
+                      onClick={() => {
+                        handleNewProfile();
+                        setComboboxSearch('');
+                        setComboboxOpen(false);
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        opacity: 0.8,
+                        borderBottom: '1px solid var(--term-border)'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--term-bg)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      New Profile...
+                    </div>
+                    {profiles
+                      .filter(p => p.name.toLowerCase().includes(comboboxSearch.toLowerCase()))
+                      .slice(0, 5)
+                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .map(profile => (
+                        <div
+                          key={profile.id}
+                          onClick={() => {
+                            handleSelectProfile(profile.id);
+                            setComboboxSearch('');
+                            setComboboxOpen(false);
+                          }}
+                          style={{
+                            padding: '8px 12px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            background: selectedProfileId === profile.id ? 'var(--term-accent-dim)' : 'transparent'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--term-bg)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = selectedProfileId === profile.id ? 'var(--term-accent-dim)' : 'transparent'}
+                        >
+                          {profile.name}
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 className="badge success"

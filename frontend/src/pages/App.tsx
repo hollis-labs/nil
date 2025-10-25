@@ -10,6 +10,7 @@ import WelcomeDialog from "@/components/WelcomeDialog";
 import HelpModal from "@/components/HelpModal";
 import AlphaWarning from "@/components/AlphaWarning";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import PowerMenu from "@/components/PowerMenu";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -40,7 +41,7 @@ function Inner() {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [showAlphaWarning, setShowAlphaWarning] = React.useState(false);
   const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
-  const [confirmQuit, setConfirmQuit] = React.useState(false);
+  const [showPowerMenu, setShowPowerMenu] = React.useState(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -85,13 +86,10 @@ function Inner() {
         console.log('Showing alpha warning');
         setShowAlphaWarning(true);
       } else {
-        // Database exists, check demo data
+        // Database exists, check demo data status
         console.log('Database exists, checking demo data');
         (Backend as any).HasDemoData?.().then((has: boolean) => {
           setHasDemoData(has);
-          if (!has) {
-            setShowDemoPrompt(true);
-          }
         });
       }
     }).catch(err => {
@@ -375,6 +373,7 @@ function Inner() {
       background: 'var(--term-bg)',
       boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2)',
       border: '2px solid var(--term-border, 1.2)',
+      borderRadius: '12px',
     }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
 
@@ -401,14 +400,30 @@ function Inner() {
               WebkitAppRegion: 'drag'
             } as any}
           >
-            <div style={{
-              fontFamily: '"Courier New", Courier, monospace',
-              fontSize: '14px',
-              fontWeight: 800,
-              letterSpacing: '0.12em',
-              color: 'var(--term-accent)',
-            }}>
-              PLANCK
+            <div className="planck-header-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span 
+                className="badge warn planck-lightning" 
+                style={{
+                  padding: '2px',
+                  fontSize: '10px',
+                  borderRadius: '3px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '14px',
+                  height: '14px',
+                  lineHeight: '1'
+                }}
+              >⚡</span>
+              <div className="planck-label" style={{
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                fontSize: '14px',
+                fontWeight: 800,
+                letterSpacing: '0.12em',
+                color: 'var(--term-info)',
+              }}>
+                PLANCK
+              </div>
             </div>
             <div style={{
               fontSize: '10px',
@@ -568,7 +583,12 @@ function Inner() {
                 <button
                   key={tab.id}
                   className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
-                  onClick={() => !sessionAsFilter && setActiveTabId(tab.id)}
+                  onClick={() => {
+                    if (!sessionAsFilter) {
+                      setActiveTabId(tab.id);
+                      runSearch();
+                    }
+                  }}
                   style={{
                     padding: '8px 12px',
                     fontSize: '13px',
@@ -702,7 +722,7 @@ function Inner() {
                 onClick={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  setConfirmQuit(true);
+                  setShowPowerMenu(true);
                 }}
                 title="Quit PLANCK"
                 onMouseEnter={(e) => {
@@ -735,9 +755,33 @@ function Inner() {
       {!showAlphaWarning && (
         <WelcomeDialog
           open={showWelcome}
-          onComplete={() => {
+          onComplete={async () => {
             setShowWelcome(false);
-            setShowDemoPrompt(true);
+            // Check if database is empty (no todos)
+            try {
+              const req: any = {
+                query: '',
+                page: 0,
+                page_size: 1,
+                sort_by: 'created_at',
+                sort_dir: 'desc',
+                keywords: [],
+                projects: [],
+                contexts: [],
+                tags: [],
+                statuses: ['open'],
+                priorities: []
+              };
+              const result = await Backend.Search(req);
+              if (result && Array.isArray(result) && result.length === 0) {
+                // Database is empty, show demo prompt
+                setShowDemoPrompt(true);
+              }
+            } catch (err) {
+              console.error('Error checking database:', err);
+              // On error, show demo prompt to be safe
+              setShowDemoPrompt(true);
+            }
           }}
         />
       )}
@@ -761,11 +805,11 @@ function Inner() {
             maxWidth: '500px',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
           }}>
-            <h2 style={{ margin: '0 0 16px 0', color: 'var(--term-accent)', fontSize: '20px' }}>
+            <h2 style={{ margin: '0 0 16px 0', color: 'var(--term-info)', fontSize: '20px' }}>
               Welcome to Planck!
             </h2>
-            <p style={{ margin: '0 0 24px 0', color: 'var(--term-fg)', lineHeight: '1.6' }}>
-              Would you like to add tutorial todos? They'll teach you todo.txt syntax and show off all the features.
+            <p style={{ margin: '0 0 24px 0', color: 'var(--term-fg)', lineHeight: '1.6', opacity: 0.9 }}>
+              Would you like to add <strong>tutorial</strong> todos? They'll <strong>teach you</strong> todo.txt syntax and show off all the features.
             </p>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
@@ -821,17 +865,21 @@ function Inner() {
         onCancel={() => setConfirmRemoveDemo(false)}
       />
 
-      <ConfirmDialog
-        open={confirmQuit}
-        title="Quit PLANCK"
-        message="Are you sure you want to quit PLANCK?"
-        confirmText="Quit"
-        cancelText="Cancel"
-        onConfirm={() => {
-          setConfirmQuit(false);
+      <PowerMenu
+        open={showPowerMenu}
+        onQuit={() => {
+          setShowPowerMenu(false);
           Quit();
         }}
-        onCancel={() => setConfirmQuit(false)}
+        onRestart={async () => {
+          setShowPowerMenu(false);
+          try {
+            await Backend.Restart();
+          } catch (err) {
+            console.error('Restart failed:', err);
+          }
+        }}
+        onCancel={() => setShowPowerMenu(false)}
       />
       <SessionContextModal
         open={sessionContextOpen}

@@ -2,7 +2,9 @@ import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { themePresets, TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import * as Backend from "../../wailsjs/go/main/App";
+import { Check } from "lucide-react";
 
 type Settings = {
   showCompleted: boolean;
@@ -77,6 +79,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   const [draggedTabId, setDraggedTabId] = React.useState<string | null>(null);
   const [databasePath, setDatabasePath] = React.useState<string>('');
   const [changingDbPath, setChangingDbPath] = React.useState(false);
+  const [showRestartPrompt, setShowRestartPrompt] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -234,11 +237,48 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
             </div>
 
             {/* Tab Navigation */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid var(--term-border)' }}>
-              <TabButton name="general" label="General" />
-              <TabButton name="tabs" label="Scope Tabs" />
-              <TabButton name="theme" label="Theme" />
-              {/* <TabButton name="data" label="Import/Export" /> */}
+            <div style={{ display: 'flex', gap: '0px', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid var(--term-border)' }}>
+              <button
+                onClick={() => setActiveTab('general')}
+                className={`badge ${activeTab === 'general' ? 'success' : ''}`}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '4px 0 0 4px',
+                  border: 'none',
+                  opacity: activeTab === 'general' ? 1 : 0.8
+                }}
+              >
+                General
+              </button>
+              <button
+                onClick={() => setActiveTab('tabs')}
+                className={`badge ${activeTab === 'tabs' ? 'success' : ''}`}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '0',
+                  border: 'none',
+                  borderLeft: '1px solid var(--term-border)',
+                  opacity: activeTab === 'tabs' ? 1 : 0.8
+                }}
+              >
+                Scope Tabs
+              </button>
+              <button
+                onClick={() => setActiveTab('theme')}
+                className={`badge ${activeTab === 'theme' ? 'success' : ''}`}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '0 4px 4px 0',
+                  border: 'none',
+                  borderLeft: '1px solid var(--term-border)',
+                  opacity: activeTab === 'theme' ? 1 : 0.8
+                }}
+              >
+                Theme
+              </button>
             </div>
           </div>
 
@@ -252,15 +292,24 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
               {activeTab === 'general' && (
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Display Options</h3>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
-                <input
-                  type="checkbox"
-                  id="showCompleted"
-                  checked={local.showCompleted}
-                  onChange={(e) => setLocal({ ...local, showCompleted: e.target.checked })}
-                  style={{ cursor: 'pointer' }}
-                />
-                <label htmlFor="showCompleted" style={{ cursor: 'pointer', fontSize: '13px' }}>
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0', cursor: 'pointer' }}
+                onClick={() => setLocal({ ...local, showCompleted: !local.showCompleted })}
+              >
+                <div style={{
+                  width: '18px',
+                  height: '18px',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: local.showCompleted ? 'var(--term-accent)' : 'transparent',
+                  transition: 'all 0.2s ease'
+                }}>
+                  {local.showCompleted && <Check size={14} style={{ color: '#000' }} />}
+                </div>
+                <label style={{ cursor: 'pointer', fontSize: '13px' }}>
                   Show completed items by default
                 </label>
               </div>
@@ -272,24 +321,40 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
                   Default View
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    className={`badge ${local.defaultView === 'scope' ? 'success' : 'info'}`}
-                    onClick={() => setLocal({ ...local, defaultView: 'scope' })}
-                    style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
-                  >
-                    Scope (Now/Soon/Anytime)
-                  </button>
-                  <button
-                    className={`badge ${local.defaultView === 'date' ? 'success' : ''}`}
-                    onClick={() => setLocal({ ...local, defaultView: 'date' })}
-                    style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
-                  >
-                    Date
-                  </button>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={() => setLocal({ ...local, defaultView: 'scope' })}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '1px solid var(--term-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: local.defaultView === 'scope' ? 'var(--term-accent)' : 'transparent'
+                    }}>
+                      {local.defaultView === 'scope' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#000' }} />}
+                    </div>
+                    <label style={{ cursor: 'pointer', fontSize: '12px' }}>Scope</label>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={() => setLocal({ ...local, defaultView: 'date' })}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '1px solid var(--term-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: local.defaultView === 'date' ? 'var(--term-accent)' : 'transparent'
+                    }}>
+                      {local.defaultView === 'date' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#000' }} />}
+                    </div>
+                    <label style={{ cursor: 'pointer', fontSize: '12px' }}>Date</label>
+                  </div>
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
-                  Choose which view to show when the app loads
+                  Scope organizes by Now/Soon/Anytime priority. Date groups by due date. Choose which view to show on app load.
                 </div>
               </div>
 
@@ -336,7 +401,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       type="button"
                       className="badge info"
                       onClick={() => setChangingDbPath(true)}
-                      style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', whiteSpace: 'nowrap' }}
+                      style={{ padding: '8px 12px', fontSize: '12px', borderRadius: '6px', whiteSpace: 'nowrap', height: '44px' }}
                     >
                       Change Location
                     </button>
@@ -371,9 +436,9 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                           if (newPath) {
                             try {
                               await (Backend as any).SetDatabasePath(newPath);
-                              alert('Database location updated! Please restart Planck for changes to take effect.');
                               setDatabasePath(newPath);
                               setChangingDbPath(false);
+                              setShowRestartPrompt(true);
                             } catch (err: any) {
                               alert(`Error: ${err.message || err}`);
                             }
@@ -401,7 +466,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 )}
               </div>
 
-              <details style={{ marginTop: '12px' }}>
+              <details style={{ marginTop: '12px', marginBottom: '24px' }}>
                 <summary style={{
                   fontSize: '12px',
                   cursor: 'pointer',
@@ -871,6 +936,25 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
         </div>
       </div>
 
+      <ConfirmDialog
+        open={showRestartPrompt}
+        title="Restart Required"
+        message="Database location has been updated. PLANCK needs to restart to apply the changes."
+        confirmText="Restart Now"
+        cancelText="Later"
+        onConfirm={async () => {
+          setShowRestartPrompt(false);
+          try {
+            await Backend.Restart();
+          } catch (err) {
+            console.error('Restart failed:', err);
+          }
+        }}
+        onCancel={() => {
+          setShowRestartPrompt(false);
+          onOpenChange(false);
+        }}
+      />
     </>
   );
 }

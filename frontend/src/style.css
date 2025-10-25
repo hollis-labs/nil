@@ -3,7 +3,7 @@
 }
 
 html {
-    background: var(--term-bg, #0b0e14);
+    background: transparent;
     color: var(--term-fg, #e6edf3);
     overscroll-behavior: none;
 }
@@ -11,7 +11,7 @@ html {
 body {
     margin: 0;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    background: var(--term-bg, #0b0e14);
+    background: transparent;
     color: var(--term-fg, #e6edf3);
     overscroll-behavior: none;
 }
@@ -19,6 +19,9 @@ body {
 #root {
     min-height: 100vh;
     overscroll-behavior: none;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--term-bg, #0b0e14);
 }
 
 input, select, textarea, button {
@@ -57,5 +60,14 @@ label {
 
 .task-header-wrapper:hover .task-lightning,
 .task-header-wrapper:hover .task-label {
+  animation: taskShake 0.4s ease-in-out infinite;
+}
+
+.planck-header-wrapper {
+  cursor: pointer;
+}
+
+.planck-header-wrapper:hover .planck-lightning,
+.planck-header-wrapper:hover .planck-label {
   animation: taskShake 0.4s ease-in-out infinite;
 }

@@ -478,19 +478,27 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
                             }}
                         >
-                          <button
-                              className={`checkbox ${r.completed ? "checked" : ""}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggle(r.id, !r.completed);
-                              }}
-                              aria-label={r.completed ? "Uncheck" : "Check"}
-                              style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggle(r.id, !r.completed);
+                            }}
+                            style={{
+                              width: '18px',
+                              height: '18px',
+                              minWidth: '18px',
+                              border: r.completed ? '1px solid var(--term-border)' : '1px solid rgba(0, 0, 0, 0.4)',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: r.completed ? 'transparent' : 'var(--term-border)',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
                           >
-                            <div className={`checkbox ${r.completed ? "checked" : ""}`}>
-                              <div className="mark" />
-                            </div>
-                          </button>
+                            {r.completed && <Check size={14} style={{ color: 'var(--term-info)' }} />}
+                          </div>
                           <div
                               style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                           >
@@ -528,15 +536,28 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           alignItems: 'center',
           justifyContent: 'center'
         }}>
-          <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px' }}>
-            No todos yet. Press <kbd style={{
-            padding: '2px 6px',
-            background: 'var(--term-panel)',
-            border: '1px solid var(--term-border)',
-            borderRadius: '4px',
-            fontSize: '11px',
-            fontFamily: 'monospace'
-          }}>⌘N</kbd> to create one.
+          <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+            <span>No todos yet. Press</span>
+            <kbd style={{
+              padding: '4px 8px',
+              background: 'var(--term-bg)',
+              border: '1px solid var(--term-border)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontFamily: 'monospace',
+              fontWeight: 500
+            }}>⌘</kbd>
+            <span>+</span>
+            <kbd style={{
+              padding: '4px 8px',
+              background: 'var(--term-bg)',
+              border: '1px solid var(--term-border)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              fontFamily: 'monospace',
+              fontWeight: 500
+            }}>N</kbd>
+            <span>to create one.</span>
           </div>
         </div>
     );
@@ -597,19 +618,27 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                   borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--term-border)'
                                 }}
                             >
-                              <button
-                                  className={`checkbox ${r.completed ? "checked" : ""}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onToggle(r.id, !r.completed);
-                                  }}
-                                  aria-label={r.completed ? "Uncheck" : "Check"}
-                                  style={{ cursor: 'pointer', border: 'none', padding: 0, background: 'transparent' }}
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggle(r.id, !r.completed);
+                                }}
+                                style={{
+                                  width: '18px',
+                                  height: '18px',
+                                  minWidth: '18px',
+                                  border: r.completed ? '1px solid var(--term-border)' : '1px solid rgba(0, 0, 0, 0.4)',
+                                  borderRadius: '4px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: r.completed ? 'transparent' : 'var(--term-border)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
                               >
-                                <div className={`checkbox ${r.completed ? "checked" : ""}`}>
-                                  <div className="mark" />
-                                </div>
-                              </button>
+                                {r.completed && <Check size={14} style={{ color: 'var(--term-info)' }} />}
+                              </div>
                               <div
                                   style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
                               >

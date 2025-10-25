@@ -13,7 +13,7 @@ import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import { TaskTemplate } from "@/lib/templates";
 import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
-import { Save } from "lucide-react";
+import { Save, ToggleLeft, ToggleRight } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -95,8 +95,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     },
     editorProps: {
       attributes: {
-        class: "prose prose-sm max-w-none focus:outline-none bg-transparent tiptap-editor",
-        style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); padding: 8px 12px 12px 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
+        class: "tiptap-editor",
+        style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
       },
       handlePaste: (view, event) => {
         const text = event.clipboardData?.getData('text/plain');
@@ -298,9 +298,26 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   return (
     <>
       <style>{`
+        .tiptap-editor {
+          padding: 8px 12px 12px 16px;
+          outline: none;
+          caret-color: var(--term-fg);
+        }
+        .tiptap-editor .ProseMirror {
+          outline: none;
+        }
+        .tiptap-editor .ProseMirror-focused {
+          outline: none;
+        }
+        .tiptap-editor .ProseMirror > * {
+          margin: 0;
+        }
+        .tiptap-editor .ProseMirror > * + * {
+          margin-top: 0.5em;
+        }
         .tiptap-editor ul,
         .tiptap-editor ol {
-          padding-left: 1.2em !important;
+          padding-left: 1.5em;
           margin: 0.5em 0;
         }
         .tiptap-editor ul li,
@@ -328,6 +345,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         .tiptap-editor p {
           margin: 0.5em 0;
           line-height: 1.5;
+        }
+        .tiptap-editor p:first-child {
+          margin-top: 22px;
         }
         .tiptap-editor strong {
           font-weight: 600;
@@ -372,6 +392,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           border: none;
           border-top: 1px solid var(--term-border);
           margin: 1em 0;
+        }
+        .tiptap-editor .ProseMirror-gapcursor:after {
+          display: none !important;
+        }
+        .tiptap-editor .ProseMirror-separator {
+          display: none !important;
+        }
+        .tiptap-editor::selection,
+        .tiptap-editor *::selection {
+          background: rgba(96, 165, 250, 0.3);
         }
       `}</style>
       <div style={modalStyle}>
@@ -587,7 +617,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     padding: '8px 12px',
                     borderRadius: '6px',
                     borderColor: 'rgba(96, 165, 250, 0.5)',
-                    opacity: 0.8
+                    opacity: 0.8,
+                    height: '29px'
                   }}
                 >
                   <Save size={12} />
@@ -654,24 +685,90 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     alignItems: 'flex-start',
                     gap: '8px'
                   }}>
-                    <input
-                      type="checkbox"
-                      id="use-defaults"
-                      checked={useDefaults}
-                      onChange={toggleUseDefaults}
-                      style={{ cursor: 'pointer', marginTop: '2px', flexShrink: 0 }}
-                    />
-                    <div style={{ fontSize: '11px', flex: 1 }} className="text-dim">
-                      {!hasSessionContext && !hasSearchFilters && <div>No active context</div>}
+                    <div 
+                      onClick={toggleUseDefaults}
+                      style={{ cursor: 'pointer', marginTop: '4px', flexShrink: 0 }}
+                    >
+                      {useDefaults ? (
+                        <ToggleRight size={18} style={{ color: 'var(--term-accent)' }} />
+                      ) : (
+                        <ToggleLeft size={18} style={{ color: 'var(--term-dim)', opacity: 0.6 }} />
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11px', flex: 1, display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: (useDefaults && (hasSessionContext || hasSearchFilters)) ? '0px' : '6px' }}>
+                      {!hasSessionContext && !hasSearchFilters && <span className="text-dim">No active context</span>}
                       {useDefaults && (
                         <>
-                          {displayContexts.length > 0 && <div>@{displayContexts.join(', @')}</div>}
-                          {displayProjects.length > 0 && <div>+{displayProjects.join(', +')}</div>}
-                          {displayTags.length > 0 && <div>#{displayTags.join(', #')}</div>}
-                          {activeSession?.priority && <div>Pri: {activeSession.priority}</div>}
+                          {displayContexts.map((ctx) => (
+                            <span
+                              key={`ctx-${ctx}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '4px 8px',
+                                background: 'var(--term-panel)',
+                                border: '1px solid var(--term-border)',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                color: 'var(--term-fg)'
+                              }}
+                            >
+                              @{ctx}
+                            </span>
+                          ))}
+                          {displayProjects.map((proj) => (
+                            <span
+                              key={`proj-${proj}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '4px 8px',
+                                background: 'var(--term-panel)',
+                                border: '1px solid var(--term-border)',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                color: 'var(--term-fg)'
+                              }}
+                            >
+                              +{proj}
+                            </span>
+                          ))}
+                          {displayTags.map((tag) => (
+                            <span
+                              key={`tag-${tag}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '4px 8px',
+                                background: 'var(--term-panel)',
+                                border: '1px solid var(--term-border)',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                color: 'var(--term-fg)'
+                              }}
+                            >
+                              #{tag}
+                            </span>
+                          ))}
+                          {activeSession?.priority && (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                padding: '4px 8px',
+                                background: 'var(--term-panel)',
+                                border: '1px solid var(--term-border)',
+                                borderRadius: '4px',
+                                fontSize: '12px',
+                                color: 'var(--term-fg)'
+                              }}
+                            >
+                              Pri: {activeSession.priority}
+                            </span>
+                          )}
                         </>
                       )}
-                      {!useDefaults && (hasSessionContext || hasSearchFilters) && <div>Context disabled</div>}
+                      {!useDefaults && (hasSessionContext || hasSearchFilters) && <span className="text-dim">Context disabled</span>}
                     </div>
                   </div>
                 </div>
@@ -682,20 +779,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', height: '16px' }}>
                   <label style={{ fontSize: '12px', lineHeight: '16px', opacity: 0.8 }}>Apply Context</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '16px' }}>
-                    <input
-                      type="checkbox"
-                      id="merge-context"
-                      checked={mergeContext}
-                      onChange={(e) => setMergeContext(e.target.checked)}
-                      style={{
-                        cursor: 'pointer',
-                        width: '12px',
-                        height: '12px',
-                        margin: 0
-                      }}
-                    />
-                    <label htmlFor="merge-context" style={{ fontSize: '11px', cursor: 'pointer', lineHeight: '16px', margin: 0, opacity: 0.8 }}>
+                  <div 
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '16px', cursor: 'pointer' }}
+                    onClick={() => setMergeContext(!mergeContext)}
+                  >
+                    {mergeContext ? (
+                      <ToggleRight size={18} style={{ color: 'var(--term-accent)' }} />
+                    ) : (
+                      <ToggleLeft size={18} style={{ color: 'var(--term-dim)', opacity: 0.6 }} />
+                    )}
+                    <label style={{ fontSize: '11px', cursor: 'pointer', lineHeight: '16px', margin: 0, opacity: 0.8 }}>
                       Merge
                     </label>
                   </div>
@@ -738,13 +831,13 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               background: 'var(--term-bg)',
               overflow: 'hidden',
               minHeight: '300px',
-              maxHeight: '300px',
-              paddingTop: '4px'
+              maxHeight: '300px'
             }}>
               <CustomScrollbar style={{
-                height: '50',
-                minHeight: '300px',
-                maxHeight: '300px'
+                height: '296px',
+                minHeight: '296px',
+                maxHeight: '296px',
+                background: 'var(--term-bg)'
               }}>
                 <EditorContent editor={editor} />
               </CustomScrollbar>
