@@ -13,7 +13,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Calendar, List, Target, Power, HelpCircle } from "lucide-react";
+import { Settings, Plus, Search, Calendar, List, Target, Power, HelpCircle } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
 
@@ -45,6 +45,10 @@ function Inner() {
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
+  });
+  const [inputMode, setInputMode] = React.useState<'search' | 'add'>(() => {
+    const saved = localStorage.getItem('planck.inputMode');
+    return (saved as 'search' | 'add') || 'search';
   });
 
   React.useEffect(() => {
@@ -223,7 +227,11 @@ function Inner() {
     }
   }, [query, activeTabId, settings.tabs, settings.showCompleted]);
 
-  React.useEffect(()=>{ runSearch(); }, [runSearch]);
+  React.useEffect(() => { 
+    if (inputMode === 'search') {
+      runSearch();
+    }
+  }, [runSearch, inputMode]);
 
   // Filter out archived items (unless explicitly searched for)
   // TerminalList handles showCompleted filtering internally
@@ -287,18 +295,54 @@ function Inner() {
   }
 
   async function handleUpdateTodo(todo: TodoRow) {
-    const reparsed = await Backend.CreateTodoFromLine(todo.title);
-    const merged = {
-      ...todo,
-      title: reparsed.title,
-      projects: reparsed.projects?.length ? reparsed.projects : todo.projects,
-      contexts: reparsed.contexts?.length ? reparsed.contexts : todo.contexts,
-      tags: [...new Set([...(todo.tags || []), ...(reparsed.tags || [])])],
-    };
-    await Backend.UpdateTodo(merged as any);
+    // Just update the existing todo - don't create a new one!
+    await Backend.UpdateTodo(todo as any);
     setQuickOpen(false);
     setEditTodo(null);
     runSearch();
+  }
+
+  async function handleInputSubmit() {
+    console.log('[InputSubmit] Mode:', inputMode, 'Query:', query);
+    if (inputMode === 'add' && query.trim()) {
+      console.log('[InputSubmit] Quick add mode - creating todo');
+      // Quick add mode
+      const session = getActiveSession();
+      const created = await Backend.CreateTodoFromLine(query);
+      const merged = {
+        ...created,
+        priority: session?.priority || created.priority,
+        projects: session?.projects?.length ? session.projects : created.projects,
+        contexts: session?.contexts?.length ? session.contexts : created.contexts,
+        tags: session?.tags?.length ? session.tags : created.tags,
+      };
+      await Backend.UpdateTodo(merged as any);
+      setQuery('');
+      // Force refresh the entire list by fetching all todos
+      try {
+        const req: any = {
+          query: '',
+          page: 0,
+          page_size: 500,
+          sort_by: 'created_at',
+          sort_dir: 'desc',
+          statuses: ['open']
+        };
+        let allResults = await Backend.Search(req);
+        if (settings.showCompleted) {
+          const completedReq = { ...req, statuses: ['completed'] };
+          const completedRes = await Backend.Search(completedReq);
+          allResults = [...allResults, ...completedRes];
+        }
+        setAllRows(Array.isArray(allResults) ? allResults : []);
+      } catch (err) {
+        console.error('Failed to refresh after add:', err);
+      }
+    } else {
+      console.log('[InputSubmit] Search mode - running search');
+      // Search mode
+      runSearch();
+    }
   }
 
   async function handleDeleteTodo(id: number) {
@@ -343,7 +387,7 @@ function Inner() {
         flexDirection: 'column'
       }} >
         {/* PLANCK Branding - Draggable */}
-        <div style={{ position: 'relative', borderBottom: '1px solid var(--term-border)' }}>
+        <div style={{ position: 'relative' }}>
           <div
             style={{
               padding: '16px 20px',
@@ -390,8 +434,9 @@ function Inner() {
                 right: '20px',
                 top: '50%',
                 transform: 'translateY(-50%)',
-                fontSize: '11px',
-                padding: '4px 8px',
+                fontSize: '13px',
+                padding: '8px 12px',
+                borderRadius: '6px',
                 cursor: 'pointer',
                 zIndex: 1000,
                 // @ts-ignore
@@ -418,7 +463,7 @@ function Inner() {
           <SearchAutocomplete
             value={query}
             onChange={setQuery}
-            onSearch={runSearch}
+            onSearch={handleInputSubmit}
           />
           <button
             style={{
@@ -434,8 +479,12 @@ function Inner() {
               height: '32px',
               width: '32px'
             }}
-            onClick={()=>setQuickOpen(true)}
-            title="New Todo (⌘N)"
+            onClick={() => {
+              const newMode = inputMode === 'search' ? 'add' : 'search';
+              setInputMode(newMode);
+              localStorage.setItem('planck.inputMode', newMode);
+            }}
+            title={inputMode === 'add' ? 'Quick Add Mode (Click to Search)' : 'Search Mode (Click to Quick Add)'}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--term-accent)';
             }}
@@ -443,7 +492,11 @@ function Inner() {
               e.currentTarget.style.borderColor = 'var(--term-border)';
             }}
           >
-            <Plus size={16} color="var(--term-fg)" />
+            {inputMode === 'add' ? (
+              <Plus size={16} color="var(--term-fg)" />
+            ) : (
+              <Search size={16} color="var(--term-fg)" />
+            )}
           </button>
           <button
             style={{
@@ -502,48 +555,63 @@ function Inner() {
           {sessionAsFilter && (
             <button
               className="badge warn"
-              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}
               title="Session Context Filter Active"
             >
               <Target size={12} />
               Session Filter
             </button>
           )}
-          {settings.tabs.length > 0 && settings.tabs.map(tab => (
-            <button
-              key={tab.id}
-              className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
-              onClick={() => !sessionAsFilter && setActiveTabId(tab.id)}
-              style={{
-                padding: '6px 12px',
-                fontSize: '12px',
-                opacity: sessionAsFilter ? 0.4 : 1,
-                cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
-              }}
-              disabled={sessionAsFilter}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {settings.tabs.length > 0 && (
+            <div style={{ display: 'flex', gap: '0px' }}>
+              {settings.tabs.map((tab, index) => (
+                <button
+                  key={tab.id}
+                  className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
+                  onClick={() => !sessionAsFilter && setActiveTabId(tab.id)}
+                  style={{
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    border: 'none',
+                    borderRadius: index === 0 ? '4px 0 0 4px' : (index === settings.tabs.length - 1 ? '0 4px 4px 0' : '0'),
+                    borderLeft: index > 0 ? '1px solid var(--term-border)' : 'none',
+                    opacity: sessionAsFilter ? 0.4 : 1,
+                    cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
+                  }}
+                  disabled={sessionAsFilter}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex' }}>
             <button
-              className={`badge ${viewMode === 'scope' ? 'info' : ''}`}
-              onClick={() => setViewMode('scope')}
-              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              title="Scope View (Now/Soon/Anytime)"
+              className="badge info"
+              onClick={() => setViewMode(viewMode === 'scope' ? 'date' : 'scope')}
+              style={{ 
+                padding: '8px 12px', 
+                fontSize: '13px', 
+                borderRadius: '6px', 
+                border: 'none',
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '4px' 
+              }}
+              title={viewMode === 'scope' ? 'Switch to Date View' : 'Switch to Scope View'}
             >
-              <List size={12} />
-              Scope
-            </button>
-            <button
-              className={`badge ${viewMode === 'date' ? 'info' : ''}`}
-              onClick={() => setViewMode('date')}
-              style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-              title="Date View (Due Dates)"
-            >
-              <Calendar size={12} />
-              Date
+              {viewMode === 'scope' ? (
+                <>
+                  <List size={12} />
+                  Scope
+                </>
+              ) : (
+                <>
+                  <Calendar size={12} />
+                  Date
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -573,9 +641,7 @@ function Inner() {
                   justifyContent: 'center',
                   transition: 'all 0.15s ease',
                   height: '32px',
-                  width: '32px',
-                  position: 'relative',
-                  top: '6px'
+                  width: '32px'
                 }}
                 onClick={()=>setHelpOpen(true)}
                 title="Help & Guide"
@@ -600,9 +666,7 @@ function Inner() {
                   justifyContent: 'center',
                   transition: 'all 0.15s ease',
                   height: '32px',
-                  width: '32px',
-                  position: 'relative',
-                  top: '6px'
+                  width: '32px'
                 }}
                 onClick={()=>setSettingsOpen(true)}
                 title="Settings"
@@ -628,8 +692,6 @@ function Inner() {
                   transition: 'all 0.15s ease',
                   height: '32px',
                   width: '32px',
-                  position: 'relative',
-                  top: '6px',
                   pointerEvents: 'auto'
                 }}
                 onMouseDown={(e) => {
@@ -708,6 +770,7 @@ function Inner() {
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
               <button
                 className="badge"
+                style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                 onClick={() => {
                   setShowDemoPrompt(false);
                   runSearch();
@@ -717,6 +780,7 @@ function Inner() {
               </button>
               <button
                 className="badge success"
+                style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                 onClick={async () => {
                   try {
                     await (Backend as any).SeedDemoData?.();

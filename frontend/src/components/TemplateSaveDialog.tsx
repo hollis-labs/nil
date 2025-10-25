@@ -101,6 +101,7 @@ export default function TemplateSaveDialog({ open, onOpenChange, values, onSaved
               type="button"
               className="badge"
               onClick={() => onOpenChange(false)}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
             >
               Cancel
             </button>
@@ -108,6 +109,7 @@ export default function TemplateSaveDialog({ open, onOpenChange, values, onSaved
               type="submit"
               className="badge success"
               disabled={!templateName.trim()}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
             >
               Save Template
             </button>

@@ -206,7 +206,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
     <button
       className={`badge ${activeTab === name ? 'success' : ''}`}
       onClick={() => setActiveTab(name)}
-      style={{ padding: '6px 12px' }}
+      style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
     >
       {label}
     </button>
@@ -230,7 +230,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
           <div style={{ padding: '20px 20px 0 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <div style={{ fontWeight: 600, fontSize: '16px' }}>Settings</div>
-              <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+              <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Close</button>
             </div>
 
             {/* Tab Navigation */}
@@ -276,14 +276,14 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   <button
                     className={`badge ${local.defaultView === 'scope' ? 'success' : 'info'}`}
                     onClick={() => setLocal({ ...local, defaultView: 'scope' })}
-                    style={{ padding: '6px 12px' }}
+                    style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                   >
                     Scope (Now/Soon/Anytime)
                   </button>
                   <button
                     className={`badge ${local.defaultView === 'date' ? 'success' : ''}`}
                     onClick={() => setLocal({ ...local, defaultView: 'date' })}
-                    style={{ padding: '6px 12px' }}
+                    style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                   >
                     Date
                   </button>
@@ -336,7 +336,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       type="button"
                       className="badge info"
                       onClick={() => setChangingDbPath(true)}
-                      style={{ whiteSpace: 'nowrap' }}
+                      style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', whiteSpace: 'nowrap' }}
                     >
                       Change Location
                     </button>
@@ -379,6 +379,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                             }
                           }
                         }}
+                        style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                       >
                         Save
                       </button>
@@ -386,6 +387,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                         type="button"
                         className="badge"
                         onClick={() => setChangingDbPath(false)}
+                        style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                       >
                         Cancel
                       </button>
@@ -407,7 +409,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   background: 'var(--term-panel)',
                   borderRadius: '4px',
                   border: '1px solid var(--term-border)',
-                  marginBottom: '8px'
+                  marginBottom: '16px'
                 }}>
                   💡 Cloud Sync Setup (Dropbox, iCloud, Google Drive)
                 </summary>
@@ -446,7 +448,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                   className="badge success"
                   onClick={addTab}
                   disabled={local.tabs.length >= 6}
-                  style={{ opacity: local.tabs.length >= 6 ? 0.5 : 1 }}
+                  style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', opacity: local.tabs.length >= 6 ? 0.5 : 1 }}
                 >
                   + Add Tab ({local.tabs.length}/6)
                 </button>
@@ -510,12 +512,12 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                           placeholder="e.g., @work +myproject pri:A"
                         />
                       </div>
-                      {local.tabs.length > 1 && (
+                        {local.tabs.length > 1 && (
                         <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                           <button
                             className="badge warn"
                             onClick={() => deleteTab(tab.id)}
-                            style={{ padding: '6px 10px' }}
+                            style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                           >
                             ✕
                           </button>
@@ -545,7 +547,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       alert('Theme cache cleared! Reloading...');
                       window.location.reload();
                     }}
-                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                    style={{ fontSize: '13px', padding: '8px 12px', borderRadius: '6px' }}
                   >
                     Clear Cache
                   </button>
@@ -560,7 +562,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       setTheme(defaultTheme);
                       alert('Theme set to DEFAULT (dark blue). Check the colors!');
                     }}
-                    style={{ fontSize: '11px', padding: '4px 8px' }}
+                    style={{ fontSize: '13px', padding: '8px 12px', borderRadius: '6px' }}
                   >
                     Use Default
                   </button>
@@ -592,7 +594,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                         {name}
                       </div>
                       {selectedPreset === name && (
-                        <span className="badge success" style={{ fontSize: '10px' }}>Active</span>
+                        <span className="badge success" style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '6px' }}>Active</span>
                       )}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -665,7 +667,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       Custom
                     </div>
                     {selectedPreset === 'custom' && (
-                      <span className="badge info" style={{ fontSize: '10px' }}>Editing</span>
+                      <span className="badge info" style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '6px' }}>Editing</span>
                     )}
                   </div>
                   {selectedPreset === 'custom' && (
@@ -782,7 +784,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                         setSelectedPreset('custom');
                         setLocalTheme(customTheme);
                       }}
-                      style={{ marginTop: '8px' }}
+                      style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', marginTop: '8px' }}
                     >
                       Edit Custom Theme
                     </button>
@@ -818,7 +820,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                       alert('Export failed: ' + err);
                     }
                   }}
-                  style={{ flex: 1, padding: '10px 16px', fontSize: '13px' }}
+                  style={{ flex: 1, padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                 >
                   Export to todo.txt
                 </button>
@@ -826,7 +828,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 <label
                   htmlFor="import-file"
                   className="badge success"
-                  style={{ flex: 1, padding: '10px 16px', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  style={{ flex: 1, padding: '8px 12px', fontSize: '13px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   Import from todo.txt
                 </label>
@@ -863,8 +865,8 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
             padding: '16px 20px 20px 20px',
             borderTop: '1px solid var(--term-border)'
           }}>
-            <button className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
-            <button className="badge success" onClick={handleSave}>Save Settings</button>
+            <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
+            <button className="badge success" onClick={handleSave} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Save Settings</button>
           </div>
         </div>
       </div>

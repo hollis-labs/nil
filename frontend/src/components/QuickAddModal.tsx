@@ -64,7 +64,7 @@ export default function QuickAddModal({ open, onOpenChange, onSubmit }: Props) {
       <div className="terminal-card" style={{ width: '640px', maxWidth: '95vw', padding: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ fontWeight: 600 }}>Quick Add Todo</div>
-          <button className="badge" onClick={() => onOpenChange(false)}>Close</button>
+          <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Close</button>
         </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
@@ -105,8 +105,8 @@ export default function QuickAddModal({ open, onOpenChange, onSubmit }: Props) {
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
-            <button type="submit" className="badge success">Create</button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
+            <button type="submit" className="badge success" style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Create</button>
           </div>
         </form>
       </div>

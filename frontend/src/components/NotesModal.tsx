@@ -48,16 +48,16 @@ export default function NotesModal({ open, onOpenChange, todo, onSave }: Props) 
       <div className="terminal-card w-[720px] max-w-[95vw] p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold">Notes: {todo?.title}</div>
-          <button className="badge" onClick={() => onOpenChange(false)}>
+          <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>
             Close
           </button>
         </div>
         <EditorContent editor={editor} />
         <div className="flex justify-end gap-2 mt-4">
-          <button className="badge" onClick={() => onOpenChange(false)}>
+          <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>
             Cancel
           </button>
-          <button className="badge success" onClick={handleSave}>
+          <button className="badge success" onClick={handleSave} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>
             Save
           </button>
         </div>

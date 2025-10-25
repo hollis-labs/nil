@@ -161,12 +161,15 @@ export default function SearchAutocomplete({ value, onChange, onSearch, inputRef
           border: '1px solid var(--term-border)',
           borderRadius: '6px',
           color: 'var(--term-fg)',
-          fontSize: '13px'
+          fontSize: '13px',
+          outline: 'none'
         }}
         placeholder="Search… e.g. review #work +todoapp @home pri:A"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
+        onFocus={(e) => e.currentTarget.style.borderColor = 'var(--term-accent)'}
+        onBlur={(e) => e.currentTarget.style.borderColor = 'var(--term-border)'}
       />
       
       {showDropdown && suggestions.length > 0 && (

@@ -77,7 +77,9 @@ export default function ConfirmDialog({
             className="badge"
             onClick={onCancel}
             style={{
-              padding: '8px 16px',
+              padding: '8px 12px',
+              fontSize: '13px',
+              borderRadius: '6px',
               cursor: 'pointer',
             }}
           >
@@ -87,7 +89,9 @@ export default function ConfirmDialog({
             className="badge warn"
             onClick={onConfirm}
             style={{
-              padding: '8px 16px',
+              padding: '8px 12px',
+              fontSize: '13px',
+              borderRadius: '6px',
               cursor: 'pointer',
             }}
           >

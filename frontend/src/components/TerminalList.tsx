@@ -79,6 +79,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   const [isRadialNavOpen, setIsRadialNavOpen] = React.useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = React.useState<number | null>(null);
   const modalOverlayRef = React.useRef<HTMLDivElement>(null);
+  const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: number; position: { x: number; y: number } } | null>(null);
+  const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
+  const deleteTriggered = React.useRef<boolean>(false);
 
   React.useEffect(() => {
     if (isRadialNavOpen !== null && modalOverlayRef.current) {
@@ -411,8 +414,48 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                 setHoveredRow(r.id);
                               }
                             }}
-                            onMouseLeave={() => setHoveredRow(null)}
+                            onMouseLeave={() => {
+                              setHoveredRow(null);
+                              if (longPressTimer.current) {
+                                clearTimeout(longPressTimer.current);
+                                longPressTimer.current = null;
+                              }
+                            }}
+                            onMouseDown={(e) => {
+                              deleteTriggered.current = false;
+                              longPressTimer.current = setTimeout(() => {
+                                deleteTriggered.current = true;
+                                setDeleteConfirm({ id: r.id, position: { x: e.clientX, y: e.clientY } });
+                              }, 1500);
+                            }}
+                            onMouseUp={() => {
+                              if (longPressTimer.current) {
+                                clearTimeout(longPressTimer.current);
+                                longPressTimer.current = null;
+                              }
+                            }}
+                            onTouchStart={(e) => {
+                              deleteTriggered.current = false;
+                              const touch = e.touches[0];
+                              longPressTimer.current = setTimeout(() => {
+                                deleteTriggered.current = true;
+                                setDeleteConfirm({ id: r.id, position: { x: touch.clientX, y: touch.clientY } });
+                              }, 1500);
+                            }}
+                            onTouchEnd={() => {
+                              if (longPressTimer.current) {
+                                clearTimeout(longPressTimer.current);
+                                longPressTimer.current = null;
+                              }
+                            }}
                             onClick={(e) => {
+                              if (deleteTriggered.current) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                deleteTriggered.current = false;
+                                return;
+                              }
+                              
                               const target = e.target as HTMLElement;
                               const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
                               const isCheckboxClick = target.closest('.checkbox');
@@ -459,7 +502,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
                               {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
                               {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
-                              {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px' }}>{new Date(r.due_at).toLocaleDateString()}</span>}
+                              {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px', padding: '4px 8px', fontSize: '11px', borderRadius: '6px', opacity: 0.8 }}>{new Date(r.due_at).toLocaleDateString()}</span>}
                             </div>
                             <div className="meta">
                               {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
@@ -597,14 +640,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           <div className="summary" style={{
             background: 'var(--term-panel)',
             padding: '16px 20px 0 0',
-            borderTop: '1px solid var(--term-border)',
+            boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)',
             marginTop: '20px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}>
           <span>
-            {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
+            {pct}% complete · <span style={{ color: 'var(--term-success)' }}>{done} done</span> · <span style={{ color: 'var(--term-info)' }}>{pending} pending</span>
           </span>
             {settingsButton && <div>{settingsButton}</div>}
           </div>
@@ -657,18 +700,80 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           <div className="summary" style={{
             background: 'var(--term-panel)',
             padding: '16px 20px 0 0',
-            borderTop: '1px solid var(--term-border)',
+            boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)',
             marginTop: '20px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center'
           }}>
           <span>
-            {pct}% complete · <span className="badge success">{done} done</span> · <span className="badge info">{pending} pending</span>
+            {pct}% complete · <span style={{ color: 'var(--term-success)' }}>{done} done</span> · <span style={{ color: 'var(--term-info)' }}>{pending} pending</span>
           </span>
             {settingsButton && <div>{settingsButton}</div>}
           </div>
         </div>
+        
+        {deleteConfirm && (
+          <div
+            style={{
+              position: 'fixed',
+              top: deleteConfirm.position.y,
+              left: deleteConfirm.position.x,
+              zIndex: 1100,
+              backgroundColor: 'var(--term-bg)',
+              border: '1px solid var(--term-border)',
+              borderRadius: '6px',
+              padding: '16px',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+              display: 'flex',
+              gap: '12px',
+              flexDirection: 'column',
+              minWidth: '200px',
+            }}
+          >
+            <div style={{ fontSize: '14px', marginBottom: '4px' }}>Delete this todo?</div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                autoFocus
+                onClick={() => {
+                  setDeleteConfirm(null);
+                  deleteTriggered.current = false;
+                }}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  backgroundColor: 'var(--term-bg)',
+                  color: 'var(--term-fg)',
+                  border: '1px solid var(--term-border)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (deleteConfirm) {
+                    onDelete(deleteConfirm.id);
+                    setDeleteConfirm(null);
+                    deleteTriggered.current = false;
+                  }
+                }}
+                style={{
+                  padding: '10px 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        )}
       </>
   );
 }

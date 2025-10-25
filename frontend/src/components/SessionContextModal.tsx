@@ -250,7 +250,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       <div className="terminal-card" style={{
         width: '720px',
         maxWidth: '95vw',
-        height: '250px',
+        height: '650px',
         maxHeight: '90vh',
         display: 'flex',
         flexDirection: 'column',
@@ -264,8 +264,9 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 className="badge info"
                 onClick={() => onOpenChange(false)}
                 style={{
-                  padding: '6px 12px',
-                  fontSize: '12px'
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '6px'
                 }}
               >
                 Close
@@ -299,41 +300,68 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
             {/* Priority chips row */}
             <div style={{
               display: 'flex',
-              gap: '8px',
+              gap: '0px',
               marginBottom: '12px',
               flexWrap: 'wrap'
             }}>
               <button
                 type="button"
-                className={`badge ${priority === 'A' ? 'warn' : ''}`}
-                onClick={() => setPriority(priority === 'A' ? '' : 'A')}
-                style={{ flex: '0 0 auto' }}
+                className={`badge ${priority === 'C' ? 'success' : ''}`}
+                onClick={() => setPriority(priority === 'C' ? '' : 'C')}
+                style={{ 
+                  flex: '0 0 auto',
+                  border: 'none',
+                  borderRadius: '4px 0 0 4px',
+                  fontSize: '11px',
+                  padding: '4px 8px'
+                }}
               >
-                High
+                LOW
               </button>
               <button
                 type="button"
                 className={`badge ${priority === 'B' ? 'info' : ''}`}
                 onClick={() => setPriority(priority === 'B' ? '' : 'B')}
-                style={{ flex: '0 0 auto' }}
+                style={{ 
+                  flex: '0 0 auto',
+                  border: 'none',
+                  borderRadius: '0',
+                  borderLeft: '1px solid var(--term-border)',
+                  fontSize: '11px',
+                  padding: '4px 8px'
+                }}
               >
-                Medium
+                MED
               </button>
               <button
                 type="button"
-                className={`badge ${priority === 'C' ? 'success' : ''}`}
-                onClick={() => setPriority(priority === 'C' ? '' : 'C')}
-                style={{ flex: '0 0 auto' }}
+                className={`badge ${priority === 'A' ? 'warn' : ''}`}
+                onClick={() => setPriority(priority === 'A' ? '' : 'A')}
+                style={{ 
+                  flex: '0 0 auto',
+                  border: 'none',
+                  borderRadius: '0',
+                  borderLeft: '1px solid var(--term-border)',
+                  fontSize: '11px',
+                  padding: '4px 8px'
+                }}
               >
-                Low
+                HIGH
               </button>
               <button
                 type="button"
                 className={`badge ${priority === '' ? 'success' : ''}`}
                 onClick={() => setPriority('')}
-                style={{ flex: '0 0 auto' }}
+                style={{ 
+                  flex: '0 0 auto',
+                  border: 'none',
+                  borderRadius: '0 4px 4px 0',
+                  borderLeft: '1px solid var(--term-border)',
+                  fontSize: '11px',
+                  padding: '4px 8px'
+                }}
               >
-                None
+                NA
               </button>
               <div style={{ 
                 marginLeft: 'auto', 
@@ -398,9 +426,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 className="badge success"
                 onClick={handleApply}
                 style={{
-                  padding: '8px 16px',
+                  padding: '8px 12px',
                   fontSize: '13px',
-                  height: '40px',
                   whiteSpace: 'nowrap',
                   borderRadius: '6px'
                 }}
@@ -505,6 +532,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 type="button"
                 className="badge warn"
                 onClick={() => handleDeleteProfile(selectedProfileId)}
+                style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
               >
                 Delete
               </button>
@@ -514,16 +542,16 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 type="button"
                 className="badge info"
                 onClick={handleClone}
-                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
                 <Copy size={14} />
                 Clone
               </button>
             )}
-            <button type="button" className="badge" onClick={handleClear}>
+            <button type="button" className="badge" onClick={handleClear} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>
               Clear
             </button>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
@@ -531,6 +559,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
               className="badge info"
               onClick={handleSaveProfile}
               disabled={!profileName.trim()}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
             >
               Save
             </button>
@@ -539,6 +568,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
               className="badge success"
               onClick={handleSaveAndApply}
               disabled={!profileName.trim()}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
             >
               Save & Apply
             </button>

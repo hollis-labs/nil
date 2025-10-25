@@ -169,12 +169,13 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, line, priority, due, tags, contexts, projects]);
+  }, [open, line, priority, due, tags, contexts, projects, editTodo, onUpdate, onSubmit, settings]);
 
   if (!open) return null;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    console.log('[EditTodoModal] handleSubmit called - isEditMode:', isEditMode, 'editTodo:', !!editTodo);
     const notes_md = editor?.getHTML() || "";
 
     // Strip prefixes from tags/contexts/projects (in case user typed them)
@@ -188,6 +189,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
 
     if (isEditMode && editTodo && onUpdate) {
+      console.log('[EditTodoModal] Calling onUpdate');
       const updated: TodoRow = {
         ...editTodo,
         title: line,
@@ -200,6 +202,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
       };
       onUpdate(updated);
     } else {
+      console.log('[EditTodoModal] Calling onSubmit (create new)');
       const extras: any = {
         tags: cleanTags,
         contexts: cleanContexts,
@@ -389,8 +392,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               className="badge info"
               onClick={() => onOpenChange(false)}
               style={{
-                padding: '6px 12px',
-                fontSize: '12px'
+                padding: '6px 9px',
+                fontSize: '12px',
+                borderRadius: '6px'
               }}
             >
               Close
@@ -421,113 +425,136 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             height: '100%',
             position: 'relative',
           }}>
-            {/* Priority/Date chips row */}
-            <div style={{
-              display: 'flex',
-              gap: '8px',
-              marginBottom: '16px',
-              paddingBottom: '8px',
-              borderBottom: '1px solid var(--term-border)',
-              flexWrap: 'wrap',
-              paddingTop: '4px'
-            }}>
-              <button
-                type="button"
-                className={`badge ${priority === 'A' ? 'warn' : ''}`}
-                onClick={() => setPriority(priority === 'A' ? '' : 'A')}
-                style={{ flex: '0 0 auto' }}
-              >
-                High
-              </button>
-              <button
-                type="button"
-                className={`badge ${priority === 'B' ? 'info' : ''}`}
-                onClick={() => setPriority(priority === 'B' ? '' : 'B')}
-                style={{ flex: '0 0 auto' }}
-              >
-                Medium
-              </button>
-              <button
-                type="button"
-                className={`badge ${priority === 'C' ? 'success' : ''}`}
-                onClick={() => setPriority(priority === 'C' ? '' : 'C')}
-                style={{ flex: '0 0 auto' }}
-              >
-                Low
-              </button>
-              <button
-                type="button"
-                className={`badge ${priority === '' ? 'success' : ''}`}
-                onClick={() => setPriority('')}
-                style={{ flex: '0 0 auto' }}
-              >
-                None
-              </button>
-              <button
-                type="button"
-                className={`badge ${due ? 'info' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log('Date chip clicked! due value:', due, 'truthy?', !!due);
-                  if (due) {
-                    console.log('Clearing due date');
-                    setDue('');
-                  } else {
-                    console.log('Creating date picker input');
-                    const input = document.createElement('input');
-                    input.type = 'date';
-                    input.value = due;
-                    input.style.position = 'absolute';
-                    input.style.top = e.currentTarget.getBoundingClientRect().top + 'px';
-                    input.style.left = e.currentTarget.getBoundingClientRect().left + 'px';
-                    input.style.width = e.currentTarget.getBoundingClientRect().width + 'px';
-                    input.style.height = e.currentTarget.getBoundingClientRect().height + 'px';
-                    input.style.opacity = '0.01';
-                    input.style.zIndex = '9999';
-                    input.style.cursor = 'pointer';
-                    document.body.appendChild(input);
-
-                    input.focus();
-
-                    requestAnimationFrame(() => {
-                      try {
-                        console.log('Attempting showPicker, available?', !!input.showPicker);
-                        if (input.showPicker) {
-                          input.showPicker();
-                        } else {
-                          input.click();
-                        }
-                      } catch (err) {
-                        console.error('Date picker error:', err);
-                      }
-                    });
-
-                    input.onchange = (e) => {
-                      console.log('Date selected:', (e.target as HTMLInputElement).value);
-                      setDue((e.target as HTMLInputElement).value);
-                      if (document.body.contains(input)) {
-                        document.body.removeChild(input);
-                      }
-                    };
-                    input.onblur = () => {
-                      setTimeout(() => {
-                        if (document.body.contains(input)) {
-                          document.body.removeChild(input);
-                        }
-                      }, 100);
-                    };
-                  }
-                }}
-                style={{ flex: '0 0 auto' }}
-              >
-                {due ? `Due: ${due}` : 'Set Due Date'}
-              </button>
-            </div>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
               <label style={{ fontSize: '12px' }} className="text-dim">Task</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {/* Priority/Date chips row - moved here */}
+                <div style={{
+                  display: 'flex',
+                  gap: '0px',
+                  flexWrap: 'wrap'
+                }}>
+                  <button
+                    type="button"
+                    className={`badge ${priority === 'C' ? 'success' : ''}`}
+                    onClick={() => setPriority(priority === 'C' ? '' : 'C')}
+                    style={{ 
+                      flex: '0 0 auto',
+                      border: 'none',
+                      borderRadius: '4px 0 0 4px',
+                      fontSize: '11px',
+                      padding: '4px 8px'
+                    }}
+                  >
+                    LOW
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${priority === 'B' ? 'info' : ''}`}
+                    onClick={() => setPriority(priority === 'B' ? '' : 'B')}
+                    style={{ 
+                      flex: '0 0 auto',
+                      border: 'none',
+                      borderRadius: '0',
+                      borderLeft: '1px solid var(--term-border)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
+                    }}
+                  >
+                    MED
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${priority === 'A' ? 'warn' : ''}`}
+                    onClick={() => setPriority(priority === 'A' ? '' : 'A')}
+                    style={{ 
+                      flex: '0 0 auto',
+                      border: 'none',
+                      borderRadius: '0',
+                      borderLeft: '1px solid var(--term-border)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
+                    }}
+                  >
+                    HIGH
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${priority === '' ? 'success' : ''}`}
+                    onClick={() => setPriority('')}
+                    style={{ 
+                      flex: '0 0 auto',
+                      border: 'none',
+                      borderRadius: '0',
+                      borderLeft: '1px solid var(--term-border)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
+                    }}
+                  >
+                    NA
+                  </button>
+                  <button
+                    type="button"
+                    className={`badge ${due ? 'info' : ''}`}
+                    style={{
+                      flex: '0 0 auto',
+                      border: 'none',
+                      borderRadius: '0 4px 4px 0',
+                      borderLeft: '1px solid var(--term-border)',
+                      fontSize: '11px',
+                      padding: '4px 8px'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (due) {
+                        setDue('');
+                      } else {
+                        const input = document.createElement('input');
+                        input.type = 'date';
+                        input.value = due;
+                        input.style.position = 'absolute';
+                        input.style.top = e.currentTarget.getBoundingClientRect().top + 'px';
+                        input.style.left = e.currentTarget.getBoundingClientRect().left + 'px';
+                        input.style.width = e.currentTarget.getBoundingClientRect().width + 'px';
+                        input.style.height = e.currentTarget.getBoundingClientRect().height + 'px';
+                        input.style.opacity = '0.01';
+                        input.style.zIndex = '9999';
+                        input.style.cursor = 'pointer';
+                        document.body.appendChild(input);
+                        input.focus();
+                        requestAnimationFrame(() => {
+                          try {
+                            if (input.showPicker) {
+                              input.showPicker();
+                            } else {
+                              input.click();
+                            }
+                          } catch (err) {
+                            console.error('Date picker error:', err);
+                          }
+                        });
+                        input.onchange = (e) => {
+                          setDue((e.target as HTMLInputElement).value);
+                          if (document.body.contains(input)) {
+                            document.body.removeChild(input);
+                          }
+                        };
+                        input.onblur = () => {
+                          setTimeout(() => {
+                            if (document.body.contains(input)) {
+                              document.body.removeChild(input);
+                            }
+                          }, 100);
+                        };
+                      }
+                    }}
+                  >
+                    {due ? `Due: ${due}` : 'DUE'}
+                  </button>
+                </div>
+                
                 <TemplatePickerCombobox
                   onSelect={handleTemplateSelect}
                   currentValues={{ contexts, projects, tags, priority: priority || undefined }}
@@ -536,7 +563,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                   type="button"
                   className="badge"
                   onClick={() => setShowTemplateSaveDialog(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                  style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '4px', 
+                    fontSize: '13px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    borderColor: 'rgba(96, 165, 250, 0.8)'
+                  }}
                 >
                   <Save size={12} />
                   Save Template
@@ -712,18 +747,18 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             {isEditMode && onDelete && !showDeleteConfirm && (
-              <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)}>Delete</button>
+              <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Delete</button>
             )}
             {isEditMode && onDelete && showDeleteConfirm && (
               <>
                 <span style={{ fontSize: '12px', color: 'var(--term-dim)', marginRight: '4px' }}>Confirm delete?</span>
-                <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }}>Yes, Delete</button>
+                <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Yes, Delete</button>
               </>
             )}
-            <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }}>Clear</button>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)}>Cancel</button>
+            <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Clear</button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
           </div>
-          <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}>{isEditMode ? 'Save' : 'Create'}</button>
+          <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>{isEditMode ? 'Save' : 'Create'}</button>
         </div>
       </div>
 

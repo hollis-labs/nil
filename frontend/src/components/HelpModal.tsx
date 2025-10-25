@@ -1,4 +1,5 @@
 import * as React from "react";
+import CustomScrollbar from "./CustomScrollbar";
 
 type Props = {
   open: boolean;
@@ -24,67 +25,86 @@ export default function HelpModal({ open, onOpenChange }: Props) {
       onClick={() => onOpenChange(false)}
     >
       <div
-        className="custom-scrollbar"
         style={{
           background: 'var(--term-bg)',
           border: '1px solid var(--term-border)',
           borderRadius: '12px',
-          padding: '32px',
-          maxWidth: '700px',
-          maxHeight: '80vh',
-          overflow: 'auto',
+          width: '700px',
+          maxWidth: '90vw',
+          height: '650px',
+          maxHeight: '90vh',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <h2 style={{ margin: 0, color: 'var(--term-accent)', fontSize: '24px', fontWeight: 700 }}>
-            Help & Guide
-          </h2>
-          <button
-            onClick={() => onOpenChange(false)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--term-fg)',
-              cursor: 'pointer',
-              fontSize: '24px',
-              padding: '4px 8px',
-            }}
-          >
-            ×
-          </button>
+        {/* Fixed Header */}
+        <div style={{ 
+          padding: '24px 32px 16px 32px',
+          borderBottom: '1px solid var(--term-border)',
+          background: 'var(--term-bg)',
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0, color: 'var(--term-accent)', fontSize: '24px', fontWeight: 700 }}>
+              Help & Guide
+            </h2>
+            <button
+              onClick={() => onOpenChange(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--term-fg)',
+                cursor: 'pointer',
+                fontSize: '24px',
+                padding: '4px 8px',
+              }}
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className={activeTab === 'app' ? 'badge success' : 'badge'}
+              onClick={() => setActiveTab('app')}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+            >
+              App Help
+            </button>
+            <button
+              className={activeTab === 'todotxt' ? 'badge success' : 'badge'}
+              onClick={() => setActiveTab('todotxt')}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+            >
+              Todo.txt Guide
+            </button>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid var(--term-border)', paddingBottom: '8px' }}>
-          <button
-            className={activeTab === 'app' ? 'badge success' : 'badge'}
-            onClick={() => setActiveTab('app')}
-            style={{ padding: '8px 16px' }}
-          >
-            App Help
-          </button>
-          <button
-            className={activeTab === 'todotxt' ? 'badge success' : 'badge'}
-            onClick={() => setActiveTab('todotxt')}
-            style={{ padding: '8px 16px' }}
-          >
-            Todo.txt Guide
-          </button>
-        </div>
+        {/* Scrollable Content */}
+        <CustomScrollbar style={{ flex: 1 }}>
+          <div style={{ padding: '24px 32px', color: 'var(--term-fg)', lineHeight: '1.8' }}>
+            {activeTab === 'app' && <AppHelp />}
+            {activeTab === 'todotxt' && <TodoTxtHelp />}
+          </div>
+        </CustomScrollbar>
 
-        {/* Content */}
-        <div style={{ color: 'var(--term-fg)', lineHeight: '1.8' }}>
-          {activeTab === 'app' && <AppHelp />}
-          {activeTab === 'todotxt' && <TodoTxtHelp />}
-        </div>
-
-        <div style={{ marginTop: '32px', textAlign: 'right' }}>
+        {/* Fixed Footer */}
+        <div style={{ 
+          padding: '16px 32px 24px 32px',
+          borderTop: '1px solid var(--term-border)',
+          background: 'var(--term-bg)',
+          textAlign: 'right',
+          flexShrink: 0
+        }}>
           <button
             className="badge info"
             onClick={() => onOpenChange(false)}
-            style={{ padding: '10px 24px' }}
+            style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
           >
             Close
           </button>

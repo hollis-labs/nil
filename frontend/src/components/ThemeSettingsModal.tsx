@@ -125,7 +125,7 @@ export default function ThemeSettingsModal({ open, onOpenChange }: { open: boole
       <div className="terminal-card" style={{ width: '700px', maxWidth: '95vw', padding: '20px', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
           <div style={{ fontWeight: 600, fontSize: '16px' }}>Theme Settings</div>
-          <button className="badge" onClick={()=>onOpenChange(false)}>Close</button>
+          <button className="badge" onClick={()=>onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Close</button>
         </div>
 
         {/* Theme Presets */}
@@ -198,8 +198,8 @@ export default function ThemeSettingsModal({ open, onOpenChange }: { open: boole
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--term-border)' }}>
           <button className="badge" onClick={()=>setLocal(theme)}>Reset to Current</button>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button className="badge" onClick={()=>onOpenChange(false)}>Cancel</button>
-            <button className="badge success" onClick={()=>{ setTheme(local as any); onOpenChange(false); }}>Apply Theme</button>
+            <button className="badge" onClick={()=>onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
+            <button className="badge success" onClick={()=>{ setTheme(local as any); onOpenChange(false); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Apply Theme</button>
           </div>
         </div>
       </div>
