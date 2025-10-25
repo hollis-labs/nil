@@ -231,6 +231,13 @@ function Inner() {
     }
   }, [runSearch, inputMode]);
 
+  // Re-run search when active tab changes
+  React.useEffect(() => {
+    if (inputMode === 'search') {
+      runSearch();
+    }
+  }, [activeTabId, runSearch, inputMode]);
+
   // Filter out archived items (unless explicitly searched for)
   // TerminalList handles showCompleted filtering internally
   const rows = React.useMemo(() => {
@@ -371,8 +378,7 @@ function Inner() {
       flexDirection: 'column',
       padding: '16',
       background: 'var(--term-bg)',
-      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2)',
-      border: '2px solid var(--term-border, 1.2)',
+      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 2px var(--term-border)',
       borderRadius: '12px',
     }}>
       <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
@@ -390,6 +396,7 @@ function Inner() {
           <div
             style={{
               padding: '16px 20px',
+              paddingTop: '26px',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -586,7 +593,6 @@ function Inner() {
                   onClick={() => {
                     if (!sessionAsFilter) {
                       setActiveTabId(tab.id);
-                      runSearch();
                     }
                   }}
                   style={{

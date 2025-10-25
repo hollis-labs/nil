@@ -19,8 +19,6 @@ body {
 #root {
     min-height: 100vh;
     overscroll-behavior: none;
-    border-radius: 12px;
-    overflow: hidden;
     background: var(--term-bg, #0b0e14);
 }
 

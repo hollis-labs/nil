@@ -153,7 +153,9 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
   };
 
   const handleSaveAndApply = () => {
-    if (!profileName.trim()) return;
+    if (!profileName.trim()) {
+      return;
+    }
 
     let profileId = selectedProfileId;
 
@@ -187,11 +189,13 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
       priority: priority || undefined,
       useAsFilterTab,
     });
-    onSessionChanged?.();
+    
     showStatusMessage('Settings saved & applied');
+    
     setTimeout(() => {
+      onSessionChanged?.();
       onOpenChange(false);
-    }, 500);
+    }, 2000);
   };
 
   const handleDeleteProfile = (profileId: string) => {

@@ -19,15 +19,17 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "PLANCK",
-		Width:     800,
-		Height:    830,
-		MinWidth:  800,
-		MinHeight: 830,
+		Title:         "PLANCK",
+		Width:         800,
+		Height:        830,
+		MinWidth:      800,
+		MinHeight:     830,
+		DisableResize: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 0},
+		// BackgroundColour: &options.RGBA{R: 31, G: 41, B: 55, A: 255},
+		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 255},
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
@@ -35,18 +37,18 @@ func main() {
 		Debug: options.Debug{
 			OpenInspectorOnStartup: os.Getenv("DEBUG") == "1",
 		},
-		Frameless: true,
+		Frameless: false,
 		Mac: &mac.Options{
 			TitleBar: &mac.TitleBar{
 				TitlebarAppearsTransparent: true,
 				HideTitle:                  true,
-				HideTitleBar:               true,
-				FullSizeContent:            false,
+				HideTitleBar:               false,
+				FullSizeContent:            true,
 				UseToolbar:                 false,
 				HideToolbarSeparator:       true,
 			},
-			WebviewIsTransparent: true,
-			WindowIsTranslucent:  true,
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
 		},
 	})
 
