@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS todos (
   recurrence_rule TEXT DEFAULT NULL,
   source_line TEXT,
   notes_md TEXT DEFAULT '',
-  section TEXT DEFAULT 'anytime'
+  section TEXT DEFAULT 'anytime',
+  pinned INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TRIGGER IF NOT EXISTS todos_update_ts

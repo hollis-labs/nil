@@ -44,6 +44,15 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 		return nil, err
 	}
 
+	// Migration: Add pinned column if it doesn't exist
+	var columnExists bool
+	err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='pinned'").Scan(&columnExists)
+	if err == nil && !columnExists {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE todos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return nil, err
+		}
+	}
+
 	return &Store{DB: db}, nil
 }
 
@@ -143,9 +152,9 @@ func (s *Store) CreateTodo(ctx context.Context, t *Todo) (*Todo, error) {
 		t.Section = "anytime"
 	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section)
-VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned)
+VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned,
 	)
 	if err != nil {
 		return nil, err
@@ -173,8 +182,8 @@ func (s *Store) UpdateTodo(ctx context.Context, t *Todo) error {
 		t.Section = "anytime"
 	}
 	_, err := s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=? WHERE id=?`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.ID,
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=? WHERE id=?`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.ID,
 	)
 	if err != nil {
 		return err
@@ -309,7 +318,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -327,7 +336,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 		var t Todo
 		var pri *string
 		var section string
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &t.Source, &t.NotesMD, &section)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &t.Source, &t.NotesMD, &section, &t.Pinned)
 		if err != nil {
 			return []Todo{}, err
 		}

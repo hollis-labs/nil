@@ -69,6 +69,7 @@ export namespace store {
 	    source_line: string;
 	    notes_md: string;
 	    section: string;
+	    pinned: boolean;
 	    projects: string[];
 	    contexts: string[];
 	    tags: string[];
@@ -92,6 +93,7 @@ export namespace store {
 	        this.source_line = source["source_line"];
 	        this.notes_md = source["notes_md"];
 	        this.section = source["section"];
+	        this.pinned = source["pinned"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];

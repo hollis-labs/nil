@@ -11,6 +11,8 @@ import HelpModal from "@/components/HelpModal";
 import AlphaWarning from "@/components/AlphaWarning";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PowerMenu from "@/components/PowerMenu";
+import RadialMenuWrapper from "@/components/RadialMenuWrapper";
+import MetaModal from "@/components/MetaModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
@@ -42,6 +44,8 @@ function Inner() {
   const [showAlphaWarning, setShowAlphaWarning] = React.useState(false);
   const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
   const [showPowerMenu, setShowPowerMenu] = React.useState(false);
+  const [radialMenuTodo, setRadialMenuTodo] = React.useState<{todo: TodoRow; position: {x: number; y: number}} | null>(null);
+  const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
@@ -304,6 +308,53 @@ function Inner() {
     await Backend.UpdateTodo(todo as any);
     setQuickOpen(false);
     setEditTodo(null);
+    runSearch();
+  }
+
+  async function handleCloneTodo(todo: TodoRow) {
+    const created = await Backend.CreateTodoFromLine(todo.title);
+    const cloned = {
+      ...created,
+      priority: todo.priority,
+      due_at: todo.due_at,
+      threshold_at: todo.threshold_at,
+      projects: todo.projects,
+      contexts: todo.contexts,
+      tags: todo.tags,
+      notes_md: todo.notes_md,
+      section: todo.section,
+    };
+    await Backend.UpdateTodo(cloned as any);
+    await runSearch();
+    
+    // Find the newly created todo and open it in edit modal
+    const allTodos = await Backend.Search({
+      query: '',
+      page: 0,
+      page_size: 500,
+      sort_by: 'created_at',
+      sort_dir: 'desc',
+      statuses: ['open']
+    } as any);
+    const newTodo = allTodos.find((t: any) => t.id === created.id);
+    if (newTodo) {
+      setEditTodo(newTodo);
+      setQuickOpen(true);
+    }
+  }
+
+  async function handleMetaSave(id: number, updates: Partial<TodoRow>) {
+    const todo = allRows.find(r => r.id === id);
+    if (!todo) return;
+    await Backend.UpdateTodo({ ...todo, ...updates } as any);
+    setMetaModalTodo(null);
+    runSearch();
+  }
+
+  async function handlePin(id: number, pinned: boolean) {
+    const todo = allRows.find(r => r.id === id);
+    if (!todo) return;
+    await Backend.UpdateTodo({ ...todo, pinned } as any);
     runSearch();
   }
 
@@ -652,7 +703,8 @@ function Inner() {
           showCompleted={settings.showCompleted}
           onEditTodo={handleEditTodo}
           viewMode={viewMode}
-          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null}
+          onOpenRadialMenu={(todo, position) => setRadialMenuTodo({todo, position})}
+          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null || radialMenuTodo !== null || metaModalTodo !== null}
           settingsButton={
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -906,6 +958,36 @@ function Inner() {
         defaultContexts={defaultNewTodoFilters.contexts}
         defaultProjects={defaultNewTodoFilters.projects}
         defaultTags={defaultNewTodoFilters.tags}
+      />
+      {radialMenuTodo && (
+        <RadialMenuWrapper
+          todo={radialMenuTodo.todo}
+          position={radialMenuTodo.position}
+          onMoveSection={handleMoveSection}
+          onDelete={handleDeleteTodo}
+          onArchive={handleArchive}
+          onToggle={handleToggle}
+          onEdit={(todo) => {
+            setRadialMenuTodo(null);
+            handleEditTodo(todo);
+          }}
+          onClone={(todo) => {
+            setRadialMenuTodo(null);
+            handleCloneTodo(todo);
+          }}
+          onMeta={(todo) => {
+            setRadialMenuTodo(null);
+            setMetaModalTodo(todo);
+          }}
+          onPin={handlePin}
+          onClose={() => setRadialMenuTodo(null)}
+        />
+      )}
+      <MetaModal
+        open={metaModalTodo !== null}
+        todo={metaModalTodo}
+        onOpenChange={(open) => !open && setMetaModalTodo(null)}
+        onSave={handleMetaSave}
       />
     </div>
   );

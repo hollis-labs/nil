@@ -14,6 +14,7 @@ type Todo struct {
 	Source    string  `json:"source_line"`
 	NotesMD   string  `json:"notes_md"`
 	Section   string  `json:"section"` // now, soon, anytime
+	Pinned    bool    `json:"pinned"`
 
 	Projects []string `json:"projects"`
 	Contexts []string `json:"contexts"`

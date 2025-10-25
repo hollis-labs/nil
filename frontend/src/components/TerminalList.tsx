@@ -11,6 +11,7 @@ export type TodoRow = {
   projects: string[]; contexts: string[]; tags: string[];
   notes_md?: string;
   section: string; // now, soon, anytime
+  pinned?: boolean;
 };
 
 type ViewMode = 'scope' | 'date';
@@ -66,32 +67,24 @@ type Props = {
   showCompleted: boolean;
   onEditTodo: (row: TodoRow) => void;
   viewMode?: ViewMode;
+  onOpenRadialMenu?: (todo: TodoRow, position: {x: number; y: number}) => void;
   closeRadialMenus?: boolean;
   settingsButton?: React.ReactNode;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', closeRadialMenus = false, settingsButton }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', onOpenRadialMenu, closeRadialMenus = false, settingsButton }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
     done: false
   });
-  const [isRadialNavOpen, setIsRadialNavOpen] = React.useState<number | null>(null);
   const [hoveredRow, setHoveredRow] = React.useState<number | null>(null);
-  const modalOverlayRef = React.useRef<HTMLDivElement>(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: number; position: { x: number; y: number } } | null>(null);
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
   const deleteTriggered = React.useRef<boolean>(false);
 
   React.useEffect(() => {
-    if (isRadialNavOpen !== null && modalOverlayRef.current) {
-      modalOverlayRef.current.focus();
-    }
-  }, [isRadialNavOpen]);
-
-  React.useEffect(() => {
     if (closeRadialMenus) {
-      setIsRadialNavOpen(null);
       setHoveredRow(null);
     }
   }, [closeRadialMenus]);
@@ -121,9 +114,11 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       else anytime.push(r);
     }
 
-    const sortFn = (a: TodoRow, b: TodoRow) =>
-        (a.priority||'Z').localeCompare(b.priority||'Z') ||
+    const sortFn = (a: TodoRow, b: TodoRow) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (a.priority||'Z').localeCompare(b.priority||'Z') ||
         (b.created_at||'').localeCompare(a.created_at||'');
+    };
 
     [now, soon, anytime, done].forEach(list => list.sort(sortFn));
 
@@ -139,10 +134,11 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       (map[key] ||= []).push(r);
     }
 
-    Object.values(map).forEach(list => list.sort((a,b) =>
-        (a.priority||'Z').localeCompare(b.priority||'Z') ||
-        (b.created_at||'').localeCompare(a.created_at||'')
-    ));
+    Object.values(map).forEach(list => list.sort((a,b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      return (a.priority||'Z').localeCompare(b.priority||'Z') ||
+        (b.created_at||'').localeCompare(a.created_at||'');
+    }));
 
     return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
   }, [rows]);
@@ -163,212 +159,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       onMoveSection(draggedId, section);
       setDraggedId(null);
     }
-  };
-
-  const DirectionalMenu = ({ row }: { row: TodoRow }) => {
-    const section = row.section || 'anytime';
-    const isOpen = isRadialNavOpen === row.id;
-    const isHovered = hoveredRow === row.id;
-    const autoCloseTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-
-    const menuItems: any[] = [];
-
-    if (section === 'anytime') {
-      menuItems.push({ dir: 'up', label: 'N', section: 'now', delay: 0 });
-      menuItems.push({ dir: 'up', label: 'S', section: 'soon', delay: 1 });
-    } else if (section === 'soon') {
-      menuItems.push({ dir: 'up', label: 'N', section: 'now', delay: 0 });
-      menuItems.push({ dir: 'down', label: 'A', section: 'anytime', delay: 0 });
-    } else if (section === 'now') {
-      menuItems.push({ dir: 'down', label: 'S', section: 'soon', delay: 0 });
-      menuItems.push({ dir: 'down', label: 'A', section: 'anytime', delay: 1 });
-    }
-
-    menuItems.push({ dir: 'left', label: <Edit3 size={12} />, action: 'edit', delay: 0 });
-    menuItems.push({ dir: 'left', label: <Check size={12} />, action: 'complete', delay: 1 });
-    menuItems.push({ dir: 'left', label: <Trash2 size={12} />, action: 'delete', delay: 2 });
-    menuItems.push({ dir: 'left', label: <Archive size={12} />, action: 'archive', delay: 3 });
-
-    const menuRef = React.useRef<HTMLDivElement>(null);
-
-
-
-    React.useEffect(() => {
-      if (!isOpen) {
-        if (autoCloseTimerRef.current) {
-          clearTimeout(autoCloseTimerRef.current);
-          autoCloseTimerRef.current = null;
-        }
-        return;
-      }
-
-      const startAutoCloseTimer = () => {
-        if (autoCloseTimerRef.current) {
-          clearTimeout(autoCloseTimerRef.current);
-        }
-        autoCloseTimerRef.current = setTimeout(() => {
-          setIsRadialNavOpen(null);
-        }, 3000);
-      };
-
-      const resetTimer = () => {
-        startAutoCloseTimer();
-      };
-
-      startAutoCloseTimer();
-
-      const menuElement = menuRef.current;
-      if (menuElement) {
-        menuElement.addEventListener('mousemove', resetTimer);
-        menuElement.addEventListener('click', resetTimer);
-      }
-
-      return () => {
-        if (autoCloseTimerRef.current) {
-          clearTimeout(autoCloseTimerRef.current);
-        }
-        if (menuElement) {
-          menuElement.removeEventListener('mousemove', resetTimer);
-          menuElement.removeEventListener('click', resetTimer);
-        }
-      };
-    }, [isOpen]);
-
-    const handleAction = (item: any) => {
-      if (item.action === 'complete') {
-        onToggle(row.id, true);
-      } else if (item.action === 'archive') {
-        onArchive(row.id, true);
-      } else if (item.action === 'delete') {
-        onDelete(row.id);
-      } else if (item.action === 'edit') {
-        onEditTodo(row);
-      } else if (item.section) {
-        onMoveSection(row.id, item.section);
-      }
-      setIsRadialNavOpen(null);
-    };
-
-    const getPosition = (dir: string, index: number) => {
-      const spacing = 35;
-      const firstOffset = 32;
-      const offset = firstOffset + (index * spacing);
-      if (dir === 'up') return { bottom: `${offset}px`, left: '50%', transform: 'translateX(-50%)' };
-      if (dir === 'down') return { top: `${offset}px`, left: '50%', transform: 'translateX(-50%)' };
-      if (dir === 'left') return { right: `${offset}px`, top: '50%', transform: 'translateY(-50%)' };
-      return {};
-    };
-
-
-
-    return (
-        <div
-            data-radial-menu="true"
-            style={{
-              position: 'absolute',
-              right: '19px',
-              top: 'calc(50% - 2px)',
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              alignItems: 'center',
-              zIndex: 1100,
-              opacity: (!isHovered && !isOpen) ? 0 : 1,
-              pointerEvents: (!isHovered && !isOpen) || (isRadialNavOpen !== null && isRadialNavOpen !== row.id) ? 'none' : 'auto',
-              transition: 'opacity 0.15s ease'
-            }}
-            ref={menuRef}
-        >
-
-
-          <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsRadialNavOpen(isOpen ? null : row.id);
-              }}
-              style={{
-                background: 'var(--term-bgAlt)',
-                border: '1px solid var(--term-info)',
-                borderRadius: '50%',
-                cursor: 'pointer',
-                width: '24px',
-                height: '24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--term-info)',
-                transition: 'all 0.2s ease',
-                boxShadow: isOpen ? '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 0 rgba(96, 165, 250, 0.4)' : '0 0 0 0 var(--term-info), 0 0 4px 0 rgba(96, 165, 250, 0.15)',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                position: 'relative',
-                zIndex: 1001
-              }}
-
-              title="Quick actions"
-          >
-            ⋮
-          </button>
-
-          {isOpen && (() => {
-            const grouped: Record<string, any[]> = {};
-            menuItems.forEach(item => {
-              if (!grouped[item.dir]) grouped[item.dir] = [];
-              grouped[item.dir].push(item);
-            });
-
-
-
-            return (
-                <>
-                  {menuItems.map((item, idx) => {
-                    const indexInDir = grouped[item.dir].indexOf(item);
-
-                    return (
-                        <React.Fragment key={`${item.dir}-${item.section || item.action}`}>
-                          <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAction(item);
-                              }}
-                              style={{
-                                position: 'absolute',
-                                ...getPosition(item.dir, indexInDir),
-                                background: 'var(--term-bgAlt)',
-                                border: '1px solid var(--term-info)',
-                                borderRadius: '50%',
-                                width: '24px',
-                                height: '24px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'var(--term-info)',
-                                fontSize: '10px',
-                                fontWeight: 'bold',
-                                cursor: 'pointer',
-                                transition: 'all 0.3s ease',
-                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)',
-                                zIndex: 1000
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'var(--term-bg)';
-                                e.currentTarget.style.color = 'var(--term-fg)';
-                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 4px 1px rgba(96, 165, 250, 0.5)';
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'var(--term-bgAlt)';
-                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(96, 165, 250, 0)';
-                              }}
-                          >
-                            {item.label}
-                          </button>
-                        </React.Fragment>
-                    );
-                  })}
-                </>
-            );
-          })()}
-        </div>
-    );
   };
 
   const renderSection = (title: string, items: TodoRow[], sectionKey: string, canCollapse = true) => {
@@ -410,9 +200,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                             draggable
                             onDragStart={(e) => handleDragStart(e, r.id)}
                             onMouseEnter={() => {
-                              if (isRadialNavOpen === null) {
-                                setHoveredRow(r.id);
-                              }
+                              setHoveredRow(r.id);
                             }}
                             onMouseLeave={() => {
                               setHoveredRow(null);
@@ -425,8 +213,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               deleteTriggered.current = false;
                               longPressTimer.current = setTimeout(() => {
                                 deleteTriggered.current = true;
-                                setDeleteConfirm({ id: r.id, position: { x: e.clientX, y: e.clientY } });
-                              }, 1500);
+                                if (onOpenRadialMenu) {
+                                  onOpenRadialMenu(r, { x: e.clientX, y: e.clientY });
+                                }
+                              }, 1000);
                             }}
                             onMouseUp={() => {
                               if (longPressTimer.current) {
@@ -439,8 +229,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               const touch = e.touches[0];
                               longPressTimer.current = setTimeout(() => {
                                 deleteTriggered.current = true;
-                                setDeleteConfirm({ id: r.id, position: { x: touch.clientX, y: touch.clientY } });
-                              }, 1500);
+                                if (onOpenRadialMenu) {
+                                  onOpenRadialMenu(r, { x: touch.clientX, y: touch.clientY });
+                                }
+                              }, 1000);
                             }}
                             onTouchEnd={() => {
                               if (longPressTimer.current) {
@@ -457,10 +249,9 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               }
                               
                               const target = e.target as HTMLElement;
-                              const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
                               const isCheckboxClick = target.closest('.checkbox');
 
-                              if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
+                              if (!isCheckboxClick) {
                                 e.preventDefault();
                                 setHoveredRow(null);
                                 onEditTodo(r);
@@ -468,7 +259,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                             }}
                             style={{
                               cursor: r.completed ? 'grab' : 'pointer',
-                              opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
                               padding: '12px 20px',
                               marginRight: '25px',
                               display: 'flex',
@@ -517,7 +307,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                             </div>
                           </div>
-                          {!r.completed && <DirectionalMenu row={r} />}
                         </div>
                     ))
                 )}
@@ -589,26 +378,22 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                             <div
                                 key={r.id}
                                 className="list-row"
-                                onMouseEnter={() => {
-                                  if (isRadialNavOpen === null) {
-                                    setHoveredRow(r.id);
-                                  }
-                                }}
+                            onMouseEnter={() => {
+                              setHoveredRow(r.id);
+                            }}
                                 onMouseLeave={() => setHoveredRow(null)}
                                 onClick={(e) => {
-                                  const target = e.target as HTMLElement;
-                                  const isRadialMenuClick = target.closest('[data-radial-menu="true"]');
-                                  const isCheckboxClick = target.closest('.checkbox');
+                              const target = e.target as HTMLElement;
+                              const isCheckboxClick = target.closest('.checkbox');
 
-                                  if (!isRadialMenuClick && !isCheckboxClick && isRadialNavOpen === null) {
-                                    e.preventDefault();
-                                    setHoveredRow(null);
-                                    onEditTodo(r);
-                                  }
-                                }}
-                                style={{
-                                  cursor: r.completed ? 'default' : 'pointer',
-                                  opacity: isRadialNavOpen !== null && isRadialNavOpen !== r.id ? 0.5 : 1,
+                              if (!isCheckboxClick) {
+                                e.preventDefault();
+                                setHoveredRow(null);
+                                onEditTodo(r);
+                              }
+                            }}
+                            style={{
+                              cursor: r.completed ? 'default' : 'pointer',
                                   padding: '12px 20px',
                                   marginRight: '25px',
                                   display: 'flex',
@@ -656,7 +441,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                   {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
                                 </div>
                               </div>
-                              {!r.completed && <DirectionalMenu row={r} />}
                             </div>
                         ))}
                         {gi < dateGroups.length - 1 && <div className="separator" />}
@@ -686,29 +470,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   return (
       <>
-        {isRadialNavOpen !== null && (
-            <div
-                ref={modalOverlayRef}
-                onClick={() => setIsRadialNavOpen(null)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setIsRadialNavOpen(null);
-                  }
-                }}
-                style={{
-                  position: 'fixed',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  zIndex: 1099,
-                  background: 'transparent',
-                  cursor: 'default',
-                  outline: 'none'
-                }}
-                tabIndex={0}
-            />
-        )}
         <div className="terminal-card" style={{
           padding: '20px',
           position: 'relative',
