@@ -13,7 +13,7 @@ import ContextsAutocomplete from "./ContextsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import TagsAutocomplete from "./TagsAutocomplete";
 import CustomScrollbar from "./CustomScrollbar";
-import { Trash2, Edit3, Plus, Copy } from "lucide-react";
+import { Trash2, Edit3, Plus, Copy, ToggleLeft, ToggleRight } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -313,7 +313,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   border: 'none',
                   borderRadius: '4px 0 0 4px',
                   fontSize: '11px',
-                  padding: '4px 8px'
+                  padding: '4px 8px',
+                  opacity: priority === 'C' ? 1 : 0.8
                 }}
               >
                 LOW
@@ -328,7 +329,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   borderRadius: '0',
                   borderLeft: '1px solid var(--term-border)',
                   fontSize: '11px',
-                  padding: '4px 8px'
+                  padding: '4px 8px',
+                  opacity: priority === 'B' ? 1 : 0.8
                 }}
               >
                 MED
@@ -343,7 +345,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   borderRadius: '0',
                   borderLeft: '1px solid var(--term-border)',
                   fontSize: '11px',
-                  padding: '4px 8px'
+                  padding: '4px 8px',
+                  opacity: priority === 'A' ? 1 : 0.8
                 }}
               >
                 HIGH
@@ -369,16 +372,17 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 alignItems: 'center', 
                 gap: '8px',
                 paddingLeft: '16px',
-                borderLeft: '1px solid var(--term-border)'
-              }}>
-                <input
-                  type="checkbox"
-                  id="use-as-filter-tab"
-                  checked={useAsFilterTab}
-                  onChange={(e) => setUseAsFilterTab(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <label htmlFor="use-as-filter-tab" style={{ fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }} className="text-dim">
+                borderLeft: '1px solid var(--term-border)',
+                cursor: 'pointer'
+              }}
+              onClick={() => setUseAsFilterTab(!useAsFilterTab)}
+              >
+                {useAsFilterTab ? (
+                  <ToggleRight size={18} style={{ color: 'var(--term-accent)' }} />
+                ) : (
+                  <ToggleLeft size={18} style={{ color: 'var(--term-dim)', opacity: 0.6 }} />
+                )}
+                <label style={{ fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap' }} className="text-dim">
                   Use as filter tab
                 </label>
               </div>
@@ -412,7 +416,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   }
                 }}
               >
-                <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)' }}>
+                <option value="" style={{ background: 'var(--term-panel)', color: 'var(--term-fg)', opacity: 0.8 }}>
                   New Profile...
                 </option>
                 {profiles.map(profile => (
@@ -429,7 +433,8 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   padding: '8px 12px',
                   fontSize: '13px',
                   whiteSpace: 'nowrap',
-                  borderRadius: '6px'
+                  borderRadius: '6px',
+                  height: '40px'
                 }}
               >
                 Apply
@@ -444,22 +449,22 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
               marginBottom: '12px'
             }}>
               <div>
-                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
+                <label style={{ fontSize: '12px', marginBottom: '4px', marginLeft: '4px', display: 'block' }} className="text-dim">Projects</label>
                 <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
+                <label style={{ fontSize: '12px', marginBottom: '4px', marginLeft: '4px', display: 'block' }} className="text-dim">Contexts</label>
                 <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context..." />
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
+                <label style={{ fontSize: '12px', marginBottom: '4px', marginLeft: '4px', display: 'block' }} className="text-dim">Tags</label>
                 <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
               </div>
 
               <div>
-                <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Summary</label>
+                <label style={{ fontSize: '12px', marginBottom: '4px', marginLeft: '4px', display: 'block' }} className="text-dim">Summary</label>
                 <div style={{
                   padding: '8px 12px',
                   background: 'var(--term-bg)',
