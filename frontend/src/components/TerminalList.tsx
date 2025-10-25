@@ -449,10 +449,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               }
                             }}
                             onClick={(e) => {
-                              if (deleteTriggered.current) {
+                              // Don't open edit if delete confirmation is showing
+                              if (deleteConfirm) {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                deleteTriggered.current = false;
                                 return;
                               }
                               

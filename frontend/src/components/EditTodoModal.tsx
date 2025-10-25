@@ -428,7 +428,23 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <label style={{ fontSize: '12px' }} className="text-dim">Task</label>
+              <div className="task-header-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span 
+                  className="badge warn task-lightning" 
+                  style={{
+                    padding: '2px',
+                    fontSize: '10px',
+                    borderRadius: '3px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '14px',
+                    height: '14px',
+                    lineHeight: '1'
+                  }}
+                >⚡</span>
+                <label className="task-label" style={{ fontSize: '13px', opacity: 0.8, letterSpacing: '0.05em' }}>TASK</label>
+              </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 {/* Priority/Date chips row - moved here */}
                 <div style={{
@@ -570,7 +586,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     fontSize: '13px',
                     padding: '8px 12px',
                     borderRadius: '6px',
-                    borderColor: 'rgba(96, 165, 250, 0.8)'
+                    borderColor: 'rgba(96, 165, 250, 0.5)',
+                    opacity: 0.8
                   }}
                 >
                   <Save size={12} />
@@ -595,17 +612,17 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             gap: '12px'
           }}>
             <div>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Projects</label>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Projects</label>
               <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
             </div>
 
             <div>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Contexts</label>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Contexts</label>
               <ContextsAutocomplete values={contexts} onValuesChange={setContexts} placeholder="Add context..." />
             </div>
 
             <div>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Tags</label>
+              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Tags</label>
               <TagsAutocomplete values={tags} onValuesChange={setTags} placeholder="Add tag..." />
             </div>
 
@@ -626,7 +643,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
               return (
                 <div>
-                  <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Session Context</label>
+                  <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Session Context</label>
                   <div style={{
                     padding: '8px 12px',
                     background: 'var(--term-bg)',
@@ -664,7 +681,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             {isEditMode && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', height: '16px' }}>
-                  <label style={{ fontSize: '12px', lineHeight: '16px' }} className="text-dim">Apply Context</label>
+                  <label style={{ fontSize: '12px', lineHeight: '16px', opacity: 0.8 }}>Apply Context</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '16px' }}>
                     <input
                       type="checkbox"
@@ -678,7 +695,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                         margin: 0
                       }}
                     />
-                    <label htmlFor="merge-context" style={{ fontSize: '11px', cursor: 'pointer', lineHeight: '16px', margin: 0 }} className="text-dim">
+                    <label htmlFor="merge-context" style={{ fontSize: '11px', cursor: 'pointer', lineHeight: '16px', margin: 0, opacity: 0.8 }}>
                       Merge
                     </label>
                   </div>
@@ -714,7 +731,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
 
           <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block' }} className="text-dim">Description</label>
+            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Description</label>
             <div style={{
               border: '1px solid var(--term-border)',
               borderRadius: '6px',
@@ -755,8 +772,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                 <button type="button" className="badge warn" onClick={() => { onDelete(editTodo!.id); onOpenChange(false); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Yes, Delete</button>
               </>
             )}
-            <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Clear</button>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
+            <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Clear</button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Cancel</button>
           </div>
           <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>{isEditMode ? 'Save' : 'Create'}</button>
         </div>

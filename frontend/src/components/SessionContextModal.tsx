@@ -473,19 +473,19 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                   flexWrap: 'wrap'
                 }}>
                   <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>PRO:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)', opacity: 0.8 }}>PRO:</span>
                     <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{projects.length}</span>
                   </div>
                   <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>CON:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)', opacity: 0.8 }}>CON:</span>
                     <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{contexts.length}</span>
                   </div>
                   <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>TAG:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)', opacity: 0.8 }}>TAG:</span>
                     <span style={{ color: 'var(--term-info)', minWidth: '10px', textAlign: 'center' }}>{tags.length}</span>
                   </div>
                   <div style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--term-fg)' }}>PRI:</span>
+                    <span style={{ fontWeight: 600, color: 'var(--term-fg)', opacity: 0.8 }}>PRI:</span>
                     <span style={{ color: 'var(--term-info)', minWidth: '32px', display: 'inline-block' }}>
                       {priority === 'A' ? 'High' : priority === 'B' ? 'Med' : priority === 'C' ? 'Low' : 'None'}
                     </span>
@@ -548,10 +548,10 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
                 Clone
               </button>
             )}
-            <button type="button" className="badge" onClick={handleClear} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>
+            <button type="button" className="badge" onClick={handleClear} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>
               Clear
             </button>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Cancel</button>
+            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Cancel</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button

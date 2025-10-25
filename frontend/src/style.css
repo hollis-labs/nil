@@ -30,3 +30,32 @@ input:focus, select:focus, textarea:focus {
     outline: 2px solid var(--term-accent, #7aa2f7);
     outline-offset: 2px;
 }
+
+input::placeholder, textarea::placeholder {
+    opacity: 0.5;
+}
+
+label {
+    opacity: 0.8;
+}
+
+@keyframes taskShake {
+  0%, 100% {
+    transform: rotate(0deg) translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: rotate(-1.5deg) translateX(-1px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: rotate(1.5deg) translateX(1px);
+  }
+}
+
+.task-header-wrapper {
+  cursor: pointer;
+}
+
+.task-header-wrapper:hover .task-lightning,
+.task-header-wrapper:hover .task-label {
+  animation: taskShake 0.4s ease-in-out infinite;
+}
