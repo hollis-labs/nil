@@ -45,7 +45,7 @@ function Inner() {
   const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
   const [showPowerMenu, setShowPowerMenu] = React.useState(false);
   const [radialMenuTodo, setRadialMenuTodo] = React.useState<{todo: TodoRow; position: {x: number; y: number}} | null>(null);
-  const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string } | null>(null);
+  const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
   const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
@@ -296,12 +296,22 @@ function Inner() {
     return allRows.filter(r => !r.archived);
   }, [allRows, query, activeTabId, settings.tabs]);
 
-  const animateAction = (id: number, action: string, callback: () => Promise<void>) => {
-    setAnimatingRow({ id, action });
+  const animateAction = (id: number, action: string, callback: () => Promise<void>, shouldExpand = false) => {
+    setAnimatingRow({ id, action, phase: 'collapsing' });
     setTimeout(async () => {
       await callback();
-      setAnimatingRow(null);
-    }, 600);
+      if (shouldExpand) {
+        // After collapse, trigger expand animation at new location
+        setTimeout(() => {
+          setAnimatingRow({ id, action, phase: 'expanding' });
+          setTimeout(() => {
+            setAnimatingRow(null);
+          }, 240); // Same speed as collapse
+        }, 50); // Small delay to ensure row is in new position
+      } else {
+        setAnimatingRow(null);
+      }
+    }, 240); // Collapse duration
   };
 
   async function handleToggle(id: number, checked: boolean) {
@@ -309,7 +319,7 @@ function Inner() {
       animateAction(id, 'Todo Completed!', async () => {
         await Backend.ToggleComplete(id, checked);
         runSearch();
-      });
+      }, true); // Expand in Done section
     } else {
       await Backend.ToggleComplete(id, checked);
       runSearch();
@@ -323,7 +333,7 @@ function Inner() {
     animateAction(id, `Moved to ${sectionName}!`, async () => {
       await Backend.UpdateTodo({ ...todo, section } as any);
       runSearch();
-    });
+    }, true); // Expand in new section
   }
 
   async function handleArchive(id: number, archived: boolean) {
@@ -421,7 +431,7 @@ function Inner() {
     animateAction(id, message, async () => {
       await Backend.UpdateTodo({ ...todo, pinned } as any);
       runSearch();
-    });
+    }, true); // Expand at new position (top if pinned, original if unpinned)
   }
 
   async function handleInputSubmit() {

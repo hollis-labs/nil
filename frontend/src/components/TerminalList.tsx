@@ -71,7 +71,7 @@ type Props = {
   closeRadialMenus?: boolean;
   settingsButton?: React.ReactNode;
   hasActiveFilters?: boolean;
-  animatingRow?: { id: number; action: string } | null;
+  animatingRow?: { id: number; action: string; phase?: 'collapsing' | 'expanding' } | null;
 };
 
 export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
@@ -198,7 +198,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                     items.map((r, idx) => (
                         <div
                             key={r.id}
-                            className={`list-row ${animatingRow?.id === r.id ? 'row-animating' : ''}`}
+                            className={`list-row ${animatingRow?.id === r.id && animatingRow.phase === 'collapsing' ? 'row-animating' : ''} ${animatingRow?.id === r.id && animatingRow.phase === 'expanding' ? 'row-expanding' : ''}`}
                             draggable
                             onDragStart={(e) => handleDragStart(e, r.id)}
                             onMouseEnter={() => {
@@ -286,7 +286,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               justifyContent: 'center',
                               background: r.completed ? 'transparent' : 'var(--term-border)',
                               cursor: 'pointer',
-                              transition: 'all 0.2s ease',
                               marginTop: '2px',
                               flexShrink: 0
                             }}
@@ -325,11 +324,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                             )}
                           </div>
                           {animatingRow?.id === r.id && (
-                            <div className="row-overlay">
-                              <div className="row-message">
-                                {animatingRow.action}
-                              </div>
-                            </div>
+                            <div className="row-overlay" />
                           )}
                         </div>
                     ))
@@ -490,8 +485,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                   alignItems: 'center',
                                   justifyContent: 'center',
                                   background: r.completed ? 'transparent' : 'var(--term-border)',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s ease'
+                                  cursor: 'pointer'
                                 }}
                               >
                                 {r.completed && <Check size={14} style={{ color: 'var(--term-info)' }} />}
@@ -562,8 +556,33 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
             }
           }
           
+          @keyframes rowExpand {
+            0% {
+              max-height: 0;
+              opacity: 0;
+              transform: scaleY(0);
+              margin: 0;
+              padding: 0;
+            }
+            50% {
+              max-height: 100px;
+              opacity: 0.5;
+            }
+            100% {
+              max-height: 100px;
+              opacity: 1;
+              transform: scaleY(1);
+            }
+          }
+          
           .row-animating {
-            animation: rowCollapse 0.6s ease-out forwards;
+            animation: rowCollapse 0.24s ease-out forwards;
+            transform-origin: center;
+            overflow: hidden;
+          }
+          
+          .row-expanding {
+            animation: rowExpand 0.24s ease-out forwards;
             transform-origin: center;
             overflow: hidden;
           }
@@ -573,33 +592,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
             inset: 0;
             background: rgba(0, 0, 0, 0.15);
             backdrop-filter: blur(1px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
             z-index: 10;
             pointer-events: none;
-          }
-          
-          .row-message {
-            background: var(--term-panel);
-            border: 1px solid var(--term-border);
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--term-fg);
-            animation: messageFadeIn 0.2s ease-out;
-          }
-          
-          @keyframes messageFadeIn {
-            from {
-              opacity: 0;
-              transform: scale(0.9);
-            }
-            to {
-              opacity: 1;
-              transform: scale(1);
-            }
           }
         `}</style>
         <div className="terminal-card" style={{
