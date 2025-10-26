@@ -18,7 +18,7 @@ import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { Settings, Plus, Search, Calendar, List, Target, Power, HelpCircle } from "lucide-react";
 import { parseQuery } from "@/lib/query";
-import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
+import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
 import { Quit } from "../../wailsjs/runtime/runtime";
@@ -45,6 +45,7 @@ function Inner() {
   const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
   const [showPowerMenu, setShowPowerMenu] = React.useState(false);
   const [radialMenuTodo, setRadialMenuTodo] = React.useState<{todo: TodoRow; position: {x: number; y: number}} | null>(null);
+  const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string } | null>(null);
   const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
@@ -52,8 +53,7 @@ function Inner() {
     return (saved as ViewMode) || settings.defaultView || 'scope';
   });
   const [inputMode, setInputMode] = React.useState<'search' | 'add'>(() => {
-    const saved = localStorage.getItem('planck.inputMode');
-    return (saved as 'search' | 'add') || 'search';
+    return settings.defaultInputMode || 'add';
   });
 
   React.useEffect(() => {
@@ -73,11 +73,44 @@ function Inner() {
       (session.projects?.length || 0) +
       (session.tags?.length || 0) +
       (session.priority ? 1 : 0);
+    
+    // If session has useAsFilterTab enabled but no actual filters, clear it
+    if (session.useAsFilterTab && count === 0) {
+      setActiveSession({ ...session, useAsFilterTab: false });
+      setSessionFilterCount(0);
+      setSessionAsFilter(false);
+      return;
+    }
+    
     setSessionFilterCount(count);
     setSessionAsFilter(session.useAsFilterTab || false);
   }, []);
 
   React.useEffect(() => {
+    // Validate and clean session on mount
+    const session = getActiveSession();
+    console.log('[App Mount] Session on startup:', session);
+    if (session) {
+      const count =
+        (session.contexts?.length || 0) +
+        (session.projects?.length || 0) +
+        (session.tags?.length || 0) +
+        (session.priority ? 1 : 0);
+      
+      console.log('[App Mount] Session filter count:', count, 'useAsFilterTab:', session.useAsFilterTab);
+      
+      // If session has useAsFilterTab enabled but no actual filters, disable it immediately
+      if (session.useAsFilterTab && count === 0) {
+        console.log('[App Mount] Disabling empty useAsFilterTab');
+        setActiveSession({ ...session, useAsFilterTab: false });
+      }
+      
+      // If session exists but has empty arrays, clear it entirely
+      if (count === 0 && !session.useAsFilterTab) {
+        console.log('[App Mount] Clearing empty session');
+        clearActiveSession();
+      }
+    }
     updateSessionFilterCount();
   }, [updateSessionFilterCount]);
 
@@ -116,13 +149,17 @@ function Inner() {
   }, [query, activeTabId, settings.tabs]);
 
   const runSearch = React.useCallback(async () => {
+    console.log('[runSearch] Starting search...');
     try {
       const session = getActiveSession();
+      console.log('[runSearch] Session:', session);
       const sessionAsFilter = session?.useAsFilterTab ? session : null;
+      console.log('[runSearch] sessionAsFilter:', sessionAsFilter);
 
       const activeTab = sessionAsFilter ? null : settings.tabs.find(t => t.id === activeTabId);
       const mainParsed = parseQuery(query);
       const tabParsed = activeTab?.query ? parseQuery(activeTab.query) : null;
+      console.log('[runSearch] mainParsed:', mainParsed, 'tabParsed:', tabParsed);
 
       const merged = {
         keywords: [...mainParsed.keywords],
@@ -165,12 +202,16 @@ function Inner() {
         page_size: 500,
         sort_by: "created_at",
         sort_dir: "desc",
-        projects: merged.projects,
-        contexts: merged.contexts,
-        tags: merged.tags,
-        statuses: statusesToSearch,
-        priorities: merged.priorities
+        statuses: statusesToSearch
       };
+      
+      // Only include filter arrays if they have values
+      if (merged.projects.length > 0) req.projects = merged.projects;
+      if (merged.contexts.length > 0) req.contexts = merged.contexts;
+      if (merged.tags.length > 0) req.tags = merged.tags;
+      if (merged.priorities.length > 0) req.priorities = merged.priorities;
+      
+      console.log('[Search] Request being sent:', req);
       const res = await Backend.Search(req);
       let allResults = Array.isArray(res) ? res : [];
 
@@ -229,18 +270,15 @@ function Inner() {
     }
   }, [query, activeTabId, settings.tabs, settings.showCompleted]);
 
-  React.useEffect(() => { 
-    if (inputMode === 'search') {
-      runSearch();
-    }
-  }, [runSearch, inputMode]);
+  React.useEffect(() => {
+    console.log('[useEffect] Running search (inputMode does not affect search)');
+    runSearch();
+  }, [runSearch]);
 
   // Re-run search when active tab changes
   React.useEffect(() => {
-    if (inputMode === 'search') {
-      runSearch();
-    }
-  }, [activeTabId, runSearch, inputMode]);
+    runSearch();
+  }, [activeTabId, runSearch]);
 
   // Filter out archived items (unless explicitly searched for)
   // TerminalList handles showCompleted filtering internally
@@ -258,21 +296,46 @@ function Inner() {
     return allRows.filter(r => !r.archived);
   }, [allRows, query, activeTabId, settings.tabs]);
 
+  const animateAction = (id: number, action: string, callback: () => Promise<void>) => {
+    setAnimatingRow({ id, action });
+    setTimeout(async () => {
+      await callback();
+      setAnimatingRow(null);
+    }, 600);
+  };
+
   async function handleToggle(id: number, checked: boolean) {
-    await Backend.ToggleComplete(id, checked);
-    runSearch();
+    if (checked) {
+      animateAction(id, 'Todo Completed!', async () => {
+        await Backend.ToggleComplete(id, checked);
+        runSearch();
+      });
+    } else {
+      await Backend.ToggleComplete(id, checked);
+      runSearch();
+    }
   }
 
   async function handleMoveSection(id: number, section: string) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
-    await Backend.UpdateTodo({ ...todo, section } as any);
-    runSearch();
+    const sectionName = section === 'now' ? 'Now' : section === 'soon' ? 'Soon' : 'Anytime';
+    animateAction(id, `Moved to ${sectionName}!`, async () => {
+      await Backend.UpdateTodo({ ...todo, section } as any);
+      runSearch();
+    });
   }
 
   async function handleArchive(id: number, archived: boolean) {
-    await Backend.Archive(id, archived);
-    runSearch();
+    if (archived) {
+      animateAction(id, 'Todo Archived!', async () => {
+        await Backend.Archive(id, archived);
+        runSearch();
+      });
+    } else {
+      await Backend.Archive(id, archived);
+      runSearch();
+    }
   }
 
   function handleOpenNotes(row: TodoRow) { setNotesTodo(row); setNotesOpen(true); }
@@ -354,8 +417,11 @@ function Inner() {
   async function handlePin(id: number, pinned: boolean) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
-    await Backend.UpdateTodo({ ...todo, pinned } as any);
-    runSearch();
+    const message = pinned ? 'Todo Pinned!' : 'Todo Unpinned!';
+    animateAction(id, message, async () => {
+      await Backend.UpdateTodo({ ...todo, pinned } as any);
+      runSearch();
+    });
   }
 
   async function handleInputSubmit() {
@@ -402,10 +468,12 @@ function Inner() {
   }
 
   async function handleDeleteTodo(id: number) {
-    await Backend.DeleteTodo(id);
-    setQuickOpen(false);
-    setEditTodo(null);
-    runSearch();
+    animateAction(id, 'Todo Deleted!', async () => {
+      await Backend.DeleteTodo(id);
+      setQuickOpen(false);
+      setEditTodo(null);
+      runSearch();
+    });
   }
 
   function handleClearAll() {
@@ -504,14 +572,13 @@ function Inner() {
               }}
               style={{
                 position: 'absolute',
-                right: '20px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: '13px',
-                padding: '8px 12px',
-                borderRadius: '6px',
+                right: '18px',
+                top: '24px',
+                fontSize: '10px',
+                padding: '4px 8px',
+                borderRadius: '4px',
                 cursor: 'pointer',
-                zIndex: 1000,
+                zIndex: 50,
                 // @ts-ignore
                 WebkitAppRegion: 'no-drag'
               } as any}
@@ -705,6 +772,8 @@ function Inner() {
           viewMode={viewMode}
           onOpenRadialMenu={(todo, position) => setRadialMenuTodo({todo, position})}
           closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null || radialMenuTodo !== null || metaModalTodo !== null}
+          hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
+          animatingRow={animatingRow}
           settingsButton={
             <div style={{ display: 'flex', gap: '8px' }}>
               <button

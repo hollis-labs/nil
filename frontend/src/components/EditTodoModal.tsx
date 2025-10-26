@@ -13,7 +13,7 @@ import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import { TaskTemplate } from "@/lib/templates";
 import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
-import { Save, ToggleLeft, ToggleRight } from "lucide-react";
+import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3 } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -46,6 +46,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [showTemplateSaveDialog, setShowTemplateSaveDialog] = React.useState(false);
   const [mergeContext, setMergeContext] = React.useState(true);
   const [sessionProfiles, setSessionProfiles] = React.useState<SessionProfile[]>([]);
+  const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
 
   React.useEffect(() => {
     if (open) {
@@ -295,6 +296,41 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     fontSize: '13px'
   };
 
+  const ToolbarButton = ({ onClick, isActive, icon: Icon, title }: { onClick: () => void; isActive?: boolean; icon: any; title: string }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: '6px 8px',
+        background: isActive ? 'var(--term-accent)' : 'transparent',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: isActive ? '#000' : 'var(--term-fg)',
+        transition: 'all 0.15s ease',
+        opacity: isActive ? 1 : 0.7
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = 'var(--term-panel)';
+          e.currentTarget.style.opacity = '1';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.opacity = '0.7';
+        }
+      }}
+    >
+      <Icon size={16} />
+    </button>
+  );
+
   return (
     <>
       <style>{`
@@ -322,7 +358,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         }
         .tiptap-editor ul li,
         .tiptap-editor ol li {
-          margin: 0.25em 0;
+          margin: 0.05em 0;
         }
         .tiptap-editor h1 {
           font-size: 1.5em;
@@ -346,7 +382,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           margin: 0.5em 0;
           line-height: 1.5;
         }
-        .tiptap-editor p:first-child {
+        .tiptap-editor .ProseMirror > p:first-child {
           margin-top: 22px;
         }
         .tiptap-editor strong {
@@ -432,10 +468,10 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
         </div>
 
-        {/* Modal Body - NO SCROLLBAR 
-            FIX: CustomScrollbar component was causing content to auto-scroll/jump when TipTap 
+        {/* Modal Body - NO SCROLLBAR
+            FIX: CustomScrollbar component was causing content to auto-scroll/jump when TipTap
             markdown elements changed (e.g. typing # for headings, - for bullets).
-            Solution: 
+            Solution:
             1. Removed CustomScrollbar wrapper (no scrollbar needed with 750px height)
             2. Added overflow: 'hidden' to prevent scrolling
             3. Added position: 'relative' to both outer and inner divs to anchor content in place
@@ -459,8 +495,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
               <div className="task-header-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span 
-                  className="badge warn task-lightning" 
+                <span
+                  className="badge warn task-lightning"
                   style={{
                     padding: '2px',
                     fontSize: '10px',
@@ -486,7 +522,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     type="button"
                     className={`badge ${priority === 'C' ? 'success' : ''}`}
                     onClick={() => setPriority(priority === 'C' ? '' : 'C')}
-                    style={{ 
+                    style={{
                       flex: '0 0 auto',
                       border: 'none',
                       borderRadius: '4px 0 0 4px',
@@ -500,7 +536,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     type="button"
                     className={`badge ${priority === 'B' ? 'info' : ''}`}
                     onClick={() => setPriority(priority === 'B' ? '' : 'B')}
-                    style={{ 
+                    style={{
                       flex: '0 0 auto',
                       border: 'none',
                       borderRadius: '0',
@@ -515,7 +551,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     type="button"
                     className={`badge ${priority === 'A' ? 'warn' : ''}`}
                     onClick={() => setPriority(priority === 'A' ? '' : 'A')}
-                    style={{ 
+                    style={{
                       flex: '0 0 auto',
                       border: 'none',
                       borderRadius: '0',
@@ -530,7 +566,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     type="button"
                     className={`badge ${priority === '' ? 'success' : ''}`}
                     onClick={() => setPriority('')}
-                    style={{ 
+                    style={{
                       flex: '0 0 auto',
                       border: 'none',
                       borderRadius: '0',
@@ -600,7 +636,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     {due ? `Due: ${due}` : 'DUE'}
                   </button>
                 </div>
-                
+
                 <TemplatePickerCombobox
                   onSelect={handleTemplateSelect}
                   currentValues={{ contexts, projects, tags, priority: priority || undefined }}
@@ -609,10 +645,10 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                   type="button"
                   className="badge"
                   onClick={() => setShowTemplateSaveDialog(true)}
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '4px', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
                     fontSize: '13px',
                     padding: '8px 12px',
                     borderRadius: '6px',
@@ -685,7 +721,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     alignItems: 'flex-start',
                     gap: '8px'
                   }}>
-                    <div 
+                    <div
                       onClick={toggleUseDefaults}
                       style={{ cursor: 'pointer', marginTop: '4px', flexShrink: 0 }}
                     >
@@ -779,7 +815,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', height: '16px' }}>
                   <label style={{ fontSize: '12px', lineHeight: '16px', opacity: 0.8 }}>Apply Context</label>
-                  <div 
+                  <div
                     style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '16px', cursor: 'pointer' }}
                     onClick={() => setMergeContext(!mergeContext)}
                   >
@@ -823,26 +859,48 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             )}
           </div>
 
-          <div>
-            <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Description</label>
-            <div style={{
-              border: '1px solid var(--term-border)',
-              borderRadius: '6px',
-              background: 'var(--term-bg)',
-              overflow: 'hidden',
-              minHeight: '300px',
-              maxHeight: '300px'
-            }}>
-              <CustomScrollbar style={{
-                height: '296px',
-                minHeight: '296px',
-                maxHeight: '296px',
-                background: 'var(--term-bg)'
+          {!descriptionExpanded && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label style={{ fontSize: '12px', opacity: 0.8 }}>Description</label>
+                <button
+                  type="button"
+                  onClick={() => setDescriptionExpanded(!descriptionExpanded)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--term-dim)',
+                    transition: 'color 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--term-accent)'}
+                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--term-dim)'}
+                >
+                  <Maximize2 size={16} />
+                </button>
+              </div>
+              <div style={{
+                border: '1px solid var(--term-border)',
+                borderRadius: '6px',
+                background: 'var(--term-bg)',
+                overflow: 'hidden',
+                minHeight: '300px',
+                maxHeight: '300px'
               }}>
-                <EditorContent editor={editor} />
-              </CustomScrollbar>
+                <CustomScrollbar style={{
+                  height: '296px',
+                  minHeight: '296px',
+                  maxHeight: '296px',
+                  background: 'var(--term-bg)'
+                }}>
+                  <EditorContent editor={editor} />
+                </CustomScrollbar>
+              </div>
             </div>
-          </div>
+          )}
         </form>
           </div>
         </div>
@@ -882,6 +940,148 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
           priority: (priority as 'A' | 'B' | 'C') || undefined,
         }}
       />
+
+      {/* Expanded Description Modal */}
+      {descriptionExpanded && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.15)',
+          backdropFilter: 'blur(1px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <div className="terminal-card" style={{
+            width: '90%',
+            height: '90%',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid var(--term-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <label style={{ fontSize: '14px', fontWeight: 600 }}>Description</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setDescriptionExpanded(false)}
+                  className="badge"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'var(--term-bg)',
+                    border: '1px solid var(--term-border)'
+                  }}
+                >
+                  <Minimize2 size={14} />
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setDescriptionExpanded(false);
+                    handleSubmit(e as any);
+                  }}
+                  className="badge success"
+                  style={{
+                    padding: '6px 12px',
+                    fontSize: '12px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Save size={14} />
+                  Save & Close
+                </button>
+              </div>
+            </div>
+
+            {/* Toolbar */}
+            {editor && (
+              <div style={{
+                padding: '12px 20px',
+                borderBottom: '1px solid var(--term-border)',
+                display: 'flex',
+                gap: '4px',
+                flexWrap: 'wrap',
+                background: 'var(--term-panel)'
+              }}>
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleBold().run()}
+                  isActive={editor.isActive('bold')}
+                  icon={Bold}
+                  title="Bold"
+                />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleItalic().run()}
+                  isActive={editor.isActive('italic')}
+                  icon={Italic}
+                  title="Italic"
+                />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleCode().run()}
+                  isActive={editor.isActive('code')}
+                  icon={Code}
+                  title="Inline Code"
+                />
+                <div style={{ width: '1px', height: '28px', background: 'var(--term-border)', margin: '0 4px' }} />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                  isActive={editor.isActive('heading', { level: 1 })}
+                  icon={Heading1}
+                  title="Heading 1"
+                />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                  isActive={editor.isActive('heading', { level: 2 })}
+                  icon={Heading2}
+                  title="Heading 2"
+                />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                  isActive={editor.isActive('heading', { level: 3 })}
+                  icon={Heading3}
+                  title="Heading 3"
+                />
+                <div style={{ width: '1px', height: '28px', background: 'var(--term-border)', margin: '0 4px' }} />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleBulletList().run()}
+                  isActive={editor.isActive('bulletList')}
+                  icon={List}
+                  title="Bullet List"
+                />
+                <ToolbarButton
+                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                  isActive={editor.isActive('orderedList')}
+                  icon={ListOrdered}
+                  title="Numbered List"
+                />
+              </div>
+            )}
+
+            {/* Editor */}
+            <CustomScrollbar style={{ flex: 1, background: 'var(--term-bg)' }}>
+              <div style={{ padding: '20px' }}>
+                <EditorContent editor={editor} />
+              </div>
+            </CustomScrollbar>
+          </div>
+        </div>
+      )}
     </div>
     </>
   );

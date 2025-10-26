@@ -12,6 +12,7 @@ type Settings = {
   dbPath?: string;
   defaultView?: 'scope' | 'date';
   defaultTags?: string[];
+  defaultInputMode?: 'search' | 'add';
 };
 
 type ScopeTab = {
@@ -34,7 +35,8 @@ const defaultSettings: Settings = {
   ],
   dbPath: './data',
   defaultView: 'scope',
-  defaultTags: []
+  defaultTags: [],
+  defaultInputMode: 'add'
 };
 
 const SettingsContext = React.createContext<{
@@ -355,6 +357,47 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
                   Scope organizes by Now/Soon/Anytime priority. Date groups by due date. Choose which view to show on app load.
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+                  Default Input Mode
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={() => setLocal({ ...local, defaultInputMode: 'search' })}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '1px solid var(--term-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: local.defaultInputMode === 'search' ? 'var(--term-accent)' : 'transparent'
+                    }}>
+                      {local.defaultInputMode === 'search' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#000' }} />}
+                    </div>
+                    <label style={{ cursor: 'pointer', fontSize: '12px' }}>Search</label>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={() => setLocal({ ...local, defaultInputMode: 'add' })}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      border: '1px solid var(--term-border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: local.defaultInputMode === 'add' ? 'var(--term-accent)' : 'transparent'
+                    }}>
+                      {local.defaultInputMode === 'add' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#000' }} />}
+                    </div>
+                    <label style={{ cursor: 'pointer', fontSize: '12px' }}>Add</label>
+                  </div>
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
+                  Search mode filters todos as you type. Add mode creates a new todo when you press Enter. Toggle with Tab key anytime.
                 </div>
               </div>
 

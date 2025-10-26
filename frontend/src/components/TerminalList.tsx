@@ -70,9 +70,11 @@ type Props = {
   onOpenRadialMenu?: (todo: TodoRow, position: {x: number; y: number}) => void;
   closeRadialMenus?: boolean;
   settingsButton?: React.ReactNode;
+  hasActiveFilters?: boolean;
+  animatingRow?: { id: number; action: string } | null;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', onOpenRadialMenu, closeRadialMenus = false, settingsButton }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -196,7 +198,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                     items.map((r, idx) => (
                         <div
                             key={r.id}
-                            className="list-row"
+                            className={`list-row ${animatingRow?.id === r.id ? 'row-animating' : ''}`}
                             draggable
                             onDragStart={(e) => handleDragStart(e, r.id)}
                             onMouseEnter={() => {
@@ -280,33 +282,55 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               border: r.completed ? '1px solid var(--term-border)' : '1px solid rgba(0, 0, 0, 0.4)',
                               borderRadius: '4px',
                               display: 'flex',
-                              alignItems: 'center',
+                              alignItems: 'flex-start',
                               justifyContent: 'center',
                               background: r.completed ? 'transparent' : 'var(--term-border)',
                               cursor: 'pointer',
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              marginTop: '2px',
+                              flexShrink: 0
                             }}
                           >
                             {r.completed && <Check size={14} style={{ color: 'var(--term-info)' }} />}
                           </div>
                           <div
-                              style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1 }}
+                              style={{ minWidth: 0, opacity: r.completed ? 0.5 : 1, flex: 1, display: 'flex', alignItems: 'flex-start', gap: '8px' }}
                           >
-                            <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none' }}>
-                              {r.title}{" "}
-                              <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
-                        {r.contexts.map((c: string) => `@${c}`).join(" ")}
-                      </span>
-                              {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
-                              {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
-                              {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
-                              {!r.completed && r.due_at && <span className="badge info" style={{ marginLeft: '6px', padding: '4px 8px', fontSize: '11px', borderRadius: '6px', opacity: 0.8 }}>{new Date(r.due_at).toLocaleDateString()}</span>}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div className={`title ${r.title.includes("http") ? "underlined" : ""}`} style={{ textDecoration: r.completed ? 'line-through' : 'none', fontSize: '13px' }}>
+                                {r.title}{" "}
+                                <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
+                          {r.contexts.map((c: string) => `@${c}`).join(" ")}
+                        </span>
+                                {r.priority === "A" && <span style={{ color: 'var(--term-success)', marginLeft: '6px' }}>★</span>}
+                                {r.priority === "B" && <span style={{ color: 'var(--term-warn)', marginLeft: '6px' }}>⁙</span>}
+                                {r.priority === "C" && <span style={{ color: 'var(--term-info)', marginLeft: '6px' }}>•</span>}
+                              </div>
+                              <div className="meta" style={{ fontSize: '11px' }}>
+                                {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
+                                {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
+                              </div>
                             </div>
-                            <div className="meta">
-                              {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
-                              {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
-                            </div>
+                            {!r.completed && r.due_at && (
+                              <span className="badge info" style={{ 
+                                padding: '3px 6px', 
+                                fontSize: '10px', 
+                                borderRadius: '4px', 
+                                opacity: 0.8,
+                                flexShrink: 0,
+                                alignSelf: 'flex-start'
+                              }}>
+                                {new Date(r.due_at).toLocaleDateString()}
+                              </span>
+                            )}
                           </div>
+                          {animatingRow?.id === r.id && (
+                            <div className="row-overlay">
+                              <div className="row-message">
+                                {animatingRow.action}
+                              </div>
+                            </div>
+                          )}
                         </div>
                     ))
                 )}
@@ -325,29 +349,77 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           alignItems: 'center',
           justifyContent: 'center'
         }}>
-          <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-            <span>No todos yet. Press</span>
-            <kbd style={{
-              padding: '4px 8px',
-              background: 'var(--term-bg)',
-              border: '1px solid var(--term-border)',
-              borderRadius: '6px',
+          {hasActiveFilters ? (
+            <div style={{ 
+              textAlign: 'center', 
+              color: 'var(--term-dim)', 
               fontSize: '13px',
-              fontFamily: 'monospace',
-              fontWeight: 500
-            }}>⌘</kbd>
-            <span>+</span>
-            <kbd style={{
-              padding: '4px 8px',
-              background: 'var(--term-bg)',
-              border: '1px solid var(--term-border)',
-              borderRadius: '6px',
-              fontSize: '13px',
-              fontFamily: 'monospace',
-              fontWeight: 500
-            }}>N</kbd>
-            <span>to create one.</span>
-          </div>
+              maxWidth: '500px',
+              lineHeight: '1.6'
+            }}>
+              <div style={{ marginBottom: '12px', fontSize: '14px', whiteSpace: 'nowrap' }}>
+                This combination of filters did not produce any results.
+              </div>
+              <div style={{ marginBottom: '12px', opacity: 0.8 }}>
+                Please expand your filter criteria.
+              </div>
+              <div style={{ 
+                margin: '20px 0',
+                fontSize: '13px',
+                letterSpacing: '1px',
+                opacity: 0.5
+              }}>
+                — OR —
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '13px' }}>
+                <span>Press</span>
+                <kbd style={{
+                  padding: '4px 8px',
+                  background: 'var(--term-bg)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  fontWeight: 500
+                }}>⌘</kbd>
+                <span>+</span>
+                <kbd style={{
+                  padding: '4px 8px',
+                  background: 'var(--term-bg)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  fontWeight: 500
+                }}>N</kbd>
+                <span>to create a new todo</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+              <span>No todos yet. Press</span>
+              <kbd style={{
+                padding: '4px 8px',
+                background: 'var(--term-bg)',
+                border: '1px solid var(--term-border)',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontFamily: 'monospace',
+                fontWeight: 500
+              }}>⌘</kbd>
+              <span>+</span>
+              <kbd style={{
+                padding: '4px 8px',
+                background: 'var(--term-bg)',
+                border: '1px solid var(--term-border)',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontFamily: 'monospace',
+                fontWeight: 500
+              }}>N</kbd>
+              <span>to create one.</span>
+            </div>
+          )}
         </div>
     );
   }
@@ -470,6 +542,66 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   return (
       <>
+        <style>{`
+          @keyframes rowCollapse {
+            0% {
+              max-height: 100px;
+              opacity: 1;
+              transform: scaleY(1);
+            }
+            50% {
+              max-height: 100px;
+              opacity: 0.5;
+            }
+            100% {
+              max-height: 0;
+              opacity: 0;
+              transform: scaleY(0);
+              margin: 0;
+              padding: 0;
+            }
+          }
+          
+          .row-animating {
+            animation: rowCollapse 0.6s ease-out forwards;
+            transform-origin: center;
+            overflow: hidden;
+          }
+          
+          .row-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(1px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: none;
+          }
+          
+          .row-message {
+            background: var(--term-panel);
+            border: 1px solid var(--term-border);
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--term-fg);
+            animation: messageFadeIn 0.2s ease-out;
+          }
+          
+          @keyframes messageFadeIn {
+            from {
+              opacity: 0;
+              transform: scale(0.9);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+        `}</style>
         <div className="terminal-card" style={{
           padding: '20px',
           position: 'relative',

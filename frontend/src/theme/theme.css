@@ -135,11 +135,11 @@ a.term-link:hover { opacity: 0.9; }
 .checkbox .mark { width: 10px; height: 10px; border-radius: 2px; background: var(--term-success); display:none; }
 .checkbox.checked .mark { display:block; }
 
-.list-row { display:grid; grid-template-columns: 24px 1fr; gap: 12px; align-items:center; padding: 6px 10px; position: relative; }
+.list-row { display:grid; grid-template-columns: 24px 1fr; gap: 12px; align-items:flex-start; padding: 6px 10px; position: relative; }
 .list-row:hover { background: rgba(255,255,255,0.02); }
 .title { line-height: 1.35; font-size: 13px; }
 .title.underlined { text-decoration: underline; text-decoration-color: var(--term-accent); text-underline-offset: 3px; }
-.meta { font-size: 12px; gap: 8px; display:flex; align-items:center; }
+.meta { font-size: 11px; gap: 8px; display:flex; align-items:center; }
 .separator { height: 1px; background: var(--term-border); margin: 6px 0; }
 
 .date-header { color: var(--term-dim); font-weight: 600; margin: 14px 0 6px; }

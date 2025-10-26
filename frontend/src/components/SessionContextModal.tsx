@@ -559,6 +559,29 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
               </div>
             </div>
 
+            {/* Help Section */}
+            <div style={{ marginTop: '20px' }}>
+              <label style={{ fontSize: '12px', marginBottom: '4px', marginLeft: '4px', display: 'block' }} className="text-dim">How Session Context Works</label>
+              <div style={{
+                padding: '12px 16px',
+                background: 'var(--term-bg)',
+                border: '1px solid var(--term-border)',
+                borderRadius: '6px',
+                fontSize: '12px',
+                lineHeight: '1.6',
+                color: 'var(--term-dim)'
+              }}>
+                <p style={{ margin: '0 0 8px 0' }}>
+                  <strong style={{ color: 'var(--term-fg)' }}>Session Context</strong> lets you set default filters for new todos.
+                </p>
+                <p style={{ margin: '0 0 8px 0' }}>
+                  <strong style={{ color: 'var(--term-fg)' }}>Profiles:</strong> Save frequently-used combinations as profiles. Select from the dropdown to load, edit, or create new ones.
+                </p>
+                <p style={{ margin: '0' }}>
+                  <strong style={{ color: 'var(--term-fg)' }}>Use as filter tab:</strong> When enabled, this profile becomes an active filter that overrides your tab filters. All searches will be restricted to items matching this context until you turn it off or clear the session.
+                </p>
+              </div>
+            </div>
 
           </div>
         </CustomScrollbar>

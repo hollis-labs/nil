@@ -95,6 +95,7 @@ export default function RadialMenuWrapper({
         onClose();
         break;
       case 'more':
+        // Force immediate state update
         setActiveLayer('more');
         break;
       case 'archive':
@@ -170,7 +171,19 @@ export default function RadialMenuWrapper({
         .radial-menu-item {
           position: absolute;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: none;
+          pointer-events: auto;
+          will-change: transform, opacity;
+        }
+        
+        .radial-menu-item.hidden {
+          display: none !important;
+        }
+        
+        .layer-wrapper {
+          position: absolute;
+          inset: 0;
+          will-change: contents;
         }
 
         .radial-menu-item.disabled {
@@ -224,7 +237,7 @@ export default function RadialMenuWrapper({
           top: 50%;
           left: 50%;
           transform: translate(-50%, -50%);
-          z-index: 10;
+          z-index: 100;
         }
 
         .center-button:hover {
@@ -247,30 +260,65 @@ export default function RadialMenuWrapper({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {menuItems.map((item, index) => {
-            const angle = (item.angle * Math.PI) / 180;
-            const x = Math.cos(angle) * radius;
-            const y = Math.sin(angle) * radius;
-            const Icon = item.icon;
+          {activeLayer === 'main' && (
+            <div className="layer-wrapper">
+              {mainMenuItems.map((item, index) => {
+                const angle = (item.angle * Math.PI) / 180;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                const Icon = item.icon;
 
-            return (
-              <div
-                key={item.id}
-                className={`radial-menu-item ${item.disabled ? 'disabled' : ''}`}
-                style={{
-                  left: `calc(50% + ${x}px)`,
-                  top: `calc(50% + ${y}px)`,
-                  transform: 'translate(-50%, -50%)',
-                }}
-                onClick={() => !item.disabled && handleAction(item.id)}
-              >
-                <div className="item-button">
-                  <Icon size={12} />
-                  <span>{item.label}</span>
-                </div>
-              </div>
-            );
-          })}
+                return (
+                  <div
+                    key={item.id}
+                    className={`radial-menu-item ${item.disabled ? 'disabled' : ''}`}
+                    style={{
+                      left: `calc(50% + ${x}px)`,
+                      top: `calc(50% + ${y}px)`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    onClick={() => !item.disabled && handleAction(item.id)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="item-button">
+                      <Icon size={12} />
+                      <span>{item.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeLayer === 'more' && (
+            <div className="layer-wrapper">
+              {moreMenuItems.map((item, index) => {
+                const angle = (item.angle * Math.PI) / 180;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                const Icon = item.icon;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`radial-menu-item ${item.disabled ? 'disabled' : ''}`}
+                    style={{
+                      left: `calc(50% + ${x}px)`,
+                      top: `calc(50% + ${y}px)`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    onClick={() => !item.disabled && handleAction(item.id)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="item-button">
+                      <Icon size={12} />
+                      <span>{item.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <div 
             className="center-button"
