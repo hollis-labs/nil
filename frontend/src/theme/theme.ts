@@ -50,7 +50,7 @@ export const themePresets: Record<string, TermTheme> = {
     panel: '#dddddd',
     fg: '#4c4f51',
     dim: '#798189',
-    accent: '#2c2e2c',
+    accent: '#eab308',
     success: '#0968ec',
     warn: '#ac0000',
     info: '#2a2b2c',

@@ -2,7 +2,7 @@ import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
-import { ChevronUp, ChevronDown, Check, Archive, Trash2, Edit3 } from "lucide-react";
+import { ChevronUp, ChevronDown, Check, Archive, Trash2, Edit3, Pin } from "lucide-react";
 
 export type TodoRow = {
   id: number; title: string; priority?: string;
@@ -259,17 +259,28 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                 onEditTodo(r);
                               }
                             }}
-                            style={{
-                              cursor: r.completed ? 'grab' : 'pointer',
-                              padding: '12px 20px',
-                              marginRight: '25px',
+                             style={{
+                               cursor: r.completed ? 'grab' : 'pointer',
+                               padding: '12px 20px',
+                               marginRight: '25px',
+                               display: 'flex',
+                               gap: '12px',
+                               position: 'relative',
+                               borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+                               borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
+                             }}
+                         >
+                          {(r as any).pinned && (
+                            <div style={{
+                              position: 'absolute',
+                              left: '4px',
+                              top: '18px',
                               display: 'flex',
-                              gap: '12px',
-                              position: 'relative',
-                              borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
-                              borderBottom: idx === items.length - 1 ? 'none' : '1px solid var(--term-border)'
-                            }}
-                        >
+                              alignItems: 'center'
+                            }}>
+                              <Pin size={12} style={{ color: 'var(--term-border)', fill: 'var(--term-border)' }} />
+                            </div>
+                          )}
                           <div
                             onClick={(e) => {
                               e.stopPropagation();
@@ -470,6 +481,17 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                                   borderBottom: idx === list.length - 1 ? 'none' : '1px solid var(--term-border)'
                                 }}
                             >
+                              {(r as any).pinned && (
+                                <div style={{
+                                  position: 'absolute',
+                                  left: '4px',
+                                  top: '18px',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}>
+                                  <Pin size={12} style={{ color: 'var(--term-border)', fill: 'var(--term-border)' }} />
+                                </div>
+                              )}
                               <div
                                 onClick={(e) => {
                                   e.stopPropagation();
