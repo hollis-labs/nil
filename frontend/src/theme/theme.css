@@ -115,7 +115,9 @@ a.term-link:hover { opacity: 0.9; }
   color: var(--term-fg);
   cursor: pointer;
   transition: all 0.15s ease;
+  text-transform: uppercase;
 }
+
 .badge:hover {
   background: var(--term-bg);
   border-color: var(--term-accent);

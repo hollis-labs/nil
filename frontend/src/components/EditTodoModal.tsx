@@ -448,7 +448,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         maxHeight: '750px',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
       }}>
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
@@ -511,12 +511,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                 >⚡</span>
                 <label className="task-label" style={{ fontSize: '13px', opacity: 0.8, letterSpacing: '0.05em' }}>TASK</label>
               </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'center'
+              }}>
                 {/* Priority/Date chips row - moved here */}
                 <div style={{
                   display: 'flex',
                   gap: '0px',
-                  flexWrap: 'wrap'
                 }}>
                   <button
                     type="button"
@@ -679,7 +682,12 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             gap: '12px'
           }}>
             <div>
-              <label style={{ fontSize: '12px', marginBottom: '4px', display: 'block', opacity: 0.8 }}>Projects</label>
+              <label style={{
+                fontSize: '12px',
+                marginBottom: '4px',
+                display: 'block',
+                opacity: 0.8
+              }}>Projects</label>
               <ProjectsAutocomplete values={projects} onValuesChange={setProjects} placeholder="Add project..." />
             </div>
 

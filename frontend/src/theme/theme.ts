@@ -25,7 +25,7 @@ export type TermTheme = {
 export const themePresets: Record<string, TermTheme> = {
   default: {
     bg: '#0b0e14',
-    bgAlt: '#0f131a',
+    bgAlt: '#1f2937',
     panel: '#0f131a',
     fg: '#e6edf3',
     dim: '#8b949e',
@@ -61,9 +61,9 @@ export const themePresets: Record<string, TermTheme> = {
     tagColor1: '#151617',
     tagColor2: '#303234',
     tagColor3: '#46484b',
-    projectColor1: '#418bf2',
-    projectColor2: '#287aed',
-    projectColor3: '#0968ec',
+    projectColor1: '#eab308',
+    projectColor2: '#eab308',
+    projectColor3: '#cc9a02',
   },
   synthwave: {
     bg: '#2b213a',

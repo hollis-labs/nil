@@ -73,7 +73,7 @@ function Inner() {
       (session.projects?.length || 0) +
       (session.tags?.length || 0) +
       (session.priority ? 1 : 0);
-    
+
     // If session has useAsFilterTab enabled but no actual filters, clear it
     if (session.useAsFilterTab && count === 0) {
       setActiveSession({ ...session, useAsFilterTab: false });
@@ -81,7 +81,7 @@ function Inner() {
       setSessionAsFilter(false);
       return;
     }
-    
+
     setSessionFilterCount(count);
     setSessionAsFilter(session.useAsFilterTab || false);
   }, []);
@@ -96,15 +96,15 @@ function Inner() {
         (session.projects?.length || 0) +
         (session.tags?.length || 0) +
         (session.priority ? 1 : 0);
-      
+
       console.log('[App Mount] Session filter count:', count, 'useAsFilterTab:', session.useAsFilterTab);
-      
+
       // If session has useAsFilterTab enabled but no actual filters, disable it immediately
       if (session.useAsFilterTab && count === 0) {
         console.log('[App Mount] Disabling empty useAsFilterTab');
         setActiveSession({ ...session, useAsFilterTab: false });
       }
-      
+
       // If session exists but has empty arrays, clear it entirely
       if (count === 0 && !session.useAsFilterTab) {
         console.log('[App Mount] Clearing empty session');
@@ -204,13 +204,13 @@ function Inner() {
         sort_dir: "desc",
         statuses: statusesToSearch
       };
-      
+
       // Only include filter arrays if they have values
       if (merged.projects.length > 0) req.projects = merged.projects;
       if (merged.contexts.length > 0) req.contexts = merged.contexts;
       if (merged.tags.length > 0) req.tags = merged.tags;
       if (merged.priorities.length > 0) req.priorities = merged.priorities;
-      
+
       console.log('[Search] Request being sent:', req);
       const res = await Backend.Search(req);
       let allResults = Array.isArray(res) ? res : [];
@@ -399,7 +399,7 @@ function Inner() {
     };
     await Backend.UpdateTodo(cloned as any);
     await runSearch();
-    
+
     // Find the newly created todo and open it in edit modal
     const allTodos = await Backend.Search({
       query: '',
@@ -537,8 +537,8 @@ function Inner() {
             } as any}
           >
             <div className="planck-header-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span 
-                className="badge warn planck-lightning" 
+              <span
+                className="badge warn planck-lightning"
                 style={{
                   padding: '2px',
                   fontSize: '10px',
@@ -713,45 +713,58 @@ function Inner() {
             </button>
           )}
           {settings.tabs.length > 0 && (
-            <div style={{ display: 'flex', gap: '0px' }}>
-              {settings.tabs.map((tab, index) => (
-                <button
+              <div style={{display: 'flex', gap: '0px'}}>
+                {settings.tabs.map((tab, index) => (
+                  <button
+                  type="button"
                   key={tab.id}
-                  className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'success' : ''}`}
-                  onClick={() => {
-                    if (!sessionAsFilter) {
-                      setActiveTabId(tab.id);
-                    }
-                  }}
-                  style={{
-                    padding: '8px 12px',
-                    fontSize: '13px',
-                    border: 'none',
-                    borderRadius: index === 0 ? '4px 0 0 4px' : (index === settings.tabs.length - 1 ? '0 4px 4px 0' : '0'),
-                    borderLeft: index > 0 ? '1px solid var(--term-border)' : 'none',
-                    opacity: sessionAsFilter ? 0.4 : 1,
-                    cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
-                  }}
-                  disabled={sessionAsFilter}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+                   className={`badge ${!sessionAsFilter && activeTabId === tab.id ? 'warn' : 'fg'}`}
+                   onClick={() => {
+                     if (!sessionAsFilter) {
+                       setActiveTabId(tab.id);
+                     }
+                   }}
+                   style={{
+                     flex: '0 0 auto',
+                     borderTopWidth: 'medium',
+                     borderRightWidth: 'medium',
+                     borderBottomWidth: 'medium',
+                     borderTopStyle: 'none',
+                     borderRightStyle: 'none',
+                     borderBottomStyle: 'none',
+                     borderTopColor: 'currentcolor',
+                     borderRightColor: 'currentcolor',
+                     borderBottomColor: 'currentcolor',
+                     borderImage: 'none',
+                     fontSize: '11px; padding: 4px 8px',
+                     padding: '4px 8px',
+                     border: 'none',
+
+                     borderRadius: index === 0 ? '4px 0 0 4px' : (index === settings.tabs.length - 1 ? '0 4px 4px 0' : '0'),
+                     borderLeft: index > 0 ? '1px solid var(--term-bgAlt)' : 'none',
+                     opacity: sessionAsFilter ? 0.4 : 0.8,
+                     cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
+                   }}
+                   disabled={sessionAsFilter}
+              >
+                {tab.label}
+              </button>
+          ))}
+        </div>
           )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex' }}>
+          <div style={{marginLeft: 'auto', display: 'flex'}}>
             <button
-              className="badge info"
-              onClick={() => setViewMode(viewMode === 'scope' ? 'date' : 'scope')}
-              style={{ 
-                padding: '8px 12px', 
-                fontSize: '13px', 
-                borderRadius: '6px', 
-                border: 'none',
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '4px' 
+                className="badge info"
+                onClick={() => setViewMode(viewMode === 'scope' ? 'date' : 'scope')}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                gap: '4px'
               }}
               title={viewMode === 'scope' ? 'Switch to Date View' : 'Switch to Scope View'}
             >
