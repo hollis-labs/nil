@@ -14,6 +14,20 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
+const currentSchemaVersion = 1
+
+type migration struct {
+	version int
+	sql     string
+}
+
+var migrations = []migration{
+	{
+		version: 1,
+		sql:     "ALTER TABLE todos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+	},
+}
+
 type Store struct {
 	DB *sql.DB
 }
@@ -44,16 +58,67 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 		return nil, err
 	}
 
-	// Migration: Add pinned column if it doesn't exist
-	var columnExists bool
-	err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='pinned'").Scan(&columnExists)
-	if err == nil && !columnExists {
-		if _, err := db.ExecContext(ctx, "ALTER TABLE todos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0"); err != nil {
-			return nil, err
-		}
+	// Run migrations
+	if err := runMigrations(ctx, db); err != nil {
+		return nil, err
 	}
 
 	return &Store{DB: db}, nil
+}
+
+func runMigrations(ctx context.Context, db *sql.DB) error {
+	// Create schema_version table if it doesn't exist
+	_, err := db.ExecContext(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_version (
+			version INTEGER NOT NULL,
+			applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`)
+	if err != nil {
+		return err
+	}
+
+	// Get current version
+	var currentVersion int
+	err = db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&currentVersion)
+	if err != nil {
+		return err
+	}
+
+	// Run pending migrations
+	for _, m := range migrations {
+		if m.version <= currentVersion {
+			continue
+		}
+
+		// Check if column already exists (for migration 1 - pinned column)
+		if m.version == 1 {
+			var count int
+			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='pinned'").Scan(&count)
+			if err == nil && count > 0 {
+				// Column exists, just record the migration
+				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
+		// Run migration
+		_, err = db.ExecContext(ctx, m.sql)
+		if err != nil {
+			return err
+		}
+
+		// Record migration
+		_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // -- Helpers to upsert taxonomy and links
@@ -336,12 +401,16 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 		var t Todo
 		var pri *string
 		var section string
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &t.Source, &t.NotesMD, &section, &t.Pinned)
+		var source sql.NullString
+		var notesMD sql.NullString
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned)
 		if err != nil {
 			return []Todo{}, err
 		}
 		t.Priority = pri
 		t.Section = section
+		t.Source = source.String
+		t.NotesMD = notesMD.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
