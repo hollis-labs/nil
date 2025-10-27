@@ -102,11 +102,23 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
       handlePaste: (view, event) => {
         const text = event.clipboardData?.getData('text/plain');
         if (text && editor) {
-          // Check if it looks like markdown
           if (text.match(/^#{1,6}\s|^\*\*|^##|^\-\s|^\*\s|^\d+\.\s/m)) {
             event.preventDefault();
-            editor.commands.insertContent(text);
-            return true;
+            try {
+              let cleanedText = text
+                .split('\n')
+                .filter(line => {
+                  const trimmed = line.trim();
+                  return !(trimmed === '-' || trimmed === '*' || trimmed === '+' || /^\d+\.$/.test(trimmed));
+                })
+                .join('\n');
+              
+              editor.commands.insertContent(cleanedText);
+              return true;
+            } catch (err) {
+              console.warn('Failed to paste markdown, using default paste:', err);
+              return false;
+            }
           }
         }
         return false;
