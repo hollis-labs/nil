@@ -838,6 +838,9 @@ function Inner() {
             )}
             <button
                 className="badge info"
+                draggable
+                onDragStart={(e) => e.preventDefault()}
+                onContextMenu={(e) => e.preventDefault()}
                 onMouseDown={() => {
                   appModeLPFired.current = false;
                   appModeLPTimer.current = setTimeout(() => {
@@ -872,7 +875,8 @@ function Inner() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  userSelect: 'none'
                 }}
                 title={appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)' : 'Switch to Todos (long-press for tab settings)'}
             >
