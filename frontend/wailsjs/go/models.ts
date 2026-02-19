@@ -34,6 +34,7 @@ export namespace store {
 	    page_size: number;
 	    sort_by: string;
 	    sort_dir: string;
+	    type: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SearchRequest(source);
@@ -53,6 +54,7 @@ export namespace store {
 	        this.page_size = source["page_size"];
 	        this.sort_by = source["sort_by"];
 	        this.sort_dir = source["sort_dir"];
+	        this.type = source["type"];
 	    }
 	}
 	export class Todo {
@@ -70,6 +72,7 @@ export namespace store {
 	    notes_md: string;
 	    section: string;
 	    pinned: boolean;
+	    type: string;
 	    projects: string[];
 	    contexts: string[];
 	    tags: string[];
@@ -94,6 +97,7 @@ export namespace store {
 	        this.notes_md = source["notes_md"];
 	        this.section = source["section"];
 	        this.pinned = source["pinned"];
+	        this.type = source["type"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];

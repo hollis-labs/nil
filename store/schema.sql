@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS todos (
   source_line TEXT,
   notes_md TEXT DEFAULT '',
   section TEXT DEFAULT 'anytime',
-  pinned INTEGER NOT NULL DEFAULT 0
+  pinned INTEGER NOT NULL DEFAULT 0,
+  type TEXT NOT NULL DEFAULT 'todo'
 );
 
 CREATE TRIGGER IF NOT EXISTS todos_update_ts

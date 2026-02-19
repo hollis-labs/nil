@@ -3,11 +3,23 @@ import * as React from "react";
 type Props = {
   onQuickAdd: () => void;
   onEscape?: () => void;
+  onQuickAddNote?: () => void;
+  onToggleAppMode?: () => void;
 };
 
-export default function KeyboardScope({ onQuickAdd, onEscape }: Props) {
+export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode }: Props) {
   React.useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "n") {
+        e.preventDefault();
+        onQuickAddNote?.();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "m") {
+        e.preventDefault();
+        onToggleAppMode?.();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
         e.preventDefault();
         onQuickAdd();
@@ -19,7 +31,7 @@ export default function KeyboardScope({ onQuickAdd, onEscape }: Props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onQuickAdd, onEscape]);
+  }, [onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode]);
 
   return null;
 }

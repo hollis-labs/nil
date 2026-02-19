@@ -5,7 +5,11 @@
       "Bash(git commit:*)",
       "Bash(git log:*)",
       "Bash(npm run dev:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(go build:*)",
+      "Bash(wails generate:*)",
+      "Bash(npx tsc:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

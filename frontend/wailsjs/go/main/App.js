@@ -6,6 +6,10 @@ export function Archive(arg1, arg2) {
   return window['go']['main']['App']['Archive'](arg1, arg2);
 }
 
+export function CreateNoteFromLine(arg1) {
+  return window['go']['main']['App']['CreateNoteFromLine'](arg1);
+}
+
 export function CreateTodoFromLine(arg1) {
   return window['go']['main']['App']['CreateTodoFromLine'](arg1);
 }

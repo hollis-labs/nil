@@ -15,6 +15,7 @@ type Todo struct {
 	NotesMD   string  `json:"notes_md"`
 	Section   string  `json:"section"` // now, soon, anytime
 	Pinned    bool    `json:"pinned"`
+	Type      string  `json:"type"`
 
 	Projects []string `json:"projects"`
 	Contexts []string `json:"contexts"`
@@ -34,4 +35,5 @@ type SearchRequest struct {
 	PageSize   int      `json:"page_size"`
 	SortBy     string   `json:"sort_by"`
 	SortDir    string   `json:"sort_dir"`
+	Type       string   `json:"type"`
 }

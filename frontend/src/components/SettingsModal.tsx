@@ -19,11 +19,15 @@ type ScopeTab = {
   id: string;
   label: string;
   query: string;
+  appMode?: 'todos' | 'notes'; // defaults to 'todos'
 };
+
+type SettingsTab = 'general' | 'tabs' | 'theme' | 'data';
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  initialTab?: SettingsTab;
 };
 
 const defaultSettings: Settings = {
@@ -70,10 +74,10 @@ export function useSettings() {
   return context;
 }
 
-export default function SettingsModal({ open, onOpenChange }: Props) {
+export default function SettingsModal({ open, onOpenChange, initialTab }: Props) {
   const { settings, setSettings } = useSettings();
   const [local, setLocal] = React.useState(settings);
-  const [activeTab, setActiveTab] = React.useState<'general' | 'tabs' | 'theme' | 'data'>('general');
+  const [activeTab, setActiveTab] = React.useState<SettingsTab>('general');
   const { theme, setTheme } = useTermTheme();
   const [localTheme, setLocalTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
   const [customTheme, setCustomTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
@@ -86,7 +90,7 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   React.useEffect(() => {
     if (open) {
       setLocal(settings);
-      setActiveTab('general');
+      setActiveTab(initialTab || 'general');
       // Ensure theme has all properties by merging with default
       const fullTheme = { ...themePresets.default, ...theme };
       console.log('[Settings] Full theme properties:', Object.keys(fullTheme));
@@ -157,10 +161,9 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
   };
 
   const addTab = () => {
-    if (local.tabs.length >= 6) return;
     const newTab: ScopeTab = {
       id: Date.now().toString(),
-      label: 'New Tab',
+      label: '',
       query: ''
     };
     setLocal({ ...local, tabs: [...local.tabs, newTab] });
@@ -555,10 +558,9 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                 <button
                   className="badge success"
                   onClick={addTab}
-                  disabled={local.tabs.length >= 6}
-                  style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', opacity: local.tabs.length >= 6 ? 0.5 : 1 }}
+                  style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
                 >
-                  + Add Tab ({local.tabs.length}/6)
+                  + Add Tab
                 </button>
               </div>
 
@@ -619,6 +621,27 @@ export default function SettingsModal({ open, onOpenChange }: Props) {
                           onChange={(e) => updateTab(tab.id, { query: e.target.value })}
                           placeholder="e.g., @work +myproject pri:A"
                         />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <label style={{ fontSize: '11px', display: 'block', marginBottom: '4px' }} className="text-dim">
+                          Type
+                        </label>
+                        <button
+                          type="button"
+                          className={`badge ${(tab.appMode || 'todos') === 'notes' ? 'info' : 'success'}`}
+                          onClick={() => updateTab(tab.id, { appMode: (tab.appMode || 'todos') === 'todos' ? 'notes' : 'todos' })}
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: '11px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            whiteSpace: 'nowrap',
+                            cursor: 'pointer'
+                          }}
+                          title={`Currently: ${(tab.appMode || 'todos') === 'todos' ? 'Todos' : 'Notes'}. Click to toggle.`}
+                        >
+                          {(tab.appMode || 'todos') === 'todos' ? 'Todos' : 'Notes'}
+                        </button>
                       </div>
                         {local.tabs.length > 1 && (
                         <div style={{ display: 'flex', alignItems: 'flex-end' }}>

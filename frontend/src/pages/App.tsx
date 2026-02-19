@@ -16,7 +16,7 @@ import MetaModal from "@/components/MetaModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Search, Calendar, List, Target, Power, HelpCircle } from "lucide-react";
+import { Settings, Plus, Search, Calendar, List, Target, Power, HelpCircle, FileText, CheckSquare } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
@@ -24,6 +24,7 @@ import * as Backend from "../../wailsjs/go/main/App";
 import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
+type AppMode = 'todos' | 'notes';
 
 function Inner() {
   const [allRows, setAllRows] = React.useState<TodoRow[]>([]);
@@ -32,6 +33,7 @@ function Inner() {
   const [notesTodo, setNotesTodo] = React.useState<any>(null);
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = React.useState<'general' | 'tabs' | 'theme' | 'data' | undefined>(undefined);
   const [sessionContextOpen, setSessionContextOpen] = React.useState(false);
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
@@ -47,10 +49,16 @@ function Inner() {
   const [radialMenuTodo, setRadialMenuTodo] = React.useState<{todo: TodoRow; position: {x: number; y: number}} | null>(null);
   const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
   const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
+  const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
+  const appModeLPFired = React.useRef(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('planck.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
+  });
+  const [appMode, setAppMode] = React.useState<AppMode>(() => {
+    const saved = localStorage.getItem('planck.appMode');
+    return (saved as AppMode) || 'todos';
   });
   const [inputMode, setInputMode] = React.useState<'search' | 'add'>(() => {
     return settings.defaultInputMode || 'add';
@@ -59,6 +67,18 @@ function Inner() {
   React.useEffect(() => {
     localStorage.setItem('planck.viewMode', viewMode);
   }, [viewMode]);
+
+  React.useEffect(() => {
+    localStorage.setItem('planck.appMode', appMode);
+    // When switching modes, ensure activeTabId points to a tab in the new mode
+    const currentTab = settings.tabs.find(t => t.id === activeTabId);
+    if (!currentTab || (currentTab.appMode || 'todos') !== appMode) {
+      const firstMatch = settings.tabs.find(t => (t.appMode || 'todos') === appMode);
+      if (firstMatch) {
+        setActiveTabId(firstMatch.id);
+      }
+    }
+  }, [appMode, settings.tabs]);
 
   // Update session filter count when component mounts or session changes
   const updateSessionFilterCount = React.useCallback(() => {
@@ -192,9 +212,10 @@ function Inner() {
 
       // Use explicit status filters if provided, otherwise let frontend handle filtering
       // Backend combines multiple statuses with AND (not OR), so we can only use single statuses
-      const statusesToSearch = merged.statuses.length > 0
-        ? merged.statuses
-        : ['open']; // Always fetch at least open items
+      const isNotesMode = appMode === 'notes';
+      const statusesToSearch = isNotesMode
+        ? [] // Notes don't have completion state, fetch all
+        : (merged.statuses.length > 0 ? merged.statuses : ['open']);
 
       const req: any = {
         query: merged.keywords.join(" "),
@@ -202,7 +223,8 @@ function Inner() {
         page_size: 500,
         sort_by: "created_at",
         sort_dir: "desc",
-        statuses: statusesToSearch
+        statuses: statusesToSearch,
+        type: isNotesMode ? 'note' : 'todo'
       };
 
       // Only include filter arrays if they have values
@@ -215,8 +237,8 @@ function Inner() {
       const res = await Backend.Search(req);
       let allResults = Array.isArray(res) ? res : [];
 
-      // If showCompleted is enabled and no explicit status filter, also fetch completed items
-      if (settings.showCompleted && merged.statuses.length === 0) {
+      // If showCompleted is enabled and no explicit status filter, also fetch completed items (not for notes)
+      if (!isNotesMode && settings.showCompleted && merged.statuses.length === 0) {
         const completedReq = { ...req, statuses: ['completed'] };
         const completedRes = await Backend.Search(completedReq);
         const completedResults = Array.isArray(completedRes) ? completedRes : [];
@@ -268,7 +290,7 @@ function Inner() {
       console.error("Search failed:", err);
       setAllRows([]);
     }
-  }, [query, activeTabId, settings.tabs, settings.showCompleted]);
+  }, [query, activeTabId, settings.tabs, settings.showCompleted, appMode]);
 
   React.useEffect(() => {
     console.log('[useEffect] Running search (inputMode does not affect search)');
@@ -371,6 +393,20 @@ function Inner() {
     runSearch();
   }
 
+  async function handleQuickAddNote(line: string, extras: any) {
+    const created = await Backend.CreateNoteFromLine(line);
+    const merged = {
+      ...created,
+      projects: extras.projects?.length ? extras.projects : created.projects,
+      contexts: extras.contexts?.length ? extras.contexts : created.contexts,
+      tags: extras.tags?.length ? extras.tags : created.tags,
+      notes_md: extras.notes_md || created.notes_md,
+    };
+    await Backend.UpdateTodo(merged as any);
+    setQuickOpen(false);
+    runSearch();
+  }
+
   function handleEditTodo(row: TodoRow) {
     setEditTodo(row);
     setQuickOpen(true);
@@ -385,7 +421,10 @@ function Inner() {
   }
 
   async function handleCloneTodo(todo: TodoRow) {
-    const created = await Backend.CreateTodoFromLine(todo.title);
+    const isNote = todo.type === 'note';
+    const created = isNote
+      ? await Backend.CreateNoteFromLine(todo.title)
+      : await Backend.CreateTodoFromLine(todo.title);
     const cloned = {
       ...created,
       priority: todo.priority,
@@ -416,6 +455,15 @@ function Inner() {
     }
   }
 
+  async function handleConvertType(todo: TodoRow) {
+    const newType = todo.type === 'note' ? 'todo' : 'note';
+    const label = newType === 'note' ? 'Converted to Note!' : 'Converted to Todo!';
+    animateAction(todo.id, label, async () => {
+      await Backend.UpdateTodo({ ...todo, type: newType } as any);
+      runSearch();
+    }, false);
+  }
+
   async function handleMetaSave(id: number, updates: Partial<TodoRow>) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
@@ -427,7 +475,8 @@ function Inner() {
   async function handlePin(id: number, pinned: boolean) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
-    const message = pinned ? 'Todo Pinned!' : 'Todo Unpinned!';
+    const itemName = appMode === 'notes' ? 'Note' : 'Todo';
+    const message = pinned ? `${itemName} Pinned!` : `${itemName} Unpinned!`;
     animateAction(id, message, async () => {
       await Backend.UpdateTodo({ ...todo, pinned } as any);
       runSearch();
@@ -435,12 +484,14 @@ function Inner() {
   }
 
   async function handleInputSubmit() {
-    console.log('[InputSubmit] Mode:', inputMode, 'Query:', query);
+    console.log('[InputSubmit] Mode:', inputMode, 'Query:', query, 'AppMode:', appMode);
     if (inputMode === 'add' && query.trim()) {
-      console.log('[InputSubmit] Quick add mode - creating todo');
+      console.log('[InputSubmit] Quick add mode - creating', appMode === 'notes' ? 'note' : 'todo');
       // Quick add mode
       const session = getActiveSession();
-      const created = await Backend.CreateTodoFromLine(query);
+      const created = appMode === 'notes'
+        ? await Backend.CreateNoteFromLine(query)
+        : await Backend.CreateTodoFromLine(query);
       const merged = {
         ...created,
         priority: session?.priority || created.priority,
@@ -450,18 +501,20 @@ function Inner() {
       };
       await Backend.UpdateTodo(merged as any);
       setQuery('');
-      // Force refresh the entire list by fetching all todos
+      // Force refresh the entire list
       try {
+        const isNotesMode = appMode === 'notes';
         const req: any = {
           query: '',
           page: 0,
           page_size: 500,
           sort_by: 'created_at',
           sort_dir: 'desc',
-          statuses: ['open']
+          statuses: isNotesMode ? [] : ['open'],
+          type: isNotesMode ? 'note' : 'todo'
         };
         let allResults = await Backend.Search(req);
-        if (settings.showCompleted) {
+        if (!isNotesMode && settings.showCompleted) {
           const completedReq = { ...req, statuses: ['completed'] };
           const completedRes = await Backend.Search(completedReq);
           allResults = [...allResults, ...completedRes];
@@ -478,7 +531,8 @@ function Inner() {
   }
 
   async function handleDeleteTodo(id: number) {
-    animateAction(id, 'Todo Deleted!', async () => {
+    const deleteMsg = appMode === 'notes' ? 'Note Deleted!' : 'Todo Deleted!';
+    animateAction(id, deleteMsg, async () => {
       await Backend.DeleteTodo(id);
       setQuickOpen(false);
       setEditTodo(null);
@@ -510,7 +564,15 @@ function Inner() {
       boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 2px var(--term-border)',
       borderRadius: '12px',
     }}>
-      <KeyboardScope onQuickAdd={()=>setQuickOpen(true)} onEscape={handleClearAll} />
+      <KeyboardScope
+        onQuickAdd={()=>setQuickOpen(true)}
+        onEscape={handleClearAll}
+        onQuickAddNote={() => {
+          setAppMode('notes');
+          setQuickOpen(true);
+        }}
+        onToggleAppMode={() => setAppMode(prev => prev === 'todos' ? 'notes' : 'todos')}
+      />
 
       <div style={{
         width: '100%',
@@ -712,9 +774,11 @@ function Inner() {
               Session Filter
             </button>
           )}
-          {settings.tabs.length > 0 && (
+          {(() => {
+            const filteredTabs = settings.tabs.filter(t => (t.appMode || 'todos') === appMode);
+            return filteredTabs.length > 0 && (
               <div style={{display: 'flex', gap: '0px'}}>
-                {settings.tabs.map((tab, index) => (
+                {filteredTabs.map((tab, index) => (
                   <button
                   type="button"
                   key={tab.id}
@@ -726,21 +790,10 @@ function Inner() {
                    }}
                    style={{
                      flex: '0 0 auto',
-                     borderTopWidth: 'medium',
-                     borderRightWidth: 'medium',
-                     borderBottomWidth: 'medium',
-                     borderTopStyle: 'none',
-                     borderRightStyle: 'none',
-                     borderBottomStyle: 'none',
-                     borderTopColor: 'currentcolor',
-                     borderRightColor: 'currentcolor',
-                     borderBottomColor: 'currentcolor',
-                     borderImage: 'none',
-                     fontSize: '11px; padding: 4px 8px',
+                     fontSize: '11px',
                      padding: '4px 8px',
                      border: 'none',
-
-                     borderRadius: index === 0 ? '4px 0 0 4px' : (index === settings.tabs.length - 1 ? '0 4px 4px 0' : '0'),
+                     borderRadius: index === 0 ? '4px 0 0 4px' : (index === filteredTabs.length - 1 ? '0 4px 4px 0' : '0'),
                      borderLeft: index > 0 ? '1px solid var(--term-bgAlt)' : 'none',
                      opacity: sessionAsFilter ? 0.4 : 0.8,
                      cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
@@ -751,9 +804,11 @@ function Inner() {
               </button>
           ))}
         </div>
-          )}
+            );
+          })()}
 
-          <div style={{marginLeft: 'auto', display: 'flex'}}>
+          <div style={{marginLeft: 'auto', display: 'flex', gap: '4px'}}>
+            {appMode === 'todos' && (
             <button
                 className="badge info"
                 onClick={() => setViewMode(viewMode === 'scope' ? 'date' : 'scope')}
@@ -764,9 +819,9 @@ function Inner() {
                   border: 'none',
                   display: 'flex',
                   alignItems: 'center',
-                gap: '4px'
-              }}
-              title={viewMode === 'scope' ? 'Switch to Date View' : 'Switch to Scope View'}
+                  gap: '4px'
+                }}
+                title={viewMode === 'scope' ? 'Switch to Date View' : 'Switch to Scope View'}
             >
               {viewMode === 'scope' ? (
                 <>
@@ -777,6 +832,59 @@ function Inner() {
                 <>
                   <Calendar size={12} />
                   Date
+                </>
+              )}
+            </button>
+            )}
+            <button
+                className="badge info"
+                onMouseDown={() => {
+                  appModeLPFired.current = false;
+                  appModeLPTimer.current = setTimeout(() => {
+                    appModeLPFired.current = true;
+                    setSettingsInitialTab('tabs');
+                    setSettingsOpen(true);
+                  }, 1000);
+                }}
+                onMouseUp={() => {
+                  if (appModeLPTimer.current) {
+                    clearTimeout(appModeLPTimer.current);
+                    appModeLPTimer.current = null;
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (appModeLPTimer.current) {
+                    clearTimeout(appModeLPTimer.current);
+                    appModeLPTimer.current = null;
+                  }
+                }}
+                onClick={() => {
+                  if (!appModeLPFired.current) {
+                    setAppMode(appMode === 'todos' ? 'notes' : 'todos');
+                  }
+                  appModeLPFired.current = false;
+                }}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  cursor: 'pointer'
+                }}
+                title={appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)' : 'Switch to Todos (long-press for tab settings)'}
+            >
+              {appMode === 'todos' ? (
+                <>
+                  <CheckSquare size={12} />
+                  Todos
+                </>
+              ) : (
+                <>
+                  <FileText size={12} />
+                  Notes
                 </>
               )}
             </button>
@@ -793,6 +901,7 @@ function Inner() {
           showCompleted={settings.showCompleted}
           onEditTodo={handleEditTodo}
           viewMode={viewMode}
+          appMode={appMode}
           onOpenRadialMenu={(todo, position) => setRadialMenuTodo({todo, position})}
           closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null || radialMenuTodo !== null || metaModalTodo !== null}
           hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
@@ -994,7 +1103,7 @@ function Inner() {
         </div>
       )}
       <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
-      <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsModal open={settingsOpen} onOpenChange={(v) => { setSettingsOpen(v); if (!v) setSettingsInitialTab(undefined); }} initialTab={settingsInitialTab} />
 
       <ConfirmDialog
         open={confirmRemoveDemo}
@@ -1043,13 +1152,19 @@ function Inner() {
       <EditTodoModal
         open={quickOpen}
         onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditTodo(null); }}
-        onSubmit={handleQuickAdd}
+        onSubmit={appMode === 'notes' ? handleQuickAddNote : handleQuickAdd}
         onUpdate={handleUpdateTodo}
         onDelete={handleDeleteTodo}
         editTodo={editTodo}
         defaultContexts={defaultNewTodoFilters.contexts}
         defaultProjects={defaultNewTodoFilters.projects}
         defaultTags={defaultNewTodoFilters.tags}
+        isNoteMode={appMode === 'notes'}
+        onConvertType={(todo) => {
+          handleConvertType(todo);
+          setQuickOpen(false);
+          setEditTodo(null);
+        }}
       />
       {radialMenuTodo && (
         <RadialMenuWrapper
@@ -1072,6 +1187,10 @@ function Inner() {
             setMetaModalTodo(todo);
           }}
           onPin={handlePin}
+          onConvertType={(todo) => {
+            setRadialMenuTodo(null);
+            handleConvertType(todo);
+          }}
           onClose={() => setRadialMenuTodo(null)}
         />
       )}

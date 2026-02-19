@@ -111,6 +111,20 @@ func (a *App) CreateTodoFromLine(line string) (*store.Todo, error) {
 		DueAt:     p.Due,
 		Threshold: p.Thresh,
 		Source:    line,
+		Type:      "todo",
+	}
+	return a.Store.CreateTodo(a.ctx, t)
+}
+
+func (a *App) CreateNoteFromLine(line string) (*store.Todo, error) {
+	p := parse.ParseLine(line)
+	t := &store.Todo{
+		Title:    p.Title,
+		Projects: p.Projects,
+		Contexts: p.Contexts,
+		Tags:     p.Tags,
+		Source:   line,
+		Type:     "note",
 	}
 	return a.Store.CreateTodo(a.ctx, t)
 }
@@ -124,6 +138,7 @@ func (a *App) HasDemoData() (bool, error) {
 	req := store.SearchRequest{
 		Tags:     []string{demoDataTag},
 		PageSize: 1,
+		Type:     "todo",
 	}
 	results, err := a.Store.Search(a.ctx, req)
 	if err != nil {
@@ -278,6 +293,7 @@ func (a *App) RemoveDemoData() error {
 	req := store.SearchRequest{
 		Tags:     []string{demoDataTag},
 		PageSize: 500,
+		Type:     "todo",
 	}
 	results, err := a.Store.Search(a.ctx, req)
 	if err != nil {
@@ -355,6 +371,7 @@ func (a *App) ExportTodoTxt() (string, error) {
 		PageSize: 10000,
 		SortBy:   "created_at",
 		SortDir:  "asc",
+		Type:     "todo",
 	}
 	todos, err := a.Store.Search(a.ctx, req)
 	if err != nil {

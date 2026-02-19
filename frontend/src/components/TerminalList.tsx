@@ -12,9 +12,11 @@ export type TodoRow = {
   notes_md?: string;
   section: string; // now, soon, anytime
   pinned?: boolean;
+  type?: string; // 'todo' | 'note'
 };
 
 type ViewMode = 'scope' | 'date';
+type AppMode = 'todos' | 'notes';
 
 function fmtDateLabel(iso?: string) {
   const d = iso ? new Date(iso) : new Date();
@@ -67,6 +69,7 @@ type Props = {
   showCompleted: boolean;
   onEditTodo: (row: TodoRow) => void;
   viewMode?: ViewMode;
+  appMode?: AppMode;
   onOpenRadialMenu?: (todo: TodoRow, position: {x: number; y: number}) => void;
   closeRadialMenus?: boolean;
   settingsButton?: React.ReactNode;
@@ -74,7 +77,7 @@ type Props = {
   animatingRow?: { id: number; action: string; phase?: 'collapsing' | 'expanding' } | null;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -144,6 +147,22 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
     return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
   }, [rows]);
+
+  const noteSections = React.useMemo(() => {
+    if (appMode !== 'notes') return { pinned: [], notes: [] };
+    const pinned: TodoRow[] = [];
+    const notes: TodoRow[] = [];
+    for (const r of rows) {
+      if (r.pinned) pinned.push(r);
+      else notes.push(r);
+    }
+    // Sort newest first
+    const sortFn = (a: TodoRow, b: TodoRow) =>
+      (b.created_at || '').localeCompare(a.created_at || '');
+    pinned.sort(sortFn);
+    notes.sort(sortFn);
+    return { pinned, notes };
+  }, [rows, appMode]);
 
   const handleDragStart = (e: React.DragEvent, id: number) => {
     setDraggedId(id);
@@ -398,12 +417,12 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                   fontFamily: 'monospace',
                   fontWeight: 500
                 }}>N</kbd>
-                <span>to create a new todo</span>
+                <span>to create a new {appMode === 'notes' ? 'note' : 'todo'}</span>
               </div>
             </div>
           ) : (
             <div style={{ textAlign: 'center', color: 'var(--term-dim)', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-              <span>No todos yet. Press</span>
+              <span>No {appMode === 'notes' ? 'notes' : 'todos'} yet. Press</span>
               <kbd style={{
                 padding: '4px 8px',
                 background: 'var(--term-bg)',
@@ -434,6 +453,169 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   const done = rows.filter(r=>r.completed).length;
   const pending = total - done;
   const pct = Math.round((done/Math.max(total,1))*100);
+
+  // Helper to strip HTML tags for note preview
+  function stripHtml(html: string): string {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  }
+
+  // Render a single note row (no checkbox, no priority, shows preview)
+  const renderNoteRow = (r: TodoRow, idx: number, listLen: number) => (
+    <div
+      key={r.id}
+      className={`list-row ${animatingRow?.id === r.id && animatingRow.phase === 'collapsing' ? 'row-animating' : ''} ${animatingRow?.id === r.id && animatingRow.phase === 'expanding' ? 'row-expanding' : ''}`}
+      onMouseEnter={() => setHoveredRow(r.id)}
+      onMouseLeave={() => {
+        setHoveredRow(null);
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+      }}
+      onMouseDown={(e) => {
+        deleteTriggered.current = false;
+        longPressTimer.current = setTimeout(() => {
+          deleteTriggered.current = true;
+          if (onOpenRadialMenu) {
+            onOpenRadialMenu(r, { x: e.clientX, y: e.clientY });
+          }
+        }, 1000);
+      }}
+      onMouseUp={() => {
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+      }}
+      onClick={(e) => {
+        if (deleteConfirm) { e.preventDefault(); e.stopPropagation(); return; }
+        e.preventDefault();
+        setHoveredRow(null);
+        onEditTodo(r);
+      }}
+      style={{
+        cursor: 'pointer',
+        padding: '12px 20px',
+        marginRight: '25px',
+        display: 'flex',
+        gap: '12px',
+        position: 'relative',
+        borderTop: idx === 0 ? '1px solid var(--term-border)' : 'none',
+        borderBottom: idx === listLen - 1 ? 'none' : '1px solid var(--term-border)'
+      }}
+    >
+      {r.pinned && (
+        <div style={{
+          position: 'absolute',
+          left: '4px',
+          top: '18px',
+          display: 'flex',
+          alignItems: 'center'
+        }}>
+          <Pin size={12} style={{ color: 'var(--term-border)', fill: 'var(--term-border)' }} />
+        </div>
+      )}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div className="title" style={{ fontSize: '13px' }}>
+          {r.title}{" "}
+          <span style={{ color: 'var(--term-info)', opacity: 0.8, fontSize: '0.95em' }}>
+            {r.contexts.map((c: string) => `@${c}`).join(" ")}
+          </span>
+        </div>
+        {r.notes_md && (
+          <div style={{
+            fontSize: '11px',
+            color: 'var(--term-dim)',
+            opacity: 0.7,
+            marginTop: '2px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '500px'
+          }}>
+            {stripHtml(r.notes_md).slice(0, 80)}
+          </div>
+        )}
+        <div className="meta" style={{ fontSize: '11px' }}>
+          {r.projects.map((p: string, i: number) => <span key={"p"+p} style={{ color: getProjectColor(i, theme) }}>+{p}</span>)}
+          {r.tags.map((t: string, i: number) => <span key={"t"+t} style={{ color: getTagColor(i, theme) }}>#{t}</span>)}
+        </div>
+      </div>
+      {animatingRow?.id === r.id && (
+        <div className="row-overlay" />
+      )}
+    </div>
+  );
+
+  // Notes view mode
+  if (appMode === 'notes') {
+    return (
+      <>
+        <style>{`
+          @keyframes rowCollapse {
+            0% { max-height: 100px; opacity: 1; transform: scaleY(1); }
+            50% { max-height: 100px; opacity: 0.5; }
+            100% { max-height: 0; opacity: 0; transform: scaleY(0); margin: 0; padding: 0; }
+          }
+          @keyframes rowExpand {
+            0% { max-height: 0; opacity: 0; transform: scaleY(0); margin: 0; padding: 0; }
+            50% { max-height: 100px; opacity: 0.5; }
+            100% { max-height: 100px; opacity: 1; transform: scaleY(1); }
+          }
+          .row-animating { animation: rowCollapse 0.24s ease-out forwards; transform-origin: center; overflow: hidden; }
+          .row-expanding { animation: rowExpand 0.24s ease-out forwards; transform-origin: center; overflow: hidden; }
+          .row-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.15); backdrop-filter: blur(1px); z-index: 10; pointer-events: none; }
+        `}</style>
+        <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <CustomScrollbar style={{ height: '450px' }}>
+            <div style={{ paddingBottom: '20px' }}>
+              {noteSections.pinned.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <div className="date-header" style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', marginRight: '25px'
+                  }}>
+                    <span>Pinned</span>
+                    <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.pinned.length})</span>
+                  </div>
+                  {noteSections.pinned.map((r, idx) => renderNoteRow(r, idx, noteSections.pinned.length))}
+                </div>
+              )}
+              <div style={{ marginBottom: '20px' }}>
+                <div className="date-header" style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', marginRight: '25px'
+                }}>
+                  <span>Notes</span>
+                  <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.notes.length})</span>
+                </div>
+                {noteSections.notes.length === 0 ? (
+                  <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
+                    No notes yet
+                  </div>
+                ) : (
+                  noteSections.notes.map((r, idx) => renderNoteRow(r, idx, noteSections.notes.length))
+                )}
+              </div>
+            </div>
+          </CustomScrollbar>
+
+          <div className="summary" style={{
+            background: 'var(--term-panel)',
+            padding: '16px 20px 0 0',
+            boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.1)',
+            marginTop: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span>{rows.length} note{rows.length !== 1 ? 's' : ''}</span>
+            {settingsButton && <div>{settingsButton}</div>}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (viewMode === 'date') {
     return (

@@ -14,7 +14,7 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
 type migration struct {
 	version int
@@ -25,6 +25,10 @@ var migrations = []migration{
 	{
 		version: 1,
 		sql:     "ALTER TABLE todos ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0",
+	},
+	{
+		version: 2,
+		sql:     "ALTER TABLE todos ADD COLUMN type TEXT NOT NULL DEFAULT 'todo'",
 	},
 }
 
@@ -91,12 +95,22 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 
-		// Check if column already exists (for migration 1 - pinned column)
+		// Check if column already exists (idempotency for ALTER TABLE migrations)
 		if m.version == 1 {
 			var count int
 			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='pinned'").Scan(&count)
 			if err == nil && count > 0 {
-				// Column exists, just record the migration
+				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if m.version == 2 {
+			var count int
+			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='type'").Scan(&count)
+			if err == nil && count > 0 {
 				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
 				if err != nil {
 					return err
@@ -216,10 +230,13 @@ func (s *Store) CreateTodo(ctx context.Context, t *Todo) (*Todo, error) {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
+	if t.Type == "" {
+		t.Type = "todo"
+	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned)
-VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type,
 	)
 	if err != nil {
 		return nil, err
@@ -246,9 +263,12 @@ func (s *Store) UpdateTodo(ctx context.Context, t *Todo) error {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
+	if t.Type == "" {
+		t.Type = "todo"
+	}
 	_, err := s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=? WHERE id=?`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.ID,
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=?, type=? WHERE id=?`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.Type, t.ID,
 	)
 	if err != nil {
 		return err
@@ -290,6 +310,14 @@ type qparts struct {
 func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	q := qparts{}
 	q.where = append(q.where, "(1=1)")
+
+	// type filter (default to 'todo' for backward compatibility)
+	typeFilter := req.Type
+	if typeFilter == "" {
+		typeFilter = "todo"
+	}
+	q.where = append(q.where, "t.type = ?")
+	q.args = append(q.args, typeFilter)
 
 	// statuses
 	for _, st := range req.Statuses {
@@ -383,7 +411,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -403,7 +431,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type)
 		if err != nil {
 			return []Todo{}, err
 		}

@@ -1,17 +1,19 @@
 import * as React from 'react';
 import { TodoRow } from './TerminalList';
-import { 
-  ArrowUp, 
-  ArrowRight, 
-  ArrowDown, 
-  Trash2, 
-  Archive, 
-  FileEdit, 
-  CheckCircle2, 
+import {
+  ArrowUp,
+  ArrowRight,
+  ArrowDown,
+  Trash2,
+  Archive,
+  FileEdit,
+  CheckCircle2,
   MoreHorizontal,
   Copy,
   Tag,
-  Pin
+  Pin,
+  FileText,
+  CheckSquare
 } from 'lucide-react';
 
 interface RadialMenuWrapperProps {
@@ -25,6 +27,7 @@ interface RadialMenuWrapperProps {
   onClone: (todo: TodoRow) => void;
   onMeta: (todo: TodoRow) => void;
   onPin: (id: number, pinned: boolean) => void;
+  onConvertType: (todo: TodoRow) => void;
   onClose: () => void;
 }
 
@@ -39,6 +42,7 @@ export default function RadialMenuWrapper({
   onClone,
   onMeta,
   onPin,
+  onConvertType,
   onClose
 }: RadialMenuWrapperProps) {
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -114,27 +118,42 @@ export default function RadialMenuWrapper({
         onPin(todo.id, !(todo as any).pinned);
         onClose();
         break;
+      case 'convertType':
+        onConvertType(todo);
+        onClose();
+        break;
       case 'back':
         setActiveLayer('main');
         break;
     }
   };
 
-  const mainMenuItems = [
-    { id: 'now', label: 'NOW', icon: ArrowUp, disabled: !canMoveToNow, angle: 0 },
-    { id: 'soon', label: 'SOON', icon: ArrowRight, disabled: !canMoveToSoon, angle: 45 },
-    { id: 'anytime', label: 'ANY', icon: ArrowDown, disabled: !canMoveToAnytime, angle: 90 },
-    { id: 'delete', label: 'DEL', icon: Trash2, disabled: false, angle: 135 },
-    { id: 'edit', label: 'EDIT', icon: FileEdit, disabled: false, angle: 180 },
-    { id: 'complete', label: 'DONE', icon: CheckCircle2, disabled: false, angle: 225 },
-    { id: 'more', label: 'MORE', icon: MoreHorizontal, disabled: false, angle: 270 },
-    { id: 'pin', label: 'PIN', icon: Pin, disabled: false, angle: 315 },
-  ];
+  const isNote = todo.type === 'note';
+
+  const mainMenuItems = isNote
+    ? [
+        { id: 'edit', label: 'EDIT', icon: FileEdit, disabled: false, angle: 0 },
+        { id: 'convertType', label: '→TODO', icon: CheckSquare, disabled: false, angle: 60 },
+        { id: 'delete', label: 'DEL', icon: Trash2, disabled: false, angle: 120 },
+        { id: 'pin', label: 'PIN', icon: Pin, disabled: false, angle: 180 },
+        { id: 'clone', label: 'COPY', icon: Copy, disabled: false, angle: 270 },
+      ]
+    : [
+        { id: 'now', label: 'NOW', icon: ArrowUp, disabled: !canMoveToNow, angle: 0 },
+        { id: 'soon', label: 'SOON', icon: ArrowRight, disabled: !canMoveToSoon, angle: 45 },
+        { id: 'anytime', label: 'ANY', icon: ArrowDown, disabled: !canMoveToAnytime, angle: 90 },
+        { id: 'delete', label: 'DEL', icon: Trash2, disabled: false, angle: 135 },
+        { id: 'edit', label: 'EDIT', icon: FileEdit, disabled: false, angle: 180 },
+        { id: 'complete', label: 'DONE', icon: CheckCircle2, disabled: false, angle: 225 },
+        { id: 'more', label: 'MORE', icon: MoreHorizontal, disabled: false, angle: 270 },
+        { id: 'pin', label: 'PIN', icon: Pin, disabled: false, angle: 315 },
+      ];
 
   const moreMenuItems = [
-    { id: 'archive', label: 'ARCH', icon: Archive, disabled: false, angle: 135 },
-    { id: 'clone', label: 'COPY', icon: Copy, disabled: false, angle: 180 },
-    { id: 'meta', label: 'META', icon: Tag, disabled: false, angle: 225 },
+    { id: 'archive', label: 'ARCH', icon: Archive, disabled: false, angle: 90 },
+    { id: 'clone', label: 'COPY', icon: Copy, disabled: false, angle: 150 },
+    { id: 'meta', label: 'META', icon: Tag, disabled: false, angle: 210 },
+    { id: 'convertType', label: '→NOTE', icon: FileText, disabled: false, angle: 270 },
   ];
 
   const menuItems = activeLayer === 'main' ? mainMenuItems : moreMenuItems;

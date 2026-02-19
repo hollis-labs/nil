@@ -5,6 +5,8 @@ import {main} from '../models';
 
 export function Archive(arg1:number,arg2:boolean):Promise<void>;
 
+export function CreateNoteFromLine(arg1:string):Promise<store.Todo>;
+
 export function CreateTodoFromLine(arg1:string):Promise<store.Todo>;
 
 export function DeleteTodo(arg1:number):Promise<void>;

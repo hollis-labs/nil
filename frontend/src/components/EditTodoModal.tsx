@@ -13,7 +13,7 @@ import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import { TaskTemplate } from "@/lib/templates";
 import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
-import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3 } from "lucide-react";
+import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3, FileText, CheckSquare } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 
 type Props = {
@@ -26,9 +26,11 @@ type Props = {
   defaultContexts?: string[];
   defaultProjects?: string[];
   defaultTags?: string[];
+  isNoteMode?: boolean;
+  onConvertType?: (todo: TodoRow) => void;
 };
 
-export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [] }: Props) {
+export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [], isNoteMode = false, onConvertType }: Props) {
   const isEditMode = !!editTodo;
   const { settings } = useSettings();
 
@@ -132,6 +134,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     // Only run this effect when modal is first opened (transition from closed to open)
     if (open && !prevOpenRef.current) {
       setShowDeleteConfirm(false);
+      setDescriptionExpanded(false);
       if (isEditMode && editTodo) {
         setLine(editTodo.title);
         setPriority(editTodo.priority || "");
@@ -465,7 +468,29 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 600 }}>{isEditMode ? 'Edit Todo' : 'Add Todo'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ fontWeight: 600 }}>{isEditMode ? (isNoteMode ? 'Edit Note' : 'Edit Todo') : (isNoteMode ? 'Add Note' : 'Add Todo')}</div>
+              {isEditMode && editTodo && onConvertType && (
+                <button
+                  type="button"
+                  className="badge"
+                  onClick={() => onConvertType(editTodo)}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '11px',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    opacity: 0.8
+                  }}
+                  title={isNoteMode ? 'Convert to Todo' : 'Convert to Note'}
+                >
+                  {isNoteMode ? <CheckSquare size={11} /> : <FileText size={11} />}
+                  {isNoteMode ? '→ Todo' : '→ Note'}
+                </button>
+              )}
+            </div>
             <button
               className="badge info"
               onClick={() => onOpenChange(false)}
@@ -521,14 +546,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     lineHeight: '1'
                   }}
                 >⚡</span>
-                <label className="task-label" style={{ fontSize: '13px', opacity: 0.8, letterSpacing: '0.05em' }}>TASK</label>
+                <label className="task-label" style={{ fontSize: '13px', opacity: 0.8, letterSpacing: '0.05em' }}>{isNoteMode ? 'NOTE' : 'TASK'}</label>
               </div>
               <div style={{
                 display: 'flex',
                 gap: '8px',
                 alignItems: 'center'
               }}>
-                {/* Priority/Date chips row - moved here */}
+                {/* Priority/Date chips row - hidden in note mode */}
+                {!isNoteMode && (
                 <div style={{
                   display: 'flex',
                   gap: '0px',
@@ -651,6 +677,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                     {due ? `Due: ${due}` : 'DUE'}
                   </button>
                 </div>
+                )}
 
                 <TemplatePickerCombobox
                   onSelect={handleTemplateSelect}
