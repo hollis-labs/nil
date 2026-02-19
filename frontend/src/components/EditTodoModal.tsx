@@ -96,7 +96,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     },
     editorProps: {
       attributes: {
-        class: "tiptap-editor",
+        class: "tiptap-editor prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
         style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
       },
       handlePaste: (view, event) => {
@@ -112,7 +112,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                   return !(trimmed === '-' || trimmed === '*' || trimmed === '+' || /^\d+\.$/.test(trimmed));
                 })
                 .join('\n');
-              
+
               editor.commands.insertContent(cleanedText);
               return true;
             } catch (err) {
@@ -881,8 +881,16 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
           {!descriptionExpanded && (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <label style={{ fontSize: '12px', opacity: 0.8 }}>Description</label>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '4px' }}>
+                <label style={{
+                  fontSize: '12px',
+                  opacity: 0.8 }}>
+                  Description
+                </label>
                 <button
                   type="button"
                   onClick={() => setDescriptionExpanded(!descriptionExpanded)}
