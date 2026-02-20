@@ -13,6 +13,7 @@ export type TodoRow = {
   section: string; // now, soon, anytime
   pinned?: boolean;
   type?: string; // 'todo' | 'note'
+  inbox?: boolean;
 };
 
 type ViewMode = 'scope' | 'date';

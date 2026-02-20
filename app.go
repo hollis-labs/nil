@@ -310,6 +310,14 @@ func (a *App) RemoveDemoData() error {
 	return nil
 }
 
+func (a *App) GetTodo(id int64) (*store.Todo, error) {
+	return a.Store.GetTodo(a.ctx, id)
+}
+
+func (a *App) GetBackrefs(id int64) ([]store.Todo, error) {
+	return a.Store.GetBackrefs(a.ctx, id)
+}
+
 func (a *App) UpdateTodo(t store.Todo) error {
 	return a.Store.UpdateTodo(a.ctx, &t)
 }
@@ -324,6 +332,18 @@ func (a *App) Archive(id int64, archived bool) error {
 
 func (a *App) DeleteTodo(id int64) error {
 	return a.Store.DeleteTodo(a.ctx, id)
+}
+
+func (a *App) GetInboxCount() (int, error) {
+	return a.Store.GetInboxCount(a.ctx)
+}
+
+func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Todo, error) {
+	return a.Store.GetInboxItems(a.ctx, req)
+}
+
+func (a *App) ProcessInboxItem(id int64) error {
+	return a.Store.ProcessInboxItem(a.ctx, id)
 }
 
 func (a *App) Search(req store.SearchRequest) ([]store.Todo, error) {

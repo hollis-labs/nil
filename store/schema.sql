@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS todos (
   notes_md TEXT DEFAULT '',
   section TEXT DEFAULT 'anytime',
   pinned INTEGER NOT NULL DEFAULT 0,
-  type TEXT NOT NULL DEFAULT 'todo'
+  type TEXT NOT NULL DEFAULT 'todo',
+  inbox INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TRIGGER IF NOT EXISTS todos_update_ts
@@ -55,6 +56,13 @@ CREATE TABLE IF NOT EXISTS todo_tags (
   PRIMARY KEY (todo_id, tag_id),
   FOREIGN KEY (todo_id) REFERENCES todos(id) ON DELETE CASCADE,
   FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
+-- references between todos/notes
+CREATE TABLE IF NOT EXISTS refs (
+  source_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  target_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+  PRIMARY KEY (source_id, target_id)
 );
 
 -- FTS5

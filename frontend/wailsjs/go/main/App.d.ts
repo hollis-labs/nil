@@ -13,17 +13,27 @@ export function DeleteTodo(arg1:number):Promise<void>;
 
 export function ExportTodoTxt():Promise<string>;
 
+export function GetBackrefs(arg1:number):Promise<Array<store.Todo>>;
+
 export function GetDatabasePath():Promise<string>;
 
 export function GetDefaultDatabasePath():Promise<string>;
 
 export function GetFilters():Promise<main.FiltersResult>;
 
+export function GetInboxCount():Promise<number>;
+
+export function GetInboxItems(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
+
+export function GetTodo(arg1:number):Promise<store.Todo>;
+
 export function HasDemoData():Promise<boolean>;
 
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
 export function NeedsSetup():Promise<boolean>;
+
+export function ProcessInboxItem(arg1:number):Promise<void>;
 
 export function RemoveDemoData():Promise<void>;
 

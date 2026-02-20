@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -14,7 +15,7 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-const currentSchemaVersion = 2
+const currentSchemaVersion = 4
 
 type migration struct {
 	version int
@@ -29,6 +30,18 @@ var migrations = []migration{
 	{
 		version: 2,
 		sql:     "ALTER TABLE todos ADD COLUMN type TEXT NOT NULL DEFAULT 'todo'",
+	},
+	{
+		version: 3,
+		sql: `CREATE TABLE IF NOT EXISTS refs (
+			source_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+			target_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+			PRIMARY KEY (source_id, target_id)
+		)`,
+	},
+	{
+		version: 4,
+		sql:     "ALTER TABLE todos ADD COLUMN inbox INTEGER NOT NULL DEFAULT 0",
 	},
 }
 
@@ -110,6 +123,28 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 		if m.version == 2 {
 			var count int
 			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='type'").Scan(&count)
+			if err == nil && count > 0 {
+				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if m.version == 3 {
+			var count int
+			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='refs'").Scan(&count)
+			if err == nil && count > 0 {
+				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if m.version == 4 {
+			var count int
+			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='inbox'").Scan(&count)
 			if err == nil && count > 0 {
 				_, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
 				if err != nil {
@@ -233,10 +268,13 @@ func (s *Store) CreateTodo(ctx context.Context, t *Todo) (*Todo, error) {
 	if t.Type == "" {
 		t.Type = "todo"
 	}
+	if strings.TrimSpace(t.Title) == "" {
+		t.Inbox = true
+	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox,
 	)
 	if err != nil {
 		return nil, err
@@ -282,7 +320,120 @@ UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, thresho
 	if err := s.setLinks(ctx, "todo_tags", "tag_id", t.ID, t.Tags); err != nil {
 		return err
 	}
+	refIDs := ExtractRefIDs(t.NotesMD)
+	if err := s.UpdateRefs(ctx, t.ID, refIDs); err != nil {
+		return err
+	}
 	return nil
+}
+
+// ExtractRefIDs parses data-id attributes from wikilink spans in stored HTML.
+func ExtractRefIDs(html string) []int64 {
+	var ids []int64
+	seen := map[int64]bool{}
+	remaining := html
+	for {
+		idx := strings.Index(remaining, `data-id="`)
+		if idx < 0 {
+			break
+		}
+		rest := remaining[idx+9:]
+		end := strings.Index(rest, `"`)
+		if end < 0 {
+			break
+		}
+		idStr := rest[:end]
+		if id, err := strconv.ParseInt(idStr, 10, 64); err == nil && id > 0 && !seen[id] {
+			ids = append(ids, id)
+			seen[id] = true
+		}
+		remaining = rest[end:]
+	}
+	return ids
+}
+
+// GetTodo returns a single todo/note by ID.
+func (s *Store) GetTodo(ctx context.Context, id int64) (*Todo, error) {
+	var t Todo
+	var pri *string
+	var source sql.NullString
+	var notesMD sql.NullString
+	err := s.DB.QueryRowContext(ctx, `
+SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox
+FROM todos WHERE id=?`, id).Scan(
+		&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
+		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox,
+	)
+	if err != nil {
+		return nil, err
+	}
+	t.Priority = pri
+	t.Source = source.String
+	t.NotesMD = notesMD.String
+	if t.Section == "" {
+		t.Section = "anytime"
+	}
+	if err := s.hydrate(ctx, &t); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// UpdateRefs replaces all outgoing refs from sourceID with targetIDs.
+func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int64) error {
+	if _, err := s.DB.ExecContext(ctx, "DELETE FROM refs WHERE source_id = ?", sourceID); err != nil {
+		return err
+	}
+	for _, targetID := range targetIDs {
+		if targetID == sourceID {
+			continue // skip self-references
+		}
+		if _, err := s.DB.ExecContext(ctx, "INSERT OR IGNORE INTO refs (source_id, target_id) VALUES (?, ?)", sourceID, targetID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// GetBackrefs returns all todos/notes that reference targetID.
+func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Todo, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
+       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox
+FROM todos t JOIN refs r ON r.source_id = t.id
+WHERE r.target_id = ?
+ORDER BY t.updated_at DESC`, targetID)
+	if err != nil {
+		return []Todo{}, err
+	}
+	defer rows.Close()
+
+	var out []Todo
+	for rows.Next() {
+		var t Todo
+		var pri *string
+		var source sql.NullString
+		var notesMD sql.NullString
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
+			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox)
+		if err != nil {
+			return []Todo{}, err
+		}
+		t.Priority = pri
+		t.Source = source.String
+		t.NotesMD = notesMD.String
+		if t.Section == "" {
+			t.Section = "anytime"
+		}
+		if err := s.hydrate(ctx, &t); err != nil {
+			return []Todo{}, err
+		}
+		out = append(out, t)
+	}
+	if out == nil {
+		return []Todo{}, nil
+	}
+	return out, nil
 }
 
 func (s *Store) ToggleComplete(ctx context.Context, id int64, completed bool) error {
@@ -311,13 +462,20 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	q := qparts{}
 	q.where = append(q.where, "(1=1)")
 
-	// type filter (default to 'todo' for backward compatibility)
+	// Exclude inbox items from normal search results unless explicitly requested
+	if !req.IncludeInbox {
+		q.where = append(q.where, "t.inbox = 0")
+	}
+
+	// type filter (default to 'todo' for backward compatibility; "all" skips filter)
 	typeFilter := req.Type
 	if typeFilter == "" {
 		typeFilter = "todo"
 	}
-	q.where = append(q.where, "t.type = ?")
-	q.args = append(q.args, typeFilter)
+	if typeFilter != "all" {
+		q.where = append(q.where, "t.type = ?")
+		q.args = append(q.args, typeFilter)
+	}
 
 	// statuses
 	for _, st := range req.Statuses {
@@ -411,7 +569,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -431,7 +589,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
 		if err != nil {
 			return []Todo{}, err
 		}
@@ -451,6 +609,91 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 		return []Todo{}, nil
 	}
 	return out, nil
+}
+
+// GetInboxCount returns the count of non-archived inbox items.
+func (s *Store) GetInboxCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE inbox = 1 AND archived = 0").Scan(&count)
+	return count, err
+}
+
+// GetInboxItems returns inbox items, optionally filtered by a keyword query.
+func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Todo, error) {
+	q := qparts{}
+	q.where = append(q.where, "t.inbox = 1")
+	q.where = append(q.where, "t.archived = 0")
+
+	// keywords via FTS
+	if strings.TrimSpace(req.Query) != "" {
+		q.joins = append(q.joins, "JOIN todos_fts ON todos_fts.rowid=t.id")
+		q.where = append(q.where, "todos_fts MATCH ?")
+		words := strings.Fields(strings.TrimSpace(req.Query))
+		for i, word := range words {
+			if !strings.HasSuffix(word, "*") {
+				words[i] = word + "*"
+			}
+		}
+		q.args = append(q.args, strings.Join(words, " "))
+	}
+
+	// paging
+	if req.PageSize <= 0 {
+		req.PageSize = 200
+	}
+	offset := 0
+	if req.Page > 0 {
+		offset = req.Page * req.PageSize
+	}
+	q.order = " ORDER BY t.created_at DESC"
+	q.limit = " LIMIT ? OFFSET ?"
+	q.args = append(q.args, req.PageSize, offset)
+
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox FROM todos t "
+	if len(q.joins) > 0 {
+		sqlStr += strings.Join(q.joins, " ") + " "
+	}
+	sqlStr += " WHERE " + strings.Join(q.where, " AND ") + q.order + q.limit
+
+	rows, err := s.DB.QueryContext(ctx, sqlStr, q.args...)
+	if err != nil {
+		return []Todo{}, err
+	}
+	defer rows.Close()
+
+	var out []Todo
+	for rows.Next() {
+		var t Todo
+		var pri *string
+		var section string
+		var source sql.NullString
+		var notesMD sql.NullString
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
+		if err != nil {
+			return []Todo{}, err
+		}
+		t.Priority = pri
+		t.Section = section
+		t.Source = source.String
+		t.NotesMD = notesMD.String
+		if t.Section == "" {
+			t.Section = "anytime"
+		}
+		if err := s.hydrate(ctx, &t); err != nil {
+			return []Todo{}, err
+		}
+		out = append(out, t)
+	}
+	if out == nil {
+		return []Todo{}, nil
+	}
+	return out, nil
+}
+
+// ProcessInboxItem clears the inbox flag for the given item.
+func (s *Store) ProcessInboxItem(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, "UPDATE todos SET inbox = 0 WHERE id = ?", id)
+	return err
 }
 
 func (s *Store) GetFilterValues(ctx context.Context) (projects, contexts, tags []string, err error) {

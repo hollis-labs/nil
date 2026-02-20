@@ -16,6 +16,7 @@ type Todo struct {
 	Section   string  `json:"section"` // now, soon, anytime
 	Pinned    bool    `json:"pinned"`
 	Type      string  `json:"type"`
+	Inbox     bool    `json:"inbox"`
 
 	Projects []string `json:"projects"`
 	Contexts []string `json:"contexts"`
@@ -33,7 +34,8 @@ type SearchRequest struct {
 	DateTo     *string  `json:"date_to"`
 	Page       int      `json:"page"`
 	PageSize   int      `json:"page_size"`
-	SortBy     string   `json:"sort_by"`
-	SortDir    string   `json:"sort_dir"`
-	Type       string   `json:"type"`
+	SortBy       string   `json:"sort_by"`
+	SortDir      string   `json:"sort_dir"`
+	Type         string   `json:"type"`
+	IncludeInbox bool     `json:"include_inbox"`
 }

@@ -22,6 +22,10 @@ export function ExportTodoTxt() {
   return window['go']['main']['App']['ExportTodoTxt']();
 }
 
+export function GetBackrefs(arg1) {
+  return window['go']['main']['App']['GetBackrefs'](arg1);
+}
+
 export function GetDatabasePath() {
   return window['go']['main']['App']['GetDatabasePath']();
 }
@@ -34,6 +38,18 @@ export function GetFilters() {
   return window['go']['main']['App']['GetFilters']();
 }
 
+export function GetInboxCount() {
+  return window['go']['main']['App']['GetInboxCount']();
+}
+
+export function GetInboxItems(arg1) {
+  return window['go']['main']['App']['GetInboxItems'](arg1);
+}
+
+export function GetTodo(arg1) {
+  return window['go']['main']['App']['GetTodo'](arg1);
+}
+
 export function HasDemoData() {
   return window['go']['main']['App']['HasDemoData']();
 }
@@ -44,6 +60,10 @@ export function ImportTodoTxt(arg1) {
 
 export function NeedsSetup() {
   return window['go']['main']['App']['NeedsSetup']();
+}
+
+export function ProcessInboxItem(arg1) {
+  return window['go']['main']['App']['ProcessInboxItem'](arg1);
 }
 
 export function RemoveDemoData() {
