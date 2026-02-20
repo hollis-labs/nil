@@ -165,57 +165,83 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   // ── Single-item actions ────────────────────────────────────────────────────
 
   async function handleProcess(id: number) {
+    setItems(prev => prev.filter(i => i.id !== id));
     try {
       await Backend.ProcessInboxItem(id);
-      await loadItems(searchQuery);
       onProcessed();
-    } catch (err) { console.error("Failed to process:", err); }
+    } catch (err) {
+      console.error("Failed to process:", err);
+    }
+    await loadItems(searchQuery);
   }
 
   async function handleArchive(id: number) {
+    setItems(prev => prev.filter(i => i.id !== id));
     try {
       await Backend.Archive(id, true);
-      await loadItems(searchQuery);
       onProcessed();
-    } catch (err) { console.error("Failed to archive:", err); }
+    } catch (err) {
+      console.error("Failed to archive:", err);
+    }
+    await loadItems(searchQuery);
   }
 
   async function handleDelete(id: number) {
     if (showDeleteConfirm !== id) { setShowDeleteConfirm(id); return; }
+    setItems(prev => prev.filter(i => i.id !== id));
+    setShowDeleteConfirm(null);
     try {
       await Backend.DeleteTodo(id);
-      setShowDeleteConfirm(null);
-      await loadItems(searchQuery);
       onProcessed();
-    } catch (err) { console.error("Failed to delete:", err); }
+    } catch (err) {
+      console.error("Failed to delete:", err);
+    }
+    await loadItems(searchQuery);
   }
 
   // ── Bulk actions ───────────────────────────────────────────────────────────
 
   async function handleBulkProcess() {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id => Backend.ProcessInboxItem(id)));
+    const idsSet = new Set(ids);
+    setItems(prev => prev.filter(i => !idsSet.has(i.id)));
     setSelectedIds(new Set());
+    try {
+      for (const id of ids) await Backend.ProcessInboxItem(id);
+      onProcessed();
+    } catch (err) {
+      console.error("Failed to bulk process:", err);
+    }
     await loadItems(searchQuery);
-    onProcessed();
   }
 
   async function handleBulkArchive() {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id => Backend.Archive(id, true)));
+    const idsSet = new Set(ids);
+    setItems(prev => prev.filter(i => !idsSet.has(i.id)));
     setSelectedIds(new Set());
+    try {
+      for (const id of ids) await Backend.Archive(id, true);
+      onProcessed();
+    } catch (err) {
+      console.error("Failed to bulk archive:", err);
+    }
     await loadItems(searchQuery);
-    onProcessed();
   }
 
-  async function handleBulkDelete() {
-    if (!bulkDeleteConfirm) { setBulkDeleteConfirm(true); return; }
+  async function confirmBulkDelete() {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map(id => Backend.DeleteTodo(id)));
+    const idsSet = new Set(ids);
+    setItems(prev => prev.filter(i => !idsSet.has(i.id)));
     setSelectedIds(new Set());
     setBulkDeleteConfirm(false);
+    try {
+      for (const id of ids) await Backend.DeleteTodo(id);
+      onProcessed();
+    } catch (err) {
+      console.error("Failed to bulk delete:", err);
+    }
     await loadItems(searchQuery);
-    onProcessed();
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -442,7 +468,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
           </button>
           {bulkDeleteConfirm ? (
             <>
-              <button className="badge warn" onClick={handleBulkDelete}
+              <button className="badge warn" onClick={confirmBulkDelete}
                 style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
                 <Trash2 size={12} /> Confirm Delete {selCount}
               </button>
@@ -452,7 +478,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
               </button>
             </>
           ) : (
-            <button className="badge warn" onClick={handleBulkDelete}
+            <button className="badge warn" onClick={() => setBulkDeleteConfirm(true)}
               style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
               <Trash2 size={12} /> Delete All
             </button>
