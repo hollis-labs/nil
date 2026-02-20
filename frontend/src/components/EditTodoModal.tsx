@@ -15,6 +15,7 @@ import { TaskTemplate } from "@/lib/templates";
 import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
 import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3, FileText, CheckSquare } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
+import { WikilinkExtension } from "@/lib/WikilinkExtension";
 
 type Props = {
   open: boolean;
@@ -28,11 +29,12 @@ type Props = {
   defaultTags?: string[];
   isNoteMode?: boolean;
   onConvertType?: (todo: TodoRow) => void;
+  onRefClick?: (id: number, refType: string) => void;
 };
 
-export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [], isNoteMode = false, onConvertType }: Props) {
+export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editTodo, defaultContexts = [], defaultProjects = [], defaultTags = [], isNoteMode = false, onConvertType, onRefClick }: Props) {
   const isEditMode = !!editTodo;
-  const { settings } = useSettings();
+  const { settings, setSettings } = useSettings();
 
   const [line, setLine] = React.useState("");
   const [priority, setPriority] = React.useState("");
@@ -49,6 +51,12 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [mergeContext, setMergeContext] = React.useState(true);
   const [sessionProfiles, setSessionProfiles] = React.useState<SessionProfile[]>([]);
   const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
+  const [showClosePrompt, setShowClosePrompt] = React.useState(false);
+  const [pendingBehavior, setPendingBehavior] = React.useState<'never' | 'always' | 'ask'>('ask');
+  const initialValuesRef = React.useRef<{
+    line: string; priority: string; due: string;
+    tags: string[]; contexts: string[]; projects: string[]; notes_md: string;
+  } | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -83,6 +91,29 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
   }, [open]);
 
+  const onRefClickRef = React.useRef(onRefClick);
+  onRefClickRef.current = onRefClick;
+
+  const editorContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Capture-phase mousedown on the editor wrapper — fires before ProseMirror's
+  // bubble-phase handlers so stopPropagation() fully prevents cursor movement.
+  React.useEffect(() => {
+    const container = editorContainerRef.current;
+    if (!container) return;
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = (e.target as Element).closest('[data-type="wikilink"]');
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const id = parseInt(target.getAttribute("data-id") || "0", 10);
+      const refType = target.getAttribute("data-ref-type") || "todo";
+      if (id) onRefClickRef.current?.(id, refType);
+    };
+    container.addEventListener("mousedown", handleMouseDown, { capture: true });
+    return () => container.removeEventListener("mousedown", handleMouseDown, { capture: true });
+  }, []);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -90,7 +121,8 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         html: true,
         transformPastedText: true,
         transformCopiedText: false,
-      })
+      }),
+      WikilinkExtension,
     ],
     content: "",
     parseOptions: {
@@ -135,6 +167,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     if (open && !prevOpenRef.current) {
       setShowDeleteConfirm(false);
       setDescriptionExpanded(false);
+      setShowClosePrompt(false);
       if (isEditMode && editTodo) {
         setLine(editTodo.title);
         setPriority(editTodo.priority || "");
@@ -146,6 +179,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         if (editor) {
           editor.commands.setContent(editTodo.notes_md || "");
         }
+        initialValuesRef.current = {
+          line: editTodo.title,
+          priority: editTodo.priority || "",
+          due: editTodo.due_at ? editTodo.due_at.slice(0, 10) : "",
+          tags: [...(editTodo.tags || [])],
+          contexts: [...(editTodo.contexts || [])],
+          projects: [...(editTodo.projects || [])],
+          notes_md: editTodo.notes_md || "",
+        };
       } else {
         // Priority order: session context > search filters > default tags
         const activeSession = getActiveSession();
@@ -170,6 +212,15 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         if (editor) {
           editor.commands.setContent("");
         }
+        initialValuesRef.current = {
+          line: "",
+          priority: activeSession?.priority || "",
+          due: "",
+          tags: [...mergedTags],
+          contexts: [...mergedContexts],
+          projects: [...mergedProjects],
+          notes_md: "",
+        };
       }
     }
     prevOpenRef.current = open;
@@ -177,7 +228,12 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ESC key disabled - users must click Close/Cancel
+      if (e.key === 'Escape' && open) {
+        e.preventDefault();
+        if (showClosePrompt) { setShowClosePrompt(false); return; }
+        requestClose();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && open) {
         e.preventDefault();
         handleSubmit(e as any);
@@ -185,50 +241,63 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, line, priority, due, tags, contexts, projects, editTodo, onUpdate, onSubmit, settings]);
+  }, [open, showClosePrompt, line, priority, due, tags, contexts, projects, editTodo, onUpdate, onSubmit, settings]);
 
   if (!open) return null;
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    console.log('[EditTodoModal] handleSubmit called - isEditMode:', isEditMode, 'editTodo:', !!editTodo);
-    const notes_md = editor?.getHTML() || "";
+  function isDirty(): boolean {
+    const initial = initialValuesRef.current;
+    if (!initial) return false;
+    const currentNotes = editor?.getHTML() || '';
+    const norm = (s: string) => (s === '<p></p>' ? '' : s);
+    const arrSame = (a: string[], b: string[]) =>
+      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+    return (
+      line !== initial.line ||
+      priority !== initial.priority ||
+      due !== initial.due ||
+      !arrSame(tags, initial.tags) ||
+      !arrSame(contexts, initial.contexts) ||
+      !arrSame(projects, initial.projects) ||
+      norm(currentNotes) !== norm(initial.notes_md)
+    );
+  }
 
-    // Strip prefixes from tags/contexts/projects (in case user typed them)
+  function doSave(forceInbox?: boolean) {
+    const notes_md = editor?.getHTML() || "";
     let cleanTags = tags.map(t => t.replace(/^#/, ''));
     const cleanContexts = contexts.map(c => c.replace(/^@/, ''));
     const cleanProjects = projects.map(p => p.replace(/^\+/, ''));
-
-    // Apply default tags if no tags or projects are specified (only for create mode)
-    if (!isEditMode && cleanTags.length === 0 && cleanProjects.length === 0 && settings.defaultTags && settings.defaultTags.length > 0) {
+    if (!isEditMode && cleanTags.length === 0 && cleanProjects.length === 0
+        && settings.defaultTags && settings.defaultTags.length > 0) {
       cleanTags = [...settings.defaultTags];
     }
-
     if (isEditMode && editTodo && onUpdate) {
-      console.log('[EditTodoModal] Calling onUpdate');
-      const updated: TodoRow = {
-        ...editTodo,
-        title: line,
-        priority: priority || undefined,
-        due_at: due || undefined,
-        tags: cleanTags,
-        contexts: cleanContexts,
-        projects: cleanProjects,
-        notes_md,
-      };
-      onUpdate(updated);
+      onUpdate({ ...editTodo, title: line, priority: priority || undefined,
+        due_at: due || undefined, tags: cleanTags, contexts: cleanContexts,
+        projects: cleanProjects, notes_md });
     } else {
-      console.log('[EditTodoModal] Calling onSubmit (create new)');
-      const extras: any = {
-        tags: cleanTags,
-        contexts: cleanContexts,
-        projects: cleanProjects
-      };
+      const extras: any = { tags: cleanTags, contexts: cleanContexts, projects: cleanProjects };
       if (priority) extras.priority = priority;
       if (due) extras.due = due;
       if (notes_md) extras.notes_md = notes_md;
+      if (forceInbox) extras.inbox = true;
       onSubmit(line, extras);
     }
+  }
+
+  function requestClose() {
+    const closeBehavior = settings.closeBehavior ?? 'ask';
+    if (!isDirty()) { onOpenChange(false); return; }
+    if (closeBehavior === 'always') { doSave(); return; }
+    if (closeBehavior === 'never') { onOpenChange(false); return; }
+    setPendingBehavior(settings.closeBehavior ?? 'ask');
+    setShowClosePrompt(true);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    doSave();
   }
 
   const toggleUseDefaults = () => {
@@ -464,6 +533,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        position: 'relative',
       }}>
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
@@ -493,7 +563,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
             </div>
             <button
               className="badge info"
-              onClick={() => onOpenChange(false)}
+              onClick={() => requestClose()}
               style={{
                 padding: '6px 9px',
                 fontSize: '12px',
@@ -951,7 +1021,9 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
                   maxHeight: '296px',
                   background: 'var(--term-bg)'
                 }}>
-                  <EditorContent editor={editor} />
+                  <div ref={editorContainerRef}>
+                    <EditorContent editor={editor} />
+                  </div>
                 </CustomScrollbar>
               </div>
             </div>
@@ -979,10 +1051,56 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
               </>
             )}
             <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Clear</button>
-            <button type="button" className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Cancel</button>
+            <button type="button" className="badge" onClick={() => requestClose()} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Cancel</button>
           </div>
-          <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>{isEditMode ? 'Save' : 'Create'}</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {!isEditMode && (
+              <button type="button" className="badge" onClick={(e) => { e.preventDefault(); doSave(true); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }} title="Create and send to Inbox for later review">→ Inbox</button>
+            )}
+            <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>{isEditMode ? 'Save' : 'Create'}</button>
+          </div>
         </div>
+
+        {showClosePrompt && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+            <div className="terminal-card" style={{ padding: '24px', maxWidth: '360px', width: '90%' }}>
+              <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>Unsaved changes</div>
+              <div style={{ fontSize: '12px', color: 'var(--term-dim)', marginBottom: '20px' }}>
+                You have unsaved changes. What would you like to do?
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                <button className="badge warn" onClick={() => {
+                  if (pendingBehavior !== (settings.closeBehavior ?? 'ask'))
+                    setSettings({ ...settings, closeBehavior: pendingBehavior });
+                  setShowClosePrompt(false); onOpenChange(false);
+                }}>Discard</button>
+                <button className="badge success" onClick={() => {
+                  if (pendingBehavior !== (settings.closeBehavior ?? 'ask'))
+                    setSettings({ ...settings, closeBehavior: pendingBehavior });
+                  setShowClosePrompt(false); doSave();
+                }}>Save &amp; Close</button>
+                <button className="badge" onClick={() => setShowClosePrompt(false)}>Stay</button>
+              </div>
+              <div style={{ borderTop: '1px solid var(--term-border)', paddingTop: '16px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--term-dim)', marginBottom: '8px' }}>
+                  Remember this choice:
+                </div>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  {(['ask', 'always', 'never'] as const).map(opt => (
+                    <button key={opt}
+                      className={`badge ${pendingBehavior === opt ? 'info' : ''}`}
+                      onClick={() => setPendingBehavior(opt)}
+                      style={{ fontSize: '11px', padding: '4px 8px', border: 'none',
+                        opacity: pendingBehavior === opt ? 1 : 0.6 }}>
+                      {opt === 'ask' ? 'Ask each time' : opt === 'always' ? 'Always save' : 'Never save'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <TemplateSaveDialog
@@ -1130,7 +1248,7 @@ export default function EditTodoModal({ open, onOpenChange, onSubmit, onUpdate, 
 
             {/* Editor */}
             <CustomScrollbar style={{ flex: 1, background: 'var(--term-bg)' }}>
-              <div style={{ padding: '20px' }}>
+              <div style={{ padding: '20px' }} ref={editorContainerRef}>
                 <EditorContent editor={editor} />
               </div>
             </CustomScrollbar>

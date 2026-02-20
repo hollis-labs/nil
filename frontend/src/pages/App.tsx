@@ -9,6 +9,7 @@ import SessionContextModal from "@/components/SessionContextModal";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
 import WelcomeDialog from "@/components/WelcomeDialog";
 import HelpModal from "@/components/HelpModal";
+import QuickSearchModal from "@/components/QuickSearchModal";
 import AlphaWarning from "@/components/AlphaWarning";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import PowerMenu from "@/components/PowerMenu";
@@ -51,6 +52,7 @@ function Inner() {
   const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
   const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
   const [inboxCount, setInboxCount] = React.useState(0);
+  const [quickSearchOpen, setQuickSearchOpen] = React.useState(false);
   const [prevAppMode, setPrevAppMode] = React.useState<'todos' | 'notes'>('todos');
   const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
   const appModeLPFired = React.useRef(false);
@@ -448,6 +450,7 @@ function Inner() {
       contexts: extras.contexts?.length ? extras.contexts : created.contexts,
       tags: extras.tags?.length ? extras.tags : created.tags,
       notes_md: extras.notes_md || created.notes_md,
+      inbox: extras.inbox ? true : created.inbox,
     };
     await Backend.UpdateTodo(merged as any);
     setQuickOpen(false);
@@ -462,6 +465,7 @@ function Inner() {
       contexts: extras.contexts?.length ? extras.contexts : created.contexts,
       tags: extras.tags?.length ? extras.tags : created.tags,
       notes_md: extras.notes_md || created.notes_md,
+      inbox: extras.inbox ? true : created.inbox,
     };
     await Backend.UpdateTodo(merged as any);
     setQuickOpen(false);
@@ -648,6 +652,7 @@ function Inner() {
         }}
         onToggleAppMode={() => setAppMode(prev => prev === 'todos' ? 'notes' : 'todos')}
         onOpenInbox={openInbox}
+        onOpenQuickSearch={() => setQuickSearchOpen(true)}
       />
 
       <div style={{
@@ -1338,6 +1343,20 @@ function Inner() {
         todo={metaModalTodo}
         onOpenChange={(open) => !open && setMetaModalTodo(null)}
         onSave={handleMetaSave}
+      />
+      <QuickSearchModal
+        open={quickSearchOpen}
+        onOpenChange={setQuickSearchOpen}
+        onOpenItem={(row) => {
+          setQuickSearchOpen(false);
+          if (row.type === 'note') {
+            setNotesTodo(row);
+            setNotesOpen(true);
+          } else {
+            setEditTodo(row);
+            setQuickOpen(true);
+          }
+        }}
       />
     </div>
   );

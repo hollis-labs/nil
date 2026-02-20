@@ -85,7 +85,7 @@ The core entity is `todos` — it holds both **todos** (`type='todo'`) and **not
 - `notes_md` — HTML string (TipTap output); also full-text indexed via FTS5
 - `section` — `now` | `soon` | `anytime`
 - `pinned`, `type` (`todo` | `note`)
-- `inbox` — boolean (`INTEGER DEFAULT 0`); auto-set when title is blank on creation; inbox items are excluded from normal search results
+- `inbox` — boolean (`INTEGER DEFAULT 0`); auto-set when title is blank on creation, or set explicitly via the "→ Inbox" button in the create modal; inbox items are excluded from normal search results
 - Taxonomy via join tables: `todo_projects`, `todo_contexts`, `todo_tags`
 - Inter-item references via `refs (source_id, target_id)` — synced on every save
 
@@ -137,7 +137,7 @@ DEBUG=1 open build/bin/PLANCK.app
 - [ ] **Rename/cleanup**: The project folder is still named `todo-app-starter/todo-app`. The app is called PLANCK. Clean up directory names, stale `.md` files, and the leftover `app/app.go` stub.
 - [ ] **Hide theme switcher**: Temporarily hide the theme menu option from the UI. The theme system stays in the codebase; it just won't be user-accessible until the Tailwind/shadcn migration is complete.
 - [ ] **Default tab migration**: Add a schema migration so that the Notes and Todos views each have an "All" tab by default when no user-created tabs exist. Both views should fall back gracefully to showing all items if no scopes have been defined.
-- [ ] **Escape closes add modal**: When the Quick Add / new todo or note modal is open, pressing Escape should close it, consistent with how all other modals behave.
+- [x] **Escape closes add modal**: Escape now closes EditTodoModal. Dirty detection triggers an inline prompt (ask / always save / never save) configurable via Settings → General → Close & Save Behavior.
 - [ ] **User-facing docs**: Consolidate the many scattered `.md` files into coherent end-user documentation covering:
   - The input syntax is loosely inspired by todo.txt, not a strict implementation — clarify this throughout
   - The toggle on the search/add icon next to the main input (switches between search mode and add mode)
@@ -171,6 +171,8 @@ DEBUG=1 open build/bin/PLANCK.app
 - `InboxView` component (`src/components/InboxView.tsx`): search, per-item actions (Edit, Archive, Delete, Process), batch selection with bulk Process/Archive/Delete (sequential writes to avoid SQLite locking), keyboard navigation (↑↓, x=select, p=process, a=archive, d=delete, Enter=edit, Escape=back)
 - Optimistic UI updates — view reflects changes immediately, then reloads from backend
 - Empty quick-add (blank title) routes to inbox instead of being rejected
+- **"→ Inbox" button** in EditTodoModal (create mode only): deliberately routes any item to inbox regardless of whether it has a title or content — for items the user wants to capture fully but review later
+- **`UpdateTodo` persists `inbox` field** (bug fix: the SQL UPDATE previously omitted the column, so setting inbox via update was silently dropped)
 
 **Remaining / future iterations**:
 - Saved named inbox views (filter presets stored in localStorage)
@@ -242,3 +244,4 @@ These files likely predate refactors and can be reviewed for deletion:
 - The `App.tsx` file is the single source of truth for app state. Read it fully before adding new state or handlers.
 - TipTap editors run inside WKWebView on macOS. Standard DOM event handling has quirks — test click/keyboard interactions in the actual app, not just in a browser.
 - Tailwind and shadcn/ui are **not yet installed**. Do not assume they are available until the migration priority (see Immediate Priorities) has been completed. Until then, continue using the existing `var(--term-*)` CSS custom property system.
+- **EditTodoModal close flow**: Escape / Close / Cancel all route through `requestClose()`, which checks `isDirty()` and respects the `closeBehavior` setting (`ask` | `always` | `never`). The "→ Inbox" button is create-mode only and passes `extras.inbox = true` through `onSubmit` → `handleQuickAdd` / `handleQuickAddNote` → `UpdateTodo`. Both App.tsx handlers must merge `extras.inbox` into the todo before calling `UpdateTodo`.

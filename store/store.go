@@ -305,8 +305,8 @@ func (s *Store) UpdateTodo(ctx context.Context, t *Todo) error {
 		t.Type = "todo"
 	}
 	_, err := s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=?, type=? WHERE id=?`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.Type, t.ID,
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=?, type=?, inbox=? WHERE id=?`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox, t.ID,
 	)
 	if err != nil {
 		return err

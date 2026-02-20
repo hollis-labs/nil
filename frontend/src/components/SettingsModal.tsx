@@ -13,6 +13,7 @@ type Settings = {
   defaultView?: 'scope' | 'date';
   defaultTags?: string[];
   defaultInputMode?: 'search' | 'add';
+  closeBehavior?: 'never' | 'always' | 'ask';
 };
 
 type ScopeTab = {
@@ -40,7 +41,8 @@ const defaultSettings: Settings = {
   dbPath: './data',
   defaultView: 'scope',
   defaultTags: [],
-  defaultInputMode: 'add'
+  defaultInputMode: 'add',
+  closeBehavior: 'ask',
 };
 
 const SettingsContext = React.createContext<{
@@ -401,6 +403,36 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
                 </div>
                 <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
                   Search mode filters todos as you type. Add mode creates a new todo when you press Enter. Toggle with Tab key anytime.
+                </div>
+              </div>
+
+              <div style={{ marginTop: '20px' }}>
+                <label style={{ fontSize: '13px', display: 'block', marginBottom: '8px' }}>
+                  Close &amp; Save Behavior
+                </label>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {(['ask', 'always', 'never'] as const).map(opt => (
+                    <div key={opt} style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }} onClick={() => setLocal({ ...local, closeBehavior: opt })}>
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
+                        border: '1px solid var(--term-border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: (local.closeBehavior ?? 'ask') === opt ? 'var(--term-accent)' : 'transparent'
+                      }}>
+                        {(local.closeBehavior ?? 'ask') === opt && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#000' }} />}
+                      </div>
+                      <label style={{ cursor: 'pointer', fontSize: '12px' }}>
+                        {opt === 'ask' ? 'Ask each time' : opt === 'always' ? 'Always save' : 'Never save'}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '8px', fontSize: '11px' }} className="text-dim">
+                  When closing a todo or note with unsaved changes: save automatically, discard, or be prompted.
                 </div>
               </div>
 
