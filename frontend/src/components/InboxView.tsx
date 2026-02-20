@@ -250,7 +250,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
 
       {/* Search bar + select-all + count */}
       <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
@@ -287,7 +287,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
       </div>
 
       {/* List */}
-      <CustomScrollbar style={{ flex: 1 }}>
+      <CustomScrollbar style={{ flex: 1, paddingBottom: selCount > 0 ? "60px" : 0 }}>
         {loading && items.length === 0 ? (
           <div style={{ textAlign: "center", color: "var(--term-dim)", padding: "40px 0", fontSize: "13px" }}>Loading…</div>
         ) : items.length === 0 ? (
@@ -433,18 +433,23 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
         )}
       </CustomScrollbar>
 
-      {/* Bulk action bar — slides in when items are selected */}
+      {/* Bulk action bar — absolutely pinned to bottom so overflow:hidden can't clip it */}
       {selCount > 0 && (
         <div style={{
-          marginTop: "8px",
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
           padding: "10px 14px",
           background: "var(--term-panel)",
           border: "1px solid var(--term-border)",
+          borderTop: "1px solid var(--term-border)",
           borderRadius: "8px",
           display: "flex",
           alignItems: "center",
           gap: "8px",
           flexWrap: "wrap",
+          boxShadow: "0 -4px 12px rgba(0,0,0,0.3)",
         }}>
           <span style={{ fontSize: "12px", color: "var(--term-fg)", fontWeight: 600, marginRight: "4px" }}>
             {selCount} selected
