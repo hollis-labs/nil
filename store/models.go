@@ -1,6 +1,6 @@
 package store
 
-type Todo struct {
+type Item struct {
 	ID        int64   `json:"id"`
 	Title     string  `json:"title"`
 	Priority  *string `json:"priority,omitempty"`

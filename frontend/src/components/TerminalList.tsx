@@ -4,7 +4,7 @@ import { TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ChevronUp, ChevronDown, Check, Archive, Trash2, Edit3, Pin } from "lucide-react";
 
-export type TodoRow = {
+export type ItemRow = {
   id: number; title: string; priority?: string;
   due_at?: string; created_at?: string; threshold_at?: string;
   completed: boolean; archived: boolean;
@@ -61,24 +61,24 @@ function adjustBrightness(hex: string, percent: number): string {
 }
 
 type Props = {
-  rows: TodoRow[];
+  rows: ItemRow[];
   onToggle: (id: number, checked: boolean) => void;
-  onOpenNotes: (row: TodoRow) => void;
+  onOpenNotes: (row: ItemRow) => void;
   onMoveSection: (id: number, section: string) => void;
   onArchive: (id: number, archived: boolean) => void;
   onDelete: (id: number) => void;
   showCompleted: boolean;
-  onEditTodo: (row: TodoRow) => void;
+  onEditItem: (row: ItemRow) => void;
   viewMode?: ViewMode;
   appMode?: AppMode;
-  onOpenRadialMenu?: (todo: TodoRow, position: {x: number; y: number}) => void;
+  onOpenRadialMenu?: (todo: ItemRow, position: {x: number; y: number}) => void;
   closeRadialMenus?: boolean;
   settingsButton?: React.ReactNode;
   hasActiveFilters?: boolean;
   animatingRow?: { id: number; action: string; phase?: 'collapsing' | 'expanding' } | null;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditTodo, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditItem, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -103,10 +103,10 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     if (!rows || !Array.isArray(rows)) return { now: [], soon: [], anytime: [], done: [] };
 
     const today = ymd();
-    const now: TodoRow[] = [];
-    const soon: TodoRow[] = [];
-    const anytime: TodoRow[] = [];
-    const done: TodoRow[] = [];
+    const now: ItemRow[] = [];
+    const soon: ItemRow[] = [];
+    const anytime: ItemRow[] = [];
+    const done: ItemRow[] = [];
 
     for (const r of rows) {
       if (r.completed) {
@@ -120,7 +120,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
       else anytime.push(r);
     }
 
-    const sortFn = (a: TodoRow, b: TodoRow) => {
+    const sortFn = (a: ItemRow, b: ItemRow) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return (a.priority||'Z').localeCompare(b.priority||'Z') ||
         (b.created_at||'').localeCompare(a.created_at||'');
@@ -132,7 +132,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   }, [rows]);
 
   const dateGroups = React.useMemo(() => {
-    const map: Record<string, TodoRow[]> = {};
+    const map: Record<string, ItemRow[]> = {};
     const withDates = rows.filter(r => !r.completed && r.due_at);
 
     for (const r of withDates) {
@@ -151,14 +151,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   const noteSections = React.useMemo(() => {
     if (appMode !== 'notes') return { pinned: [], notes: [] };
-    const pinned: TodoRow[] = [];
-    const notes: TodoRow[] = [];
+    const pinned: ItemRow[] = [];
+    const notes: ItemRow[] = [];
     for (const r of rows) {
       if (r.pinned) pinned.push(r);
       else notes.push(r);
     }
     // Sort newest first
-    const sortFn = (a: TodoRow, b: TodoRow) =>
+    const sortFn = (a: ItemRow, b: ItemRow) =>
       (b.created_at || '').localeCompare(a.created_at || '');
     pinned.sort(sortFn);
     notes.sort(sortFn);
@@ -183,7 +183,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     }
   };
 
-  const renderSection = (title: string, items: TodoRow[], sectionKey: string, canCollapse = true) => {
+  const renderSection = (title: string, items: ItemRow[], sectionKey: string, canCollapse = true) => {
     const isCollapsed = collapsedSections[sectionKey];
 
     return (
@@ -276,7 +276,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               if (!isCheckboxClick) {
                                 e.preventDefault();
                                 setHoveredRow(null);
-                                onEditTodo(r);
+                                onEditItem(r);
                               }
                             }}
                              style={{
@@ -463,7 +463,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   }
 
   // Render a single note row (no checkbox, no priority, shows preview)
-  const renderNoteRow = (r: TodoRow, idx: number, listLen: number) => (
+  const renderNoteRow = (r: ItemRow, idx: number, listLen: number) => (
     <div
       key={r.id}
       className={`list-row ${animatingRow?.id === r.id && animatingRow.phase === 'collapsing' ? 'row-animating' : ''} ${animatingRow?.id === r.id && animatingRow.phase === 'expanding' ? 'row-expanding' : ''}`}
@@ -494,7 +494,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
         if (deleteConfirm) { e.preventDefault(); e.stopPropagation(); return; }
         e.preventDefault();
         setHoveredRow(null);
-        onEditTodo(r);
+        onEditItem(r);
       }}
       style={{
         cursor: 'pointer',
@@ -650,7 +650,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                               if (!isCheckboxClick) {
                                 e.preventDefault();
                                 setHoveredRow(null);
-                                onEditTodo(r);
+                                onEditItem(r);
                               }
                             }}
                             style={{

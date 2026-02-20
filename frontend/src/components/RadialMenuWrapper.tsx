@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { TodoRow } from './TerminalList';
+import { ItemRow } from './TerminalList';
 import {
   ArrowUp,
   ArrowRight,
@@ -17,17 +17,17 @@ import {
 } from 'lucide-react';
 
 interface RadialMenuWrapperProps {
-  todo: TodoRow;
+  todo: ItemRow;
   position: { x: number; y: number };
   onMoveSection: (id: number, section: string) => void;
   onDelete: (id: number) => void;
   onArchive: (id: number, archived: boolean) => void;
   onToggle: (id: number, completed: boolean) => void;
-  onEdit: (todo: TodoRow) => void;
-  onClone: (todo: TodoRow) => void;
-  onMeta: (todo: TodoRow) => void;
+  onEdit: (todo: ItemRow) => void;
+  onClone: (todo: ItemRow) => void;
+  onMeta: (todo: ItemRow) => void;
   onPin: (id: number, pinned: boolean) => void;
-  onConvertType: (todo: TodoRow) => void;
+  onConvertType: (todo: ItemRow) => void;
   onClose: () => void;
 }
 

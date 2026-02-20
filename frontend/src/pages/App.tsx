@@ -1,9 +1,9 @@
 import * as React from "react";
-import TerminalList, { TodoRow } from "@/components/TerminalList";
+import TerminalList, { ItemRow } from "@/components/TerminalList";
 import InboxView from "@/components/InboxView";
 import KeyboardScope from "@/components/KeyboardScope";
 import NotesModal from "@/components/NotesModal";
-import EditTodoModal from "@/components/EditTodoModal";
+import EditItemModal from "@/components/EditItemModal";
 import SettingsModal, { useSettings, SettingsProvider } from "@/components/SettingsModal";
 import SessionContextModal from "@/components/SessionContextModal";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
@@ -29,16 +29,16 @@ type ViewMode = 'scope' | 'date';
 type AppMode = 'todos' | 'notes' | 'inbox';
 
 function Inner() {
-  const [allRows, setAllRows] = React.useState<TodoRow[]>([]);
+  const [allRows, setAllRows] = React.useState<ItemRow[]>([]);
   const [query, setQuery] = React.useState("");
   const [notesOpen, setNotesOpen] = React.useState(false);
-  const [notesTodo, setNotesTodo] = React.useState<any>(null);
+  const [notesItem, setNotesItem] = React.useState<any>(null);
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = React.useState<'general' | 'tabs' | 'theme' | 'data' | undefined>(undefined);
+  const [settingsInitialTab, setSettingsInitialTab] = React.useState<'general' | 'tabs' | 'data' | undefined>(undefined);
   const [sessionContextOpen, setSessionContextOpen] = React.useState(false);
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
-  const [editTodo, setEditTodo] = React.useState<TodoRow | null>(null);
+  const [editItem, setEditItem] = React.useState<ItemRow | null>(null);
   const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
   const [sessionAsFilter, setSessionAsFilter] = React.useState(false);
   const [showWelcome, setShowWelcome] = React.useState(false);
@@ -48,9 +48,9 @@ function Inner() {
   const [showAlphaWarning, setShowAlphaWarning] = React.useState(false);
   const [confirmRemoveDemo, setConfirmRemoveDemo] = React.useState(false);
   const [showPowerMenu, setShowPowerMenu] = React.useState(false);
-  const [radialMenuTodo, setRadialMenuTodo] = React.useState<{todo: TodoRow; position: {x: number; y: number}} | null>(null);
+  const [radialMenuItem, setRadialMenuItem] = React.useState<{todo: ItemRow; position: {x: number; y: number}} | null>(null);
   const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
-  const [metaModalTodo, setMetaModalTodo] = React.useState<TodoRow | null>(null);
+  const [metaModalItem, setMetaModalItem] = React.useState<ItemRow | null>(null);
   const [inboxCount, setInboxCount] = React.useState(0);
   const [quickSearchOpen, setQuickSearchOpen] = React.useState(false);
   const [prevAppMode, setPrevAppMode] = React.useState<'todos' | 'notes'>('todos');
@@ -58,11 +58,11 @@ function Inner() {
   const appModeLPFired = React.useRef(false);
   const { settings } = useSettings();
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
-    const saved = localStorage.getItem('planck.viewMode');
+    const saved = localStorage.getItem('nanite.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
   });
   const [appMode, setAppMode] = React.useState<AppMode>(() => {
-    const saved = localStorage.getItem('planck.appMode');
+    const saved = localStorage.getItem('nanite.appMode');
     const mode = (saved as AppMode) || 'todos';
     // Never restore inbox mode from localStorage
     return mode === 'inbox' ? 'todos' : mode;
@@ -72,13 +72,13 @@ function Inner() {
   });
 
   React.useEffect(() => {
-    localStorage.setItem('planck.viewMode', viewMode);
+    localStorage.setItem('nanite.viewMode', viewMode);
   }, [viewMode]);
 
   React.useEffect(() => {
     // Don't persist inbox mode
     if (appMode !== 'inbox') {
-      localStorage.setItem('planck.appMode', appMode);
+      localStorage.setItem('nanite.appMode', appMode);
     }
     // When switching modes, ensure activeTabId points to a tab in the new mode
     if (appMode !== 'inbox') {
@@ -372,7 +372,7 @@ function Inner() {
 
   async function handleToggle(id: number, checked: boolean) {
     if (checked) {
-      animateAction(id, 'Todo Completed!', async () => {
+      animateAction(id, 'Item Completed!', async () => {
         await Backend.ToggleComplete(id, checked);
         runSearch();
       }, true); // Expand in Done section
@@ -387,14 +387,14 @@ function Inner() {
     if (!todo) return;
     const sectionName = section === 'now' ? 'Now' : section === 'soon' ? 'Soon' : 'Anytime';
     animateAction(id, `Moved to ${sectionName}!`, async () => {
-      await Backend.UpdateTodo({ ...todo, section } as any);
+      await Backend.UpdateItem({ ...todo, section } as any);
       runSearch();
     }, true); // Expand in new section
   }
 
   async function handleArchive(id: number, archived: boolean) {
     if (archived) {
-      animateAction(id, 'Todo Archived!', async () => {
+      animateAction(id, 'Item Archived!', async () => {
         await Backend.Archive(id, archived);
         runSearch();
       });
@@ -404,12 +404,12 @@ function Inner() {
     }
   }
 
-  function handleOpenNotes(row: TodoRow) { setNotesTodo(row); setNotesOpen(true); }
+  function handleOpenNotes(row: ItemRow) { setNotesItem(row); setNotesOpen(true); }
   async function handleRefClick(id: number, _refType: string) {
     try {
-      const todo = await Backend.GetTodo(id) as any;
+      const todo = await Backend.GetItem(id) as any;
       if (!todo) return;
-      const row: TodoRow = {
+      const row: ItemRow = {
         id: todo.id,
         title: todo.title,
         priority: todo.priority,
@@ -427,20 +427,20 @@ function Inner() {
         type: todo.type,
       };
       setNotesOpen(false);
-      setNotesTodo(null);
-      setEditTodo(row);
+      setNotesItem(null);
+      setEditItem(row);
       setQuickOpen(true);
     } catch (err) {
       console.error("Failed to open linked item:", err);
     }
   }
   async function handleSaveNotes(md: string) {
-    if (!notesTodo) return;
-    await Backend.UpdateTodo({ ...notesTodo, notes_md: md } as any);
-    setNotesOpen(false); setNotesTodo(null); runSearch();
+    if (!notesItem) return;
+    await Backend.UpdateItem({ ...notesItem, notes_md: md } as any);
+    setNotesOpen(false); setNotesItem(null); runSearch();
   }
   async function handleQuickAdd(line: string, extras: any) {
-    const created = await Backend.CreateTodoFromLine(line);
+    const created = await Backend.CreateItemFromLine(line);
     const merged = {
       ...created,
       priority: extras.priority || created.priority,
@@ -452,7 +452,7 @@ function Inner() {
       notes_md: extras.notes_md || created.notes_md,
       inbox: extras.inbox ? true : created.inbox,
     };
-    await Backend.UpdateTodo(merged as any);
+    await Backend.UpdateItem(merged as any);
     setQuickOpen(false);
     runSearch();
   }
@@ -467,29 +467,29 @@ function Inner() {
       notes_md: extras.notes_md || created.notes_md,
       inbox: extras.inbox ? true : created.inbox,
     };
-    await Backend.UpdateTodo(merged as any);
+    await Backend.UpdateItem(merged as any);
     setQuickOpen(false);
     runSearch();
   }
 
-  function handleEditTodo(row: TodoRow) {
-    setEditTodo(row);
+  function handleEditItem(row: ItemRow) {
+    setEditItem(row);
     setQuickOpen(true);
   }
 
-  async function handleUpdateTodo(todo: TodoRow) {
+  async function handleUpdateItem(todo: ItemRow) {
     // Just update the existing todo - don't create a new one!
-    await Backend.UpdateTodo(todo as any);
+    await Backend.UpdateItem(todo as any);
     setQuickOpen(false);
-    setEditTodo(null);
+    setEditItem(null);
     runSearch();
   }
 
-  async function handleCloneTodo(todo: TodoRow) {
+  async function handleCloneItem(todo: ItemRow) {
     const isNote = todo.type === 'note';
     const created = isNote
       ? await Backend.CreateNoteFromLine(todo.title)
-      : await Backend.CreateTodoFromLine(todo.title);
+      : await Backend.CreateItemFromLine(todo.title);
     const cloned = {
       ...created,
       priority: todo.priority,
@@ -501,7 +501,7 @@ function Inner() {
       notes_md: todo.notes_md,
       section: todo.section,
     };
-    await Backend.UpdateTodo(cloned as any);
+    await Backend.UpdateItem(cloned as any);
     await runSearch();
 
     // Find the newly created todo and open it in edit modal
@@ -515,25 +515,25 @@ function Inner() {
     } as any);
     const newTodo = allTodos.find((t: any) => t.id === created.id);
     if (newTodo) {
-      setEditTodo(newTodo);
+      setEditItem(newTodo);
       setQuickOpen(true);
     }
   }
 
-  async function handleConvertType(todo: TodoRow) {
+  async function handleConvertType(todo: ItemRow) {
     const newType = todo.type === 'note' ? 'todo' : 'note';
     const label = newType === 'note' ? 'Converted to Note!' : 'Converted to Todo!';
     animateAction(todo.id, label, async () => {
-      await Backend.UpdateTodo({ ...todo, type: newType } as any);
+      await Backend.UpdateItem({ ...todo, type: newType } as any);
       runSearch();
     }, false);
   }
 
-  async function handleMetaSave(id: number, updates: Partial<TodoRow>) {
+  async function handleMetaSave(id: number, updates: Partial<ItemRow>) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
-    await Backend.UpdateTodo({ ...todo, ...updates } as any);
-    setMetaModalTodo(null);
+    await Backend.UpdateItem({ ...todo, ...updates } as any);
+    setMetaModalItem(null);
     runSearch();
   }
 
@@ -543,7 +543,7 @@ function Inner() {
     const itemName = appMode === 'notes' ? 'Note' : 'Todo';
     const message = pinned ? `${itemName} Pinned!` : `${itemName} Unpinned!`;
     animateAction(id, message, async () => {
-      await Backend.UpdateTodo({ ...todo, pinned } as any);
+      await Backend.UpdateItem({ ...todo, pinned } as any);
       runSearch();
     }, true); // Expand at new position (top if pinned, original if unpinned)
   }
@@ -555,7 +555,7 @@ function Inner() {
       const baseMode = appMode === 'inbox' ? prevAppMode : appMode;
       const created = baseMode === 'notes'
         ? await Backend.CreateNoteFromLine('')
-        : await Backend.CreateTodoFromLine('');
+        : await Backend.CreateItemFromLine('');
       console.log('[InputSubmit] Created inbox item:', created);
       await refreshInboxCount();
       return;
@@ -566,7 +566,7 @@ function Inner() {
       const session = getActiveSession();
       const created = appMode === 'notes'
         ? await Backend.CreateNoteFromLine(query)
-        : await Backend.CreateTodoFromLine(query);
+        : await Backend.CreateItemFromLine(query);
       const merged = {
         ...created,
         priority: session?.priority || created.priority,
@@ -574,7 +574,7 @@ function Inner() {
         contexts: session?.contexts?.length ? session.contexts : created.contexts,
         tags: session?.tags?.length ? session.tags : created.tags,
       };
-      await Backend.UpdateTodo(merged as any);
+      await Backend.UpdateItem(merged as any);
       setQuery('');
       // Force refresh the entire list
       try {
@@ -606,11 +606,11 @@ function Inner() {
   }
 
   async function handleDeleteTodo(id: number) {
-    const deleteMsg = appMode === 'notes' ? 'Note Deleted!' : 'Todo Deleted!';
+    const deleteMsg = appMode === 'notes' ? 'Note Deleted!' : 'Item Deleted!';
     animateAction(id, deleteMsg, async () => {
-      await Backend.DeleteTodo(id);
+      await Backend.DeleteItem(id);
       setQuickOpen(false);
-      setEditTodo(null);
+      setEditItem(null);
       runSearch();
     });
   }
@@ -663,7 +663,7 @@ function Inner() {
         display: 'flex',
         flexDirection: 'column'
       }} >
-        {/* PLANCK Branding - Draggable */}
+        {/* NANITE Branding - Draggable */}
         <div style={{ position: 'relative' }}>
           <div
             style={{
@@ -701,7 +701,7 @@ function Inner() {
                 letterSpacing: '0.12em',
                 color: 'var(--term-info)',
               }}>
-                PLANCK
+                NANITE
               </div>
             </div>
             <div style={{
@@ -775,7 +775,7 @@ function Inner() {
             onClick={() => {
               const newMode = inputMode === 'search' ? 'add' : 'search';
               setInputMode(newMode);
-              localStorage.setItem('planck.inputMode', newMode);
+              localStorage.setItem('nanite.inputMode', newMode);
             }}
             title={inputMode === 'add' ? 'Quick Add Mode (Click to Search)' : 'Search Mode (Click to Quick Add)'}
             onMouseEnter={(e) => {
@@ -907,9 +907,11 @@ function Inner() {
           )}
           {appMode !== 'inbox' && (() => {
             const filteredTabs = settings.tabs.filter(t => (t.appMode || 'todos') === appMode);
-            return filteredTabs.length > 0 && (
+            // Fallback: synthesize a read-only "All" tab if no tabs exist for this mode
+            const displayTabs = filteredTabs.length > 0 ? filteredTabs : [{ id: '__all__', label: 'All', query: '', appMode: appMode as 'todos' | 'notes' }];
+            return displayTabs.length > 0 && (
               <div style={{display: 'flex', gap: '0px'}}>
-                {filteredTabs.map((tab, index) => (
+                {displayTabs.map((tab, index) => (
                   <button
                   type="button"
                   key={tab.id}
@@ -924,7 +926,7 @@ function Inner() {
                      fontSize: '11px',
                      padding: '4px 8px',
                      border: 'none',
-                     borderRadius: index === 0 ? '4px 0 0 4px' : (index === filteredTabs.length - 1 ? '0 4px 4px 0' : '0'),
+                     borderRadius: index === 0 ? '4px 0 0 4px' : (index === displayTabs.length - 1 ? '0 4px 4px 0' : '0'),
                      borderLeft: index > 0 ? '1px solid var(--term-bgAlt)' : 'none',
                      opacity: sessionAsFilter ? 0.4 : 0.8,
                      cursor: sessionAsFilter ? 'not-allowed' : 'pointer'
@@ -1009,12 +1011,12 @@ function Inner() {
                   cursor: 'pointer',
                   userSelect: 'none'
                 }}
-                title={appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)' : 'Switch to Todos (long-press for tab settings)'}
+                title={appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)' : 'Switch to Items (long-press for tab settings)'}
             >
               {appMode === 'todos' ? (
                 <>
                   <CheckSquare size={12} />
-                  Todos
+                  Items
                 </>
               ) : (
                 <>
@@ -1029,7 +1031,7 @@ function Inner() {
         {appMode === 'inbox' ? (
           <InboxView
             onClose={closeInbox}
-            onEdit={(row) => { setEditTodo(row); setQuickOpen(true); }}
+            onEdit={(row) => { setEditItem(row); setQuickOpen(true); }}
             onProcessed={refreshInboxCount}
           />
         ) : (
@@ -1041,11 +1043,11 @@ function Inner() {
           onArchive={handleArchive}
           onDelete={handleDeleteTodo}
           showCompleted={settings.showCompleted}
-          onEditTodo={handleEditTodo}
+          onEditItem={handleEditItem}
           viewMode={viewMode}
           appMode={appMode as 'todos' | 'notes'}
-          onOpenRadialMenu={(todo, position) => setRadialMenuTodo({todo, position})}
-          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editTodo !== null || radialMenuTodo !== null || metaModalTodo !== null}
+          onOpenRadialMenu={(todo, position) => setRadialMenuItem({todo, position})}
+          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editItem !== null || radialMenuItem !== null || metaModalItem !== null}
           hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
           animatingRow={animatingRow}
           settingsButton={
@@ -1125,7 +1127,7 @@ function Inner() {
                   e.preventDefault();
                   setShowPowerMenu(true);
                 }}
-                title="Quit PLANCK"
+                title="Quit NANITE"
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = 'var(--term-accent)';
                 }}
@@ -1208,7 +1210,7 @@ function Inner() {
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
           }}>
             <h2 style={{ margin: '0 0 16px 0', color: 'var(--term-info)', fontSize: '20px' }}>
-              Welcome to Planck!
+              Welcome to Nanite!
             </h2>
             <p style={{ margin: '0 0 24px 0', color: 'var(--term-fg)', lineHeight: '1.6', opacity: 0.9 }}>
               Would you like to add <strong>tutorial</strong> todos? They'll <strong>teach you</strong> todo.txt syntax and show off all the features.
@@ -1291,57 +1293,57 @@ function Inner() {
           runSearch();
         }}
       />
-      <NotesModal open={notesOpen} onOpenChange={setNotesOpen} todo={notesTodo} onSave={handleSaveNotes} onRefClick={handleRefClick} />
-      <EditTodoModal
+      <NotesModal open={notesOpen} onOpenChange={setNotesOpen} todo={notesItem} onSave={handleSaveNotes} onRefClick={handleRefClick} />
+      <EditItemModal
         open={quickOpen}
-        onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditTodo(null); }}
+        onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditItem(null); }}
         onSubmit={appMode === 'notes' ? handleQuickAddNote : handleQuickAdd}
-        onUpdate={handleUpdateTodo}
+        onUpdate={handleUpdateItem}
         onDelete={handleDeleteTodo}
-        editTodo={editTodo}
+        editItem={editItem}
         defaultContexts={defaultNewTodoFilters.contexts}
         defaultProjects={defaultNewTodoFilters.projects}
         defaultTags={defaultNewTodoFilters.tags}
-        isNoteMode={editTodo ? editTodo.type === 'note' : appMode === 'notes'}
+        isNoteMode={editItem ? editItem.type === 'note' : appMode === 'notes'}
         onConvertType={(todo) => {
           handleConvertType(todo);
           setQuickOpen(false);
-          setEditTodo(null);
+          setEditItem(null);
         }}
         onRefClick={handleRefClick}
       />
-      {radialMenuTodo && (
+      {radialMenuItem && (
         <RadialMenuWrapper
-          todo={radialMenuTodo.todo}
-          position={radialMenuTodo.position}
+          todo={radialMenuItem.todo}
+          position={radialMenuItem.position}
           onMoveSection={handleMoveSection}
           onDelete={handleDeleteTodo}
           onArchive={handleArchive}
           onToggle={handleToggle}
           onEdit={(todo) => {
-            setRadialMenuTodo(null);
-            handleEditTodo(todo);
+            setRadialMenuItem(null);
+            handleEditItem(todo);
           }}
           onClone={(todo) => {
-            setRadialMenuTodo(null);
-            handleCloneTodo(todo);
+            setRadialMenuItem(null);
+            handleCloneItem(todo);
           }}
           onMeta={(todo) => {
-            setRadialMenuTodo(null);
-            setMetaModalTodo(todo);
+            setRadialMenuItem(null);
+            setMetaModalItem(todo);
           }}
           onPin={handlePin}
           onConvertType={(todo) => {
-            setRadialMenuTodo(null);
+            setRadialMenuItem(null);
             handleConvertType(todo);
           }}
-          onClose={() => setRadialMenuTodo(null)}
+          onClose={() => setRadialMenuItem(null)}
         />
       )}
       <MetaModal
-        open={metaModalTodo !== null}
-        todo={metaModalTodo}
-        onOpenChange={(open) => !open && setMetaModalTodo(null)}
+        open={metaModalItem !== null}
+        todo={metaModalItem}
+        onOpenChange={(open) => !open && setMetaModalItem(null)}
         onSave={handleMetaSave}
       />
       <QuickSearchModal
@@ -1350,10 +1352,10 @@ function Inner() {
         onOpenItem={(row) => {
           setQuickSearchOpen(false);
           if (row.type === 'note') {
-            setNotesTodo(row);
+            setNotesItem(row);
             setNotesOpen(true);
           } else {
-            setEditTodo(row);
+            setEditItem(row);
             setQuickOpen(true);
           }
         }}

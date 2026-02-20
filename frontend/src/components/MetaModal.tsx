@@ -1,5 +1,5 @@
 import * as React from "react";
-import { TodoRow } from "./TerminalList";
+import { ItemRow } from "./TerminalList";
 import ContextsAutocomplete from "./ContextsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import TagsAutocomplete from "./TagsAutocomplete";
@@ -7,9 +7,9 @@ import CustomScrollbar from "./CustomScrollbar";
 
 type Props = {
   open: boolean;
-  todo: TodoRow | null;
+  todo: ItemRow | null;
   onOpenChange: (open: boolean) => void;
-  onSave: (id: number, updates: Partial<TodoRow>) => void;
+  onSave: (id: number, updates: Partial<ItemRow>) => void;
 };
 
 export default function MetaModal({ open, todo, onOpenChange, onSave }: Props) {

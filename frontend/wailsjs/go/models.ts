@@ -21,6 +21,54 @@ export namespace main {
 
 export namespace store {
 	
+	export class Item {
+	    id: number;
+	    title: string;
+	    priority?: string;
+	    completed: boolean;
+	    archived: boolean;
+	    created_at: string;
+	    updated_at: string;
+	    due_at?: string;
+	    threshold_at?: string;
+	    recurrence_rule?: string;
+	    source_line: string;
+	    notes_md: string;
+	    section: string;
+	    pinned: boolean;
+	    type: string;
+	    inbox: boolean;
+	    projects: string[];
+	    contexts: string[];
+	    tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Item(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	        this.priority = source["priority"];
+	        this.completed = source["completed"];
+	        this.archived = source["archived"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	        this.due_at = source["due_at"];
+	        this.threshold_at = source["threshold_at"];
+	        this.recurrence_rule = source["recurrence_rule"];
+	        this.source_line = source["source_line"];
+	        this.notes_md = source["notes_md"];
+	        this.section = source["section"];
+	        this.pinned = source["pinned"];
+	        this.type = source["type"];
+	        this.inbox = source["inbox"];
+	        this.projects = source["projects"];
+	        this.contexts = source["contexts"];
+	        this.tags = source["tags"];
+	    }
+	}
 	export class SearchRequest {
 	    query: string;
 	    projects: string[];
@@ -57,54 +105,6 @@ export namespace store {
 	        this.sort_dir = source["sort_dir"];
 	        this.type = source["type"];
 	        this.include_inbox = source["include_inbox"];
-	    }
-	}
-	export class Todo {
-	    id: number;
-	    title: string;
-	    priority?: string;
-	    completed: boolean;
-	    archived: boolean;
-	    created_at: string;
-	    updated_at: string;
-	    due_at?: string;
-	    threshold_at?: string;
-	    recurrence_rule?: string;
-	    source_line: string;
-	    notes_md: string;
-	    section: string;
-	    pinned: boolean;
-	    type: string;
-	    inbox: boolean;
-	    projects: string[];
-	    contexts: string[];
-	    tags: string[];
-	
-	    static createFrom(source: any = {}) {
-	        return new Todo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
-	        this.priority = source["priority"];
-	        this.completed = source["completed"];
-	        this.archived = source["archived"];
-	        this.created_at = source["created_at"];
-	        this.updated_at = source["updated_at"];
-	        this.due_at = source["due_at"];
-	        this.threshold_at = source["threshold_at"];
-	        this.recurrence_rule = source["recurrence_rule"];
-	        this.source_line = source["source_line"];
-	        this.notes_md = source["notes_md"];
-	        this.section = source["section"];
-	        this.pinned = source["pinned"];
-	        this.type = source["type"];
-	        this.inbox = source["inbox"];
-	        this.projects = source["projects"];
-	        this.contexts = source["contexts"];
-	        this.tags = source["tags"];
 	    }
 	}
 

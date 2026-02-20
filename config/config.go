@@ -16,20 +16,20 @@ func getConfigDir() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home := os.Getenv("HOME")
-		return filepath.Join(home, ".config", "planck")
+		return filepath.Join(home, ".config", "nanite")
 	case "windows":
 		appdata := os.Getenv("APPDATA")
 		if appdata == "" {
 			appdata = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
 		}
-		return filepath.Join(appdata, "Planck")
+		return filepath.Join(appdata, "Nanite")
 	default: // linux
 		home := os.Getenv("HOME")
 		configHome := os.Getenv("XDG_CONFIG_HOME")
 		if configHome == "" {
 			configHome = filepath.Join(home, ".config")
 		}
-		return filepath.Join(configHome, "planck")
+		return filepath.Join(configHome, "nanite")
 	}
 }
 
@@ -38,20 +38,20 @@ func getDefaultDatabasePath() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home := os.Getenv("HOME")
-		return filepath.Join(home, "Library", "Application Support", "Planck")
+		return filepath.Join(home, "Library", "Application Support", "Nanite")
 	case "windows":
 		appdata := os.Getenv("APPDATA")
 		if appdata == "" {
 			appdata = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
 		}
-		return filepath.Join(appdata, "Planck", "data")
+		return filepath.Join(appdata, "Nanite", "data")
 	default: // linux
 		home := os.Getenv("HOME")
 		dataHome := os.Getenv("XDG_DATA_HOME")
 		if dataHome == "" {
 			dataHome = filepath.Join(home, ".local", "share")
 		}
-		return filepath.Join(dataHome, "planck")
+		return filepath.Join(dataHome, "nanite")
 	}
 }
 

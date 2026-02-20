@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"todo-app/config"
-	"todo-app/parse"
-	"todo-app/store"
+	"nanite/config"
+	"nanite/parse"
+	"nanite/store"
 )
 
 type App struct {
@@ -75,7 +75,7 @@ func (a *App) SetDatabasePath(path string) error {
 	}
 
 	// Check if writable
-	testFile := path + "/.planck-write-test"
+	testFile := path + "/.nanite-write-test"
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		return fmt.Errorf("directory not writable: %s", path)
 	}
@@ -100,9 +100,9 @@ func (a *App) SetDatabasePath(path string) error {
 	return nil
 }
 
-func (a *App) CreateTodoFromLine(line string) (*store.Todo, error) {
+func (a *App) CreateItemFromLine(line string) (*store.Item, error) {
 	p := parse.ParseLine(line)
-	t := &store.Todo{
+	t := &store.Item{
 		Title:     p.Title,
 		Priority:  p.Priority,
 		Projects:  p.Projects,
@@ -113,12 +113,12 @@ func (a *App) CreateTodoFromLine(line string) (*store.Todo, error) {
 		Source:    line,
 		Type:      "todo",
 	}
-	return a.Store.CreateTodo(a.ctx, t)
+	return a.Store.CreateItem(a.ctx, t)
 }
 
-func (a *App) CreateNoteFromLine(line string) (*store.Todo, error) {
+func (a *App) CreateNoteFromLine(line string) (*store.Item, error) {
 	p := parse.ParseLine(line)
-	t := &store.Todo{
+	t := &store.Item{
 		Title:    p.Title,
 		Projects: p.Projects,
 		Contexts: p.Contexts,
@@ -126,10 +126,10 @@ func (a *App) CreateNoteFromLine(line string) (*store.Todo, error) {
 		Source:   line,
 		Type:     "note",
 	}
-	return a.Store.CreateTodo(a.ctx, t)
+	return a.Store.CreateItem(a.ctx, t)
 }
 
-const demoDataTag = "planck-demo"
+const demoDataTag = "nanite-demo"
 
 func (a *App) HasDemoData() (bool, error) {
 	if a.Store == nil {
@@ -162,9 +162,9 @@ func (a *App) SeedDemoData() error {
 	demos := []todoWithMeta{
 		// NOW section - Top priorities to start
 		{
-			line:    "(A) Welcome to Planck! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
+			line:    "(A) Welcome to NANITE! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
 			section: "now",
-			notes:   "# Welcome!\n\nPlanck is a todo.txt task manager.\n\n**Quick Start:**\n- Click any todo to view/edit notes\n- Press ⌘N to add todos\n- Right-click for actions\n- Search with +project @context #tag",
+			notes:   "# Welcome!\n\nNANITE is a todo.txt task manager.\n\n**Quick Start:**\n- Click any todo to view/edit notes\n- Press ⌘N to add todos\n- Right-click for actions\n- Search with +project @context #tag",
 		},
 		{
 			line:    "(A) Learn todo.txt syntax - (A)=high +project @context #tag due:2025-10-25 +tutorial @getting-started #now",
@@ -203,7 +203,7 @@ func (a *App) SeedDemoData() error {
 		{
 			line:    "(C) Sync with iCloud Drive across devices due:2025-12-01 +tutorial @sync #icloud #anytime",
 			section: "anytime",
-			notes:   "# iCloud Sync\n\n1. Create folder: `~/Library/Mobile Documents/com~apple~CloudDocs/Planck`\n2. Settings → Database Location → Change\n3. Paste path, restart\n4. On other devices: Use Existing Database\n\nWorks with Dropbox/Google Drive too!",
+			notes:   "# iCloud Sync\n\n1. Create folder: `~/Library/Mobile Documents/com~apple~CloudDocs/NANITE`\n2. Settings → Database Location → Change\n3. Paste path, restart\n4. On other devices: Use Existing Database\n\nWorks with Dropbox/Google Drive too!",
 		},
 		{
 			line:    "Keyboard shortcuts: ⌘N=new, Esc=clear +tutorial @shortcuts #anytime",
@@ -264,7 +264,7 @@ func (a *App) SeedDemoData() error {
 
 	for _, demo := range demos {
 		p := parse.ParseLine(demo.line)
-		todo := &store.Todo{
+		todo := &store.Item{
 			Title:     p.Title,
 			Priority:  p.Priority,
 			Projects:  p.Projects,
@@ -276,7 +276,7 @@ func (a *App) SeedDemoData() error {
 			NotesMD:   demo.notes,
 			Section:   demo.section,
 		}
-		_, err := a.Store.CreateTodo(a.ctx, todo)
+		_, err := a.Store.CreateItem(a.ctx, todo)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func (a *App) RemoveDemoData() error {
 	}
 
 	for _, todo := range results {
-		err = a.Store.DeleteTodo(a.ctx, int64(todo.ID))
+		err = a.Store.DeleteItem(a.ctx, int64(todo.ID))
 		if err != nil {
 			return err
 		}
@@ -310,16 +310,16 @@ func (a *App) RemoveDemoData() error {
 	return nil
 }
 
-func (a *App) GetTodo(id int64) (*store.Todo, error) {
-	return a.Store.GetTodo(a.ctx, id)
+func (a *App) GetItem(id int64) (*store.Item, error) {
+	return a.Store.GetItem(a.ctx, id)
 }
 
-func (a *App) GetBackrefs(id int64) ([]store.Todo, error) {
+func (a *App) GetBackrefs(id int64) ([]store.Item, error) {
 	return a.Store.GetBackrefs(a.ctx, id)
 }
 
-func (a *App) UpdateTodo(t store.Todo) error {
-	return a.Store.UpdateTodo(a.ctx, &t)
+func (a *App) UpdateItem(t store.Item) error {
+	return a.Store.UpdateItem(a.ctx, &t)
 }
 
 func (a *App) ToggleComplete(id int64, completed bool) error {
@@ -330,15 +330,15 @@ func (a *App) Archive(id int64, archived bool) error {
 	return a.Store.Archive(a.ctx, id, archived)
 }
 
-func (a *App) DeleteTodo(id int64) error {
-	return a.Store.DeleteTodo(a.ctx, id)
+func (a *App) DeleteItem(id int64) error {
+	return a.Store.DeleteItem(a.ctx, id)
 }
 
 func (a *App) GetInboxCount() (int, error) {
 	return a.Store.GetInboxCount(a.ctx)
 }
 
-func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Todo, error) {
+func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Item, error) {
 	return a.Store.GetInboxItems(a.ctx, req)
 }
 
@@ -346,7 +346,7 @@ func (a *App) ProcessInboxItem(id int64) error {
 	return a.Store.ProcessInboxItem(a.ctx, id)
 }
 
-func (a *App) Search(req store.SearchRequest) ([]store.Todo, error) {
+func (a *App) Search(req store.SearchRequest) ([]store.Item, error) {
 	req.Query = strings.TrimSpace(req.Query)
 	println("Backend search query:", req.Query, "statuses:", len(req.Statuses))
 	results, err := a.Store.Search(a.ctx, req)
@@ -412,7 +412,7 @@ func (a *App) ImportTodoTxt(content string) error {
 		if line == "" {
 			continue
 		}
-		_, err := a.CreateTodoFromLine(line)
+		_, err := a.CreateItemFromLine(line)
 		if err != nil {
 			return err
 		}

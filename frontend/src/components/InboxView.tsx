@@ -1,12 +1,12 @@
 import * as React from "react";
-import { TodoRow } from "./TerminalList";
+import { ItemRow } from "./TerminalList";
 import CustomScrollbar from "./CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
 import { Archive, Trash2, CheckCircle, CheckSquare, Square } from "lucide-react";
 
 type Props = {
   onClose: () => void;
-  onEdit: (row: TodoRow) => void;
+  onEdit: (row: ItemRow) => void;
   onProcessed: () => void;
 };
 
@@ -36,7 +36,7 @@ const SCROLL_H = 410;
 const SCROLL_H_WITH_BAR = 350;
 
 export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
-  const [items, setItems] = React.useState<TodoRow[]>([]);
+  const [items, setItems] = React.useState<ItemRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [focusedIndex, setFocusedIndex] = React.useState(0);
@@ -56,7 +56,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
         sort_by: "created_at",
         sort_dir: "desc",
       } as any);
-      setItems(Array.isArray(results) ? (results as TodoRow[]) : []);
+      setItems(Array.isArray(results) ? (results as ItemRow[]) : []);
     } catch (err) {
       console.error("Failed to load inbox items:", err);
       setItems([]);
@@ -191,7 +191,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
     setItems(prev => prev.filter(i => i.id !== id));
     setShowDeleteConfirm(null);
     try {
-      await Backend.DeleteTodo(id);
+      await Backend.DeleteItem(id);
       onProcessed();
     } catch (err) {
       console.error("Failed to delete:", err);
@@ -236,7 +236,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
     setSelectedIds(new Set());
     setBulkDeleteConfirm(false);
     try {
-      for (const id of ids) await Backend.DeleteTodo(id);
+      for (const id of ids) await Backend.DeleteItem(id);
       onProcessed();
     } catch (err) {
       console.error("Failed to bulk delete:", err);

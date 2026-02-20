@@ -1,19 +1,83 @@
-# README
+# NANITE
 
-## About
+Keyboard-driven personal task and note management.
 
-This is the official Wails React-TS template.
+## What is NANITE?
 
-You can configure the project by editing `wails.json`. More information about the project settings can be found
-here: https://wails.io/docs/reference/project-config
+NANITE is a minimal desktop app for capturing and managing tasks and notes without leaving the keyboard. It uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging — all stored locally in a SQLite database.
 
-## Live Development
+## Key Features
 
-To run in live development mode, run `wails dev` in the project directory. This will run a Vite development
-server that will provide very fast hot reload of your frontend changes. If you want to develop in a browser
-and have access to your Go methods, there is also a dev server that runs on http://localhost:34115. Connect
-to this in your browser, and you can call your Go code from devtools.
+- **Keyboard-first** — create, search, and navigate without touching the mouse
+- **todo.txt-inspired syntax** — `(A) Buy milk +shopping @errands #personal due:2026-02-25`
+- **Items + Notes** — one data model for both task items and long-form notes with rich-text editing
+- **Inbox** — fast capture with zero taxonomy friction; triage later
+- **Sessions** — temporary context filter for focused work; new items auto-inherit session tags
+- **Scopes** — Now / Soon / Anytime views to manage focus
+- **Custom Tabs** — save common searches as persistent tab filters
+- **Wikilinks** — `@reference` chips link items together with backlinks
+- **Cloud sync** — store your database in iCloud Drive, Dropbox, or any folder
 
-## Building
+## Install
 
-To build a redistributable, production mode package, use `wails build`.
+See [INSTALL.md](INSTALL.md) for platform-specific instructions (macOS, Windows, Linux).
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd/Ctrl+N` | New Item |
+| `Cmd/Ctrl+Shift+N` | New Note |
+| `Cmd/Ctrl+S` | Quick Search |
+| `Shift+Shift` | Quick Search (alias) |
+| `Cmd/Ctrl+I` | Open Inbox |
+| `Cmd/Ctrl+Shift+M` | Toggle Items / Notes mode |
+| `Escape` | Close modal / back |
+
+## Quick Add Syntax
+
+```
+(A) Buy milk +shopping @errands #personal due:2026-02-25
+```
+
+| Token | Meaning |
+|-------|---------|
+| `(A)` | Priority — A, B, or C |
+| `+project` | Project tag |
+| `@context` | Context tag |
+| `#tag` | Flexible label |
+| `due:YYYY-MM-DD` | Due date |
+| `t:YYYY-MM-DD` | Threshold (hide until date) |
+| `rec:Nd/Nw/Nm` | Recurrence (days/weeks/months) |
+
+## Development
+
+```bash
+# Run in dev mode (hot reload)
+wails dev
+
+# Build macOS app locally
+./build-local.sh
+
+# Cross-platform distribution build
+./build-for-friends.sh
+
+# Regenerate Wails TypeScript bindings after Go changes
+wails generate module
+
+# Type-check frontend only
+cd frontend && npx tsc --noEmit
+```
+
+**Debug mode** (opens WebKit inspector on startup):
+```bash
+DEBUG=1 open build/bin/NANITE.app
+```
+
+## Contributing
+
+NANITE is in public beta. Bug reports and feature requests are welcome — please open an issue on GitHub.
+
+## License
+
+Copyright © 2026 Hollis Labs. All rights reserved.

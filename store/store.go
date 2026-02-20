@@ -212,7 +212,7 @@ func (s *Store) setLinks(ctx context.Context, table string, linkCol string, todo
 	return nil
 }
 
-func (s *Store) hydrate(ctx context.Context, t *Todo) error {
+func (s *Store) hydrate(ctx context.Context, t *Item) error {
 	// Initialize empty slices to avoid null in JSON
 	t.Projects = []string{}
 	t.Contexts = []string{}
@@ -261,7 +261,7 @@ func (s *Store) hydrate(ctx context.Context, t *Todo) error {
 }
 
 // CreateTodo creates a todo with normalized links.
-func (s *Store) CreateTodo(ctx context.Context, t *Todo) (*Todo, error) {
+func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
@@ -297,7 +297,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	return t, nil
 }
 
-func (s *Store) UpdateTodo(ctx context.Context, t *Todo) error {
+func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
@@ -353,8 +353,8 @@ func ExtractRefIDs(html string) []int64 {
 }
 
 // GetTodo returns a single todo/note by ID.
-func (s *Store) GetTodo(ctx context.Context, id int64) (*Todo, error) {
-	var t Todo
+func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
+	var t Item
 	var pri *string
 	var source sql.NullString
 	var notesMD sql.NullString
@@ -396,7 +396,7 @@ func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int6
 }
 
 // GetBackrefs returns all todos/notes that reference targetID.
-func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Todo, error) {
+func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
        t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox
@@ -404,20 +404,20 @@ FROM todos t JOIN refs r ON r.source_id = t.id
 WHERE r.target_id = ?
 ORDER BY t.updated_at DESC`, targetID)
 	if err != nil {
-		return []Todo{}, err
+		return []Item{}, err
 	}
 	defer rows.Close()
 
-	var out []Todo
+	var out []Item
 	for rows.Next() {
-		var t Todo
+		var t Item
 		var pri *string
 		var source sql.NullString
 		var notesMD sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
 			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox)
 		if err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Source = source.String
@@ -426,12 +426,12 @@ ORDER BY t.updated_at DESC`, targetID)
 			t.Section = "anytime"
 		}
 		if err := s.hydrate(ctx, &t); err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		out = append(out, t)
 	}
 	if out == nil {
-		return []Todo{}, nil
+		return []Item{}, nil
 	}
 	return out, nil
 }
@@ -445,7 +445,7 @@ func (s *Store) Archive(ctx context.Context, id int64, archived bool) error {
 	return err
 }
 
-func (s *Store) DeleteTodo(ctx context.Context, id int64) error {
+func (s *Store) DeleteItem(ctx context.Context, id int64) error {
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id)
 	return err
 }
@@ -458,7 +458,7 @@ type qparts struct {
 	limit string
 }
 
-func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
+func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q := qparts{}
 	q.where = append(q.where, "(1=1)")
 
@@ -578,20 +578,20 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 	println("SQL Query:", sqlStr)
 	rows, err := s.DB.QueryContext(ctx, sqlStr, q.args...)
 	if err != nil {
-		return []Todo{}, err
+		return []Item{}, err
 	}
 	defer rows.Close()
 
-	var out []Todo
+	var out []Item
 	for rows.Next() {
-		var t Todo
+		var t Item
 		var pri *string
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
 		if err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Section = section
@@ -601,12 +601,12 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Todo, error) {
 			t.Section = "anytime"
 		}
 		if err := s.hydrate(ctx, &t); err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		out = append(out, t)
 	}
 	if out == nil {
-		return []Todo{}, nil
+		return []Item{}, nil
 	}
 	return out, nil
 }
@@ -619,7 +619,7 @@ func (s *Store) GetInboxCount(ctx context.Context) (int, error) {
 }
 
 // GetInboxItems returns inbox items, optionally filtered by a keyword query.
-func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Todo, error) {
+func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q := qparts{}
 	q.where = append(q.where, "t.inbox = 1")
 	q.where = append(q.where, "t.archived = 0")
@@ -657,20 +657,20 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Todo, e
 
 	rows, err := s.DB.QueryContext(ctx, sqlStr, q.args...)
 	if err != nil {
-		return []Todo{}, err
+		return []Item{}, err
 	}
 	defer rows.Close()
 
-	var out []Todo
+	var out []Item
 	for rows.Next() {
-		var t Todo
+		var t Item
 		var pri *string
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
 		if err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Section = section
@@ -680,12 +680,12 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Todo, e
 			t.Section = "anytime"
 		}
 		if err := s.hydrate(ctx, &t); err != nil {
-			return []Todo{}, err
+			return []Item{}, err
 		}
 		out = append(out, t)
 	}
 	if out == nil {
-		return []Todo{}, nil
+		return []Item{}, nil
 	}
 	return out, nil
 }

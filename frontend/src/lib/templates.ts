@@ -8,7 +8,7 @@ export type TaskTemplate = {
   createdAt: string;
 };
 
-const STORAGE_KEY = 'planck.taskTemplates';
+const STORAGE_KEY = 'nanite.taskTemplates';
 
 export function getTemplates(): TaskTemplate[] {
   try {

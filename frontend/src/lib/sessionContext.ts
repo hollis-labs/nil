@@ -17,8 +17,8 @@ export type ActiveSession = {
   useAsFilterTab?: boolean;
 };
 
-const PROFILES_KEY = 'planck.sessionProfiles';
-const ACTIVE_KEY = 'planck.activeSession';
+const PROFILES_KEY = 'nanite.sessionProfiles';
+const ACTIVE_KEY = 'nanite.activeSession';
 
 export function getSessionProfiles(): SessionProfile[] {
   try {

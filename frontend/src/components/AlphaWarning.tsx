@@ -83,7 +83,7 @@ export default function AlphaWarning({ open, onComplete }: Props) {
 
         {/* Content */}
         <div style={{ flex: 1 }}>
-          {/* Title matching PLANCK branding */}
+          {/* Title matching NANITE branding */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '0.75rem' }}>
             <h3 style={{
               color: 'var(--term-accent)',
@@ -93,7 +93,7 @@ export default function AlphaWarning({ open, onComplete }: Props) {
               fontWeight: 800,
               fontFamily: '"Courier New", Courier, monospace',
             }}>
-              PLANCK
+              NANITE
             </h3>
             <div style={{
               fontSize: '10px',
@@ -115,7 +115,7 @@ export default function AlphaWarning({ open, onComplete }: Props) {
             marginBottom: '1.5rem',
           }}>
             <p style={{ margin: '0 0 0.75rem 0' }}>
-              Thank you for trying out PLANCK!
+              Thank you for trying out NANITE!
             </p>
             <p style={{ margin: '0 0 0.75rem 0' }}>
               This software is in <strong style={{ color: 'var(--term-accent)', fontWeight: 600 }}>early alpha</strong>. 

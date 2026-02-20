@@ -81,7 +81,7 @@ const AboutModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen
         <BeeIcon />
       </div>
       <div className="copyright-modal-text">
-        <h3>PLANCK</h3>
+        <h3>NANITE</h3>
         <p>Optimize for speed, precision planning, and minimal friction. Organize your work in discrete, actionable units. The quantum of action.</p>
         <div className="copyright-modal-links">
           <a href="https://hollislabs.com" target="_blank" rel="noopener noreferrer">

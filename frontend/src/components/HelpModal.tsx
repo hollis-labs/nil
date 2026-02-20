@@ -7,7 +7,7 @@ type Props = {
 };
 
 export default function HelpModal({ open, onOpenChange }: Props) {
-  const [activeTab, setActiveTab] = React.useState<'app' | 'todotxt'>('app');
+  const [activeTab, setActiveTab] = React.useState<'app' | 'syntax'>('app');
 
   if (!open) return null;
 
@@ -43,7 +43,7 @@ export default function HelpModal({ open, onOpenChange }: Props) {
         {/* Fixed Header */}
         <div style={{ padding: '20px 20px 0 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <div style={{ fontWeight: 600, fontSize: '16px' }}>Help & Guide</div>
+            <div style={{ fontWeight: 600, fontSize: '16px' }}>Help &amp; Guide</div>
             <button className="badge" onClick={() => onOpenChange(false)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Close</button>
           </div>
 
@@ -63,18 +63,18 @@ export default function HelpModal({ open, onOpenChange }: Props) {
               App Help
             </button>
             <button
-              onClick={() => setActiveTab('todotxt')}
-              className={`badge ${activeTab === 'todotxt' ? 'success' : ''}`}
+              onClick={() => setActiveTab('syntax')}
+              className={`badge ${activeTab === 'syntax' ? 'success' : ''}`}
               style={{
                 padding: '4px 8px',
                 fontSize: '11px',
                 borderRadius: '0 4px 4px 0',
                 border: 'none',
                 borderLeft: '1px solid var(--term-border)',
-                opacity: activeTab === 'todotxt' ? 1 : 0.8
+                opacity: activeTab === 'syntax' ? 1 : 0.8
               }}
             >
-              Todo.txt Guide
+              Syntax Guide
             </button>
           </div>
         </div>
@@ -83,7 +83,7 @@ export default function HelpModal({ open, onOpenChange }: Props) {
         <CustomScrollbar style={{ flex: 1, minHeight: 0 }}>
           <div style={{ padding: '0 20px' }}>
             {activeTab === 'app' && <AppHelp />}
-            {activeTab === 'todotxt' && <TodoTxtHelp />}
+            {activeTab === 'syntax' && <SyntaxHelp />}
           </div>
         </CustomScrollbar>
       </div>
@@ -92,122 +92,136 @@ export default function HelpModal({ open, onOpenChange }: Props) {
 }
 
 function AppHelp() {
+  const code = (s: string) => (
+    <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>{s}</code>
+  );
+
   return (
     <div style={{ paddingBottom: '20px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Getting Started with PLANCK</h3>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>PLANCK is your simple, powerful task manager. Here's how to get started:</p>
-      
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Adding Your First Task</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>Click the <strong>+</strong> button or press <strong>⌘N</strong> (Cmd+N on Mac) to create a new task. Just type what you need to do!</p>
-      
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Organizing Tasks</h4>
-      <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
-        <li style={{ marginBottom: '6px' }}><strong>Priority:</strong> Add (A), (B), or (C) at the start - like "(A) Important task"</li>
-        <li style={{ marginBottom: '6px' }}><strong>Projects:</strong> Add +project to group related tasks - like "+home" or "+work"</li>
-        <li style={{ marginBottom: '6px' }}><strong>Contexts:</strong> Add @context for where you'll do it - like "@computer" or "@phone"</li>
-        <li style={{ marginBottom: '6px' }}><strong>Tags:</strong> Add #tag for categories - like "#urgent" or "#ideas"</li>
-      </ul>
+      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Getting Started with NANITE</h3>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>NANITE is a keyboard-driven task and note manager. Here's how to get started:</p>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Searching</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Use the search bar to filter your tasks:</p>
-      <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
-        <li style={{ marginBottom: '6px' }}>Type any word to search</li>
-        <li style={{ marginBottom: '6px' }}>Type <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>+project</code> to see only that project</li>
-        <li style={{ marginBottom: '6px' }}>Type <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>@context</code> to filter by context</li>
-        <li style={{ marginBottom: '6px' }}>Type <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>#tag</code> to find tagged items</li>
-        <li style={{ marginBottom: '6px' }}>Combine them! Try: <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>+work @computer #urgent</code></li>
-      </ul>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Keyboard Shortcuts</h4>
+      <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '16px' }}>
+        <tbody>
+          {[
+            ['Cmd/Ctrl+N', 'New Item'],
+            ['Cmd/Ctrl+Shift+N', 'New Note'],
+            ['Cmd/Ctrl+S', 'Quick Search'],
+            ['Shift+Shift', 'Quick Search (alias)'],
+            ['Cmd/Ctrl+I', 'Open Inbox'],
+            ['Cmd/Ctrl+Shift+M', 'Toggle Items / Notes mode'],
+            ['Escape', 'Close modal / back'],
+          ].map(([key, desc]) => (
+            <tr key={key}>
+              <td style={{ padding: '4px 12px 4px 0', fontFamily: 'monospace', fontSize: '12px', whiteSpace: 'nowrap', color: 'var(--term-accent)' }}>{key}</td>
+              <td style={{ padding: '4px 0', opacity: 0.9 }}>{desc}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Adding Items</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Press <strong>Cmd+N</strong> or click the <strong>+</strong> button. Type what you need to do and press Enter.</p>
 
       <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Organizing with Sections</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>PLANCK has three sections to help you focus:</p>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>NANITE has three sections to help you focus:</p>
       <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
-        <li style={{ marginBottom: '6px' }}><strong>Now:</strong> What you're working on right now (3-5 tasks)</li>
-        <li style={{ marginBottom: '6px' }}><strong>Soon:</strong> What's coming up next</li>
-        <li style={{ marginBottom: '6px' }}><strong>Anytime:</strong> Everything else - ideas, someday tasks</li>
+        <li style={{ marginBottom: '6px' }}><strong>Now</strong> — What you're working on right now (keep this to 3–5 items)</li>
+        <li style={{ marginBottom: '6px' }}><strong>Soon</strong> — What's coming up next</li>
+        <li style={{ marginBottom: '6px' }}><strong>Anytime</strong> — Everything else: ideas, someday tasks</li>
       </ul>
-      <p>Right-click any task and choose "Move to..." to organize it.</p>
+      <p style={{ fontSize: '13px', lineHeight: '1.6' }}>Right-click any item and choose "Move to…" to organize it.</p>
 
-      <h4 style={{ color: 'var(--term-accent)', marginTop: '20px' }}>Adding Notes</h4>
-      <p>Click any task to add detailed notes. You can use basic formatting like bold, lists, and links.</p>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Inbox — Fast Capture</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>
+        Press <strong>Cmd+I</strong> to open the Inbox. Create an item with no title to send it straight to the Inbox — add context later.
+        Use the "→ Inbox" button in the create modal to deliberately route any item to the Inbox regardless of content.
+      </p>
 
-      <h4 style={{ color: 'var(--term-accent)', marginTop: '20px' }}>Quick Tips</h4>
-      <ul style={{ marginLeft: '20px' }}>
-        <li>Check the box to mark a task done</li>
-        <li>Right-click for more actions (edit, delete, archive)</li>
-        <li>Click the 🎯 icon to set a temporary focus filter</li>
-        <li>Click ⚙️ to change themes and settings</li>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Searching</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Use the search bar or Quick Search (Cmd+S) to filter items:</p>
+      <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
+        <li style={{ marginBottom: '6px' }}>Type any word to search by keyword</li>
+        <li style={{ marginBottom: '6px' }}>Type {code('+project')} to filter by project</li>
+        <li style={{ marginBottom: '6px' }}>Type {code('@context')} to filter by context</li>
+        <li style={{ marginBottom: '6px' }}>Type {code('#tag')} to filter by tag</li>
+        <li style={{ marginBottom: '6px' }}>Combine freely: {code('+work @computer #urgent')}</li>
       </ul>
+
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Sessions — Focused Work</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>
+        Click the 🎯 icon to set a temporary session context (e.g., {code('+work @computer')}).
+        While a session is active, new items automatically inherit the session's tags and contexts for faster capture.
+        Enable "Use as Filter Tab" to filter the main view to only session items.
+      </p>
+
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Notes</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6' }}>
+        Click any item to add rich-text notes with Markdown support: headings, bold, italic, lists, code, and {code('@reference')} wikilinks that link to other items.
+      </p>
     </div>
   );
 }
 
-function TodoTxtHelp() {
+function SyntaxHelp() {
   return (
     <div style={{ paddingBottom: '20px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Todo.txt Format</h3>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>PLANCK uses the popular todo.txt format. It's a simple, human-readable way to organize tasks in plain text.</p>
+      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Quick Add Syntax Guide</h3>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>
+        NANITE uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging.
+        It is <em>not</em> a strict todo.txt implementation — notably, {' '}
+        <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>#tag</code> is a NANITE extension
+        (standard todo.txt uses key:value pairs).
+      </p>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Basic Format</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>A basic task looks like this:</p>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Full Example</h4>
       <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        Call dentist for appointment
+        (A) Buy groceries +home @errands #tonight due:2026-02-25
       </code>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Adding Priority</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Put (A), (B), or (C) at the very beginning:</p>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Call dentist for appointment
-      </code>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>(A) = most important, (B) = important, (C) = nice to have</p>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Syntax Reference</h4>
+      <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '16px' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '4px 12px 8px 0', opacity: 0.6, fontSize: '11px', fontWeight: 500 }}>Token</th>
+            <th style={{ textAlign: 'left', padding: '4px 0 8px 0', opacity: 0.6, fontSize: '11px', fontWeight: 500 }}>Meaning</th>
+            <th style={{ textAlign: 'left', padding: '4px 0 8px 0', opacity: 0.6, fontSize: '11px', fontWeight: 500 }}>Example</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[
+            ['(A)', 'Priority — A, B, or C', '(A), (B), (C)'],
+            ['+project', 'Project tag', '+shopping, +work'],
+            ['@context', 'Context tag', '@errands, @computer'],
+            ['#tag', 'Flexible label (NANITE extension)', '#urgent, #ideas'],
+            ['due:YYYY-MM-DD', 'Due date', 'due:2026-02-25'],
+            ['t:YYYY-MM-DD', 'Threshold — hide until this date', 't:2026-02-01'],
+            ['rec:N d/w/m', 'Recurrence', 'rec:1w, rec:30d, rec:3m'],
+          ].map(([token, meaning, example]) => (
+            <tr key={token} style={{ borderTop: '1px solid var(--term-border)' }}>
+              <td style={{ padding: '6px 12px 6px 0', fontFamily: 'monospace', fontSize: '12px', color: 'var(--term-accent)', whiteSpace: 'nowrap' }}>{token}</td>
+              <td style={{ padding: '6px 12px 6px 0', opacity: 0.9 }}>{meaning}</td>
+              <td style={{ padding: '6px 0', fontFamily: 'monospace', fontSize: '11px', opacity: 0.7 }}>{example}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Projects (with +)</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Group related tasks with +project:</p>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Call dentist for appointment +health
-      </code>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Examples: +home, +work, +errands, +vacation</p>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Priority</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>
+        Put <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>(A)</code> at the very start of the line.
+        (A) = must do, (B) = should do, (C) = nice to have.
+      </p>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Contexts (with @)</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Tag where or how you'll do the task with @context:</p>
+      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Completed Items</h4>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>When marked done, an <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>x</code> prefix is recorded:</p>
       <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Call dentist for appointment +health @phone
-      </code>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Examples: @phone, @computer, @home, @office, @errands</p>
-
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Tags (with #)</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Add flexible labels with #tag:</p>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Call dentist for appointment +health @phone #urgent
-      </code>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Examples: #urgent, #waiting, #someday, #idea</p>
-
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Due Dates</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Add a deadline with due:YYYY-MM-DD:</p>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Call dentist @phone due:2025-11-01
+        x 2026-02-25 Called dentist for appointment
       </code>
 
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Completed Tasks</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>When done, tasks get an 'x' at the beginning:</p>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        x 2025-10-23 Called dentist for appointment
-      </code>
-
-      <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Complete Example</h4>
-      <code style={{ display: 'block', background: 'var(--term-panel)', padding: '12px', borderRadius: '6px', margin: '12px 0', fontSize: '12px', fontFamily: 'monospace' }}>
-        (A) Buy groceries for dinner party +home @errands #tonight due:2025-10-24
-      </code>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>This task is:</p>
-      <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
-        <li style={{ marginBottom: '6px' }}>High priority (A)</li>
-        <li style={{ marginBottom: '6px' }}>Part of +home project</li>
-        <li style={{ marginBottom: '6px' }}>Done while running @errands</li>
-        <li style={{ marginBottom: '6px' }}>Tagged #tonight</li>
-        <li style={{ marginBottom: '6px' }}>Due October 24th, 2025</li>
-      </ul>
-
-      <p style={{ marginTop: '24px', fontSize: '11px', lineHeight: '1.6', opacity: 0.8 }}>
-        <strong>Why todo.txt?</strong> Your tasks are stored as plain text files. No proprietary formats, no vendor lock-in. You can edit them in any text editor, sync them anywhere, and keep them forever!
+      <p style={{ marginTop: '24px', fontSize: '11px', lineHeight: '1.6', opacity: 0.7 }}>
+        Data is stored locally in SQLite. Nothing is sent to any server.
       </p>
     </div>
   );

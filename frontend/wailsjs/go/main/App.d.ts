@@ -5,15 +5,15 @@ import {main} from '../models';
 
 export function Archive(arg1:number,arg2:boolean):Promise<void>;
 
-export function CreateNoteFromLine(arg1:string):Promise<store.Todo>;
+export function CreateItemFromLine(arg1:string):Promise<store.Item>;
 
-export function CreateTodoFromLine(arg1:string):Promise<store.Todo>;
+export function CreateNoteFromLine(arg1:string):Promise<store.Item>;
 
-export function DeleteTodo(arg1:number):Promise<void>;
+export function DeleteItem(arg1:number):Promise<void>;
 
 export function ExportTodoTxt():Promise<string>;
 
-export function GetBackrefs(arg1:number):Promise<Array<store.Todo>>;
+export function GetBackrefs(arg1:number):Promise<Array<store.Item>>;
 
 export function GetDatabasePath():Promise<string>;
 
@@ -23,9 +23,9 @@ export function GetFilters():Promise<main.FiltersResult>;
 
 export function GetInboxCount():Promise<number>;
 
-export function GetInboxItems(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
+export function GetInboxItems(arg1:store.SearchRequest):Promise<Array<store.Item>>;
 
-export function GetTodo(arg1:number):Promise<store.Todo>;
+export function GetItem(arg1:number):Promise<store.Item>;
 
 export function HasDemoData():Promise<boolean>;
 
@@ -39,7 +39,7 @@ export function RemoveDemoData():Promise<void>;
 
 export function Restart():Promise<void>;
 
-export function Search(arg1:store.SearchRequest):Promise<Array<store.Todo>>;
+export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
 
 export function SeedDemoData():Promise<void>;
 
@@ -47,4 +47,4 @@ export function SetDatabasePath(arg1:string):Promise<void>;
 
 export function ToggleComplete(arg1:number,arg2:boolean):Promise<void>;
 
-export function UpdateTodo(arg1:store.Todo):Promise<void>;
+export function UpdateItem(arg1:store.Item):Promise<void>;

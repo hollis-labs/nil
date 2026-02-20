@@ -23,7 +23,7 @@ type ScopeTab = {
   appMode?: 'todos' | 'notes'; // defaults to 'todos'
 };
 
-type SettingsTab = 'general' | 'tabs' | 'theme' | 'data';
+type SettingsTab = 'general' | 'tabs' | 'data'; // 'theme' hidden until Tailwind migration
 
 type Props = {
   open: boolean;
@@ -34,9 +34,8 @@ type Props = {
 const defaultSettings: Settings = {
   showCompleted: false,
   tabs: [
-    { id: '1', label: 'All', query: '' },
-    { id: '2', label: 'Work', query: '@work' },
-    { id: '3', label: 'Home', query: '@home' },
+    { id: '1', label: 'All', query: '', appMode: 'todos' },
+    { id: '2', label: 'All', query: '', appMode: 'notes' },
   ],
   dbPath: './data',
   defaultView: 'scope',
@@ -52,13 +51,35 @@ const SettingsContext = React.createContext<{
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = React.useState<Settings>(() => {
-    const saved = localStorage.getItem('todo.settings');
-    return saved ? JSON.parse(saved) : defaultSettings;
+    // Migrate old key on first load
+    const oldData = localStorage.getItem('todo.settings');
+    if (oldData && !localStorage.getItem('nanite.settings')) {
+      localStorage.setItem('nanite.settings', oldData);
+      localStorage.removeItem('todo.settings');
+    }
+
+    const saved = localStorage.getItem('nanite.settings');
+    let parsed: Settings = saved ? JSON.parse(saved) : defaultSettings;
+
+    // Inject notes-mode All tab if missing (one-time migration)
+    if (!localStorage.getItem('nanite.settings.migrated.notesTab')) {
+      const hasNoteTab = parsed.tabs.some(t => (t.appMode || 'todos') === 'notes');
+      if (!hasNoteTab) {
+        parsed = {
+          ...parsed,
+          tabs: [...parsed.tabs, { id: 'notes-all', label: 'All', query: '', appMode: 'notes' }],
+        };
+        localStorage.setItem('nanite.settings', JSON.stringify(parsed));
+      }
+      localStorage.setItem('nanite.settings.migrated.notesTab', '1');
+    }
+
+    return parsed;
   });
 
   const setSettings = React.useCallback((s: Settings) => {
     setSettingsState(s);
-    localStorage.setItem('todo.settings', JSON.stringify(s));
+    localStorage.setItem('nanite.settings', JSON.stringify(s));
   }, []);
 
   return (
@@ -156,9 +177,8 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
 
   const handleSave = () => {
     setSettings(local);
-    if (activeTab === 'theme') {
-      setTheme(localTheme as TermTheme);
-    }
+    // Theme tab hidden until Tailwind migration; keep setTheme call guarded
+    // if (activeTab === 'theme') { setTheme(localTheme as TermTheme); }
     onOpenChange(false);
   };
 
@@ -212,7 +232,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
     setDraggedTabId(null);
   };
 
-  const TabButton = ({ name, label }: { name: 'general' | 'tabs' | 'theme' | 'data', label: string }) => (
+  const TabButton = ({ name, label }: { name: SettingsTab, label: string }) => (
     <button
       className={`badge ${activeTab === name ? 'success' : ''}`}
       onClick={() => setActiveTab(name)}
@@ -272,6 +292,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
               >
                 Scope Tabs
               </button>
+              {/* HIDDEN until Tailwind migration:
               <button
                 onClick={() => setActiveTab('theme')}
                 className={`badge ${activeTab === 'theme' ? 'success' : ''}`}
@@ -286,6 +307,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
               >
                 Theme
               </button>
+              */}
             </div>
           </div>
 
@@ -693,8 +715,8 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
             </div>
           )}
 
-          {/* Theme Settings */}
-          {activeTab === 'theme' && (
+          {/* Theme Settings — HIDDEN until Tailwind migration */}
+          {false && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Color Theme</h3>
@@ -1037,7 +1059,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
       <ConfirmDialog
         open={showRestartPrompt}
         title="Restart Required"
-        message="Database location has been updated. PLANCK needs to restart to apply the changes."
+        message="Database location has been updated. NANITE needs to restart to apply the changes."
         confirmText="Restart Now"
         cancelText="Later"
         onConfirm={async () => {

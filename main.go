@@ -19,7 +19,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:         "PLANCK",
+		Title:         "NANITE",
 		Width:         800,
 		Height:        830,
 		MinWidth:      800,

@@ -6,11 +6,26 @@ type Props = {
   onQuickAddNote?: () => void;
   onToggleAppMode?: () => void;
   onOpenInbox?: () => void;
+  onOpenQuickSearch?: () => void;
 };
 
-export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox }: Props) {
+export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox, onOpenQuickSearch }: Props) {
+  const lastShiftRef = React.useRef<number>(0);
+
   React.useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Shift+Shift (double-tap within 500ms) → Quick Search
+      if (e.key === 'Shift' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const now = Date.now();
+        if (now - lastShiftRef.current < 500) {
+          e.preventDefault();
+          onOpenQuickSearch?.();
+          lastShiftRef.current = 0;
+        } else {
+          lastShiftRef.current = now;
+        }
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "n") {
         e.preventDefault();
         onQuickAddNote?.();
@@ -19,6 +34,11 @@ export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, on
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "m") {
         e.preventDefault();
         onToggleAppMode?.();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === "s") {
+        e.preventDefault();
+        onOpenQuickSearch?.();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "i") {
@@ -37,7 +57,7 @@ export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, on
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox]);
+  }, [onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox, onOpenQuickSearch]);
 
   return null;
 }

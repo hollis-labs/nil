@@ -1,6 +1,6 @@
-# PLANCK — Agent Development Guide
+# NANITE — Agent Development Guide
 
-PLANCK is a keyboard-driven personal task and note management desktop app. It is currently in alpha/beta, being shared with a small group of friends before wider release.
+NANITE is a keyboard-driven personal task and note management desktop app. It is currently in public beta.
 
 ---
 
@@ -20,21 +20,21 @@ PLANCK is a keyboard-driven personal task and note management desktop app. It is
 ## Project Layout
 
 ```
-todo-app/
+nanite/
 ├── main.go              # Wails entry point, window config
 ├── app.go               # App struct, all Wails-bound Go methods
-├── go.mod / go.sum
-├── wails.json           # App name (PLANCK), build config
+├── go.mod / go.sum      # module: nanite
+├── wails.json           # App name (NANITE), build config
 ├── build-local.sh       # Quick local macOS build
 ├── build-for-friends.sh # Cross-platform distribution build
 ├── config/
 │   └── config.go        # OS-appropriate config/data paths, JSON config
 ├── store/
-│   ├── models.go        # Todo, SearchRequest structs
+│   ├── models.go        # Item, SearchRequest structs
 │   ├── schema.sql       # Embedded SQL: tables, triggers, FTS5, refs
 │   └── store.go         # All DB logic: CRUD, search, migrations, refs
 ├── parse/
-│   └── line.go          # todo.txt line parser
+│   └── line.go          # todo.txt-inspired line parser
 └── frontend/
     ├── package.json
     ├── vite.config.ts   # Path alias: @ → ./src
@@ -61,9 +61,9 @@ todo-app/
 - All Wails-exposed methods live in **`app.go`** as methods on `*App`.
 - All database logic lives in **`store/store.go`** as methods on `*Store`.
 - Schema is defined in **`store/schema.sql`** (embedded at compile time). Add new tables here for fresh installs.
-- Schema changes for existing users use the **migration slice** in `store/store.go`. Increment `currentSchemaVersion` and add a new `migration` entry. Migrations are idempotent (use `IF NOT EXISTS`, `IF NOT EXISTS` guards, or catch "already exists" errors).
+- Schema changes for existing users use the **migration slice** in `store/store.go`. Increment `currentSchemaVersion` and add a new `migration` entry. Migrations are idempotent (use `IF NOT EXISTS` guards, or catch "already exists" errors).
 - Current schema version: **4** (inbox column).
-- Build/test the Go layer with `go build .` from the project root (not `go build ./...` — the `app/` directory has a legacy stub that may fail).
+- Build/test the Go layer with `go build .` from the project root.
 - After adding or changing Go methods bound to Wails, regenerate TypeScript bindings: `wails generate module`.
 
 ### Frontend (TypeScript/React)
@@ -78,7 +78,7 @@ todo-app/
 
 ### Data Model
 
-The core entity is `todos` — it holds both **todos** (`type='todo'`) and **notes** (`type='note'`). Fields:
+The core entity is `todos` (DB table name unchanged) — it holds both **items** (`type='todo'`) and **notes** (`type='note'`). The Go struct is `store.Item`. Fields:
 
 - `id`, `title`, `priority`, `completed`, `archived`, `created_at`, `updated_at`
 - `due_at`, `threshold_at`, `recurrence_rule` (optional scheduling)
@@ -89,9 +89,22 @@ The core entity is `todos` — it holds both **todos** (`type='todo'`) and **not
 - Taxonomy via join tables: `todo_projects`, `todo_contexts`, `todo_tags`
 - Inter-item references via `refs (source_id, target_id)` — synced on every save
 
+### localStorage Keys
+
+All localStorage keys use the `nanite.` prefix:
+- `nanite.settings` — app settings (tabs, showCompleted, etc.)
+- `nanite.viewMode` — scope | date
+- `nanite.appMode` — todos | notes
+- `nanite.inputMode` — search | add
+- `nanite.sessionProfiles` — saved session profiles
+- `nanite.activeSession` — current active session
+- `nanite.taskTemplates` — saved task templates
+
 ### Theme System
 
 Themes are defined in `src/theme/theme.ts` as `TermTheme` objects. The `ThemeProvider` injects them as CSS custom properties. All UI uses `var(--term-*)` variables. Add new theme variables to the `TermTheme` type and all presets together.
+
+The theme switcher is **hidden from the Settings UI** until the Tailwind/shadcn migration is complete. The theme system itself remains intact in code.
 
 ---
 
@@ -116,7 +129,7 @@ cd frontend && npx tsc --noEmit
 
 **Debug mode** (opens WebKit inspector on startup):
 ```bash
-DEBUG=1 open build/bin/PLANCK.app
+DEBUG=1 open build/bin/NANITE.app
 ```
 
 ---
@@ -130,26 +143,25 @@ DEBUG=1 open build/bin/PLANCK.app
 - **Root cause**: WKWebView (macOS WebView) suppresses `click` events after ProseMirror handles `mousedown`. All attempted fixes (React onClick, container delegation, `handleDOMEvents`, native capture-phase listener) confirmed that `preventDefault` works but the state-update callback does not fire reliably.
 - **Next steps**: Attach Safari devtools to the live WKWebView process (`Develop → [device]`) to confirm where the chain breaks. Alternative approach: render a small "open" button next to chips that lives outside ProseMirror's DOM.
 
+### Import/Export not working
+- **Status**: Backlogged
+- **Note**: Need to revisit to understand the current state and plan proper fix/feature.
+
 ---
 
 ## Immediate Priorities
 
-- [ ] **Rename/cleanup**: The project folder is still named `todo-app-starter/todo-app`. The app is called PLANCK. Clean up directory names, stale `.md` files, and the leftover `app/app.go` stub.
-- [ ] **Hide theme switcher**: Temporarily hide the theme menu option from the UI. The theme system stays in the codebase; it just won't be user-accessible until the Tailwind/shadcn migration is complete.
-- [ ] **Default tab migration**: Add a schema migration so that the Notes and Todos views each have an "All" tab by default when no user-created tabs exist. Both views should fall back gracefully to showing all items if no scopes have been defined.
-- [x] **Escape closes add modal**: Escape now closes EditTodoModal. Dirty detection triggers an inline prompt (ask / always save / never save) configurable via Settings → General → Close & Save Behavior.
-- [ ] **User-facing docs**: Consolidate the many scattered `.md` files into coherent end-user documentation covering:
-  - The input syntax is loosely inspired by todo.txt, not a strict implementation — clarify this throughout
-  - The toggle on the search/add icon next to the main input (switches between search mode and add mode)
-  - Keyboard usage, example workflows, philosophy, and a full keyboard shortcut reference
-  - How simple and advanced Scopes work
-  - How the Session Manager works: while a session is active, any item created automatically inherits the session's tags/contexts for faster capture
-  - Quick Add syntax on the main view (todo.txt-inspired inline syntax)
-  - How main-view search works
-  - Cloud sync setup guide for iCloud, OneDrive, Dropbox, and Google Drive
+- [ ] **Move repo & GitHub setup**: Move project out of Downloads into `~/Projects-apps/nanite`. Set up GitHub repo under the `hollis-labs` org with slug `nanite`.
+- [x] **Dead file cleanup**: `app/app.go`, `store/store.go.bak`, debug scripts, stale `.md` files removed.
+- [x] **App rename**: PLANCK → NANITE throughout (wails.json, main.go, index.html, config paths, build scripts, docs).
+- [x] **Item rename**: `Todo` struct → `Item`; Wails methods `CreateTodoFromLine` → `CreateItemFromLine`, `UpdateTodo` → `UpdateItem`, etc. DB `type` column values `'todo'`/`'note'` unchanged.
+- [x] **Hide theme switcher**: Theme tab hidden from Settings UI (`SettingsTab` type, tab button commented out, content gated with `false &&`).
+- [x] **Default tab migration**: `defaultSettings` now includes All tab for both todos and notes modes. `SettingsProvider` injects a notes-mode All tab on first load if missing.
+- [x] **Escape closes EditItemModal**: Dirty detection + inline prompt configurable via Settings → General → Close & Save Behavior.
+- [ ] **User-facing docs**: Keyboard shortcut reference, Quick Add syntax guide, Scope and Session documentation, cloud sync setup guide. See `docs/` for current state.
 - [ ] **Code standardization**: Audit components for inline styles vs. CSS variables; standardize prop patterns across modals.
 - [ ] **Stack evaluation**: Evaluate whether Wails v2 → v3, or an alternative framework, is the right long-term choice before the codebase grows further.
-- [ ] **Frontend layout migration (Tailwind/shadcn)**: The current styling uses hand-rolled CSS custom properties with no utility framework. This project normally uses Tailwind + shadcn/ui. Audit the existing component library, plan a migration to Tailwind v4 + shadcn/ui that preserves the terminal aesthetic and the `--term-*` CSS variable theme system. This is part of the stack evaluation — do the layout/styling analysis before committing to the migration approach.
+- [ ] **Frontend layout migration (Tailwind/shadcn)**: Audit the existing component library, plan a migration to Tailwind v4 + shadcn/ui that preserves the terminal aesthetic and the `--term-*` CSS variable theme system.
 - [ ] **Fix wikilink click** (see Known Issues above).
 
 ---
@@ -160,19 +172,19 @@ DEBUG=1 open build/bin/PLANCK.app
 
 **Status**: MVP shipped. See remaining items below.
 
-**Philosophy**: Never lose an idea to taxonomy friction. Users can create a todo or note with no title or metadata — this is intentional. Empty or minimally-filled items are automatically flagged as **inbox items** and surfaced in a dedicated Inbox view rather than cluttering the main Todo or Notes views.
+**Philosophy**: Never lose an idea to taxonomy friction. Users can create an item or note with no title or metadata — this is intentional. Empty or minimally-filled items are automatically flagged as **inbox items** and surfaced in a dedicated Inbox view rather than cluttering the main Items or Notes views.
 
 **What's implemented (MVP)**:
 - `inbox` boolean column in DB (migration v4); auto-set when title is blank on creation
-- Inbox items excluded from all normal search/todo/notes results
+- Inbox items excluded from all normal search/item/notes results
 - `GetInboxCount`, `GetInboxItems`, `ProcessInboxItem` backend methods + Wails bindings
 - Inbox count badge in tab bar (dimmed when 0, accented when items present)
 - `Cmd+I` / `Ctrl+I` keyboard shortcut to open Inbox
-- `InboxView` component (`src/components/InboxView.tsx`): search, per-item actions (Edit, Archive, Delete, Process), batch selection with bulk Process/Archive/Delete (sequential writes to avoid SQLite locking), keyboard navigation (↑↓, x=select, p=process, a=archive, d=delete, Enter=edit, Escape=back)
+- `InboxView` component: search, per-item actions (Edit, Archive, Delete, Process), batch selection with bulk Process/Archive/Delete, keyboard navigation
 - Optimistic UI updates — view reflects changes immediately, then reloads from backend
 - Empty quick-add (blank title) routes to inbox instead of being rejected
-- **"→ Inbox" button** in EditTodoModal (create mode only): deliberately routes any item to inbox regardless of whether it has a title or content — for items the user wants to capture fully but review later
-- **`UpdateTodo` persists `inbox` field** (bug fix: the SQL UPDATE previously omitted the column, so setting inbox via update was silently dropped)
+- **"→ Inbox" button** in EditItemModal (create mode only): deliberately routes any item to inbox
+- **`UpdateItem` persists `inbox` field** (bug fix: the SQL UPDATE previously omitted the column)
 
 **Remaining / future iterations**:
 - Saved named inbox views (filter presets stored in localStorage)
@@ -188,11 +200,11 @@ DEBUG=1 open build/bin/PLANCK.app
 
 **Core capabilities**:
 - Support negative search terms, field-scoped queries, date range filters, type filters, and taxonomy filters — building on the existing FTS5 infrastructure.
-- User-defined **result templates** (Markdown only for v1, with basic dynamic tags like `{{title}}`, `{{created_at}}`, `{{tags}}`) to control how results are displayed. Sensible defaults ship out of the box.
+- User-defined **result templates** (Markdown only for v1, with basic dynamic tags like `{{title}}`, `{{created_at}}`, `{{tags}}`).
 
 **Data & search evaluation**:
-- Audit the current data model and FTS5 setup to identify refactoring opportunities that better support multiple search strategies.
-- Expose a user-facing control for **speed vs. depth** trade-off (e.g., fast prefix/FTS5 search vs. slower ranked fuzzy/semantic search), with sensible defaults so most users never need to think about it.
+- Audit the current data model and FTS5 setup to identify refactoring opportunities.
+- Expose a user-facing control for **speed vs. depth** trade-off (fast FTS5 vs. slower ranked fuzzy/semantic search).
 
 ---
 
@@ -200,16 +212,11 @@ DEBUG=1 open build/bin/PLANCK.app
 
 A plugin architecture that allows first- and third-party addons to introduce new data types and behaviors without bloating the core app.
 
-**Design principles**:
-- Addons can define new item types (e.g., Journal entry, Contact) and new behaviors (e.g., scheduled prompts, broadcast messages).
-- First-party addons serve as both useful features and reference implementations for third-party developers.
-- Keep the core clean; addons are opt-in.
-
 **Planned first-party addons**:
 - **Journal** — time-stamped daily entries with prompt support
 - **Scheduler** — recurring reminders and time-based triggers
 - **Broadcast** — send messages/updates to a list of recipients or channels
-- **Contacts** — lightweight contact records linkable to todos/notes
+- **Contacts** — lightweight contact records linkable to items/notes
 - **Calendar** — event and deadline visualization
 
 ---
@@ -217,23 +224,6 @@ A plugin architecture that allows first- and third-party addons to introduce new
 ### F4 — Automations & Flows *(low priority)*
 
 AI-assisted automation builder for creating recurring workflows: daily/weekly digests, custom newsletters, report generation, and any repeatable process that can be templated.
-
-- Addon/plugin-based so users install only what they need and the community can contribute.
-- AI helps construct and refine flows from natural language descriptions.
-- Pairs naturally with F3 addons (e.g., a Scheduler addon triggering a Broadcast flow).
-
----
-
-## File Cleanup Candidates
-
-These files likely predate refactors and can be reviewed for deletion:
-
-- `app/app.go` — appears to be a legacy stub (causes `go build ./...` to fail)
-- `store/store.go.bak` — backup file
-- `debug_search.js`, `test-theme-properties.js` — ad-hoc debug scripts
-- `test-build` — unclear artifact
-- `launch-debug.sh`, `fix-database-location.sh` — check if still needed
-- Many top-level `*.md` files — consolidate or delete
 
 ---
 
@@ -243,5 +233,6 @@ These files likely predate refactors and can be reviewed for deletion:
 - After any Go method signature change, run `wails generate module` to keep TypeScript bindings in sync.
 - The `App.tsx` file is the single source of truth for app state. Read it fully before adding new state or handlers.
 - TipTap editors run inside WKWebView on macOS. Standard DOM event handling has quirks — test click/keyboard interactions in the actual app, not just in a browser.
-- Tailwind and shadcn/ui are **not yet installed**. Do not assume they are available until the migration priority (see Immediate Priorities) has been completed. Until then, continue using the existing `var(--term-*)` CSS custom property system.
-- **EditTodoModal close flow**: Escape / Close / Cancel all route through `requestClose()`, which checks `isDirty()` and respects the `closeBehavior` setting (`ask` | `always` | `never`). The "→ Inbox" button is create-mode only and passes `extras.inbox = true` through `onSubmit` → `handleQuickAdd` / `handleQuickAddNote` → `UpdateTodo`. Both App.tsx handlers must merge `extras.inbox` into the todo before calling `UpdateTodo`.
+- Tailwind and shadcn/ui are **not yet installed**. Do not assume they are available until the migration priority has been completed. Until then, continue using the existing `var(--term-*)` CSS custom property system.
+- **EditItemModal close flow**: Escape / Close / Cancel all route through `requestClose()`, which checks `isDirty()` and respects the `closeBehavior` setting (`ask` | `always` | `never`). The "→ Inbox" button is create-mode only and passes `extras.inbox = true` through `onSubmit` → `handleQuickAdd` / `handleQuickAddNote` → `UpdateItem`. Both App.tsx handlers must merge `extras.inbox` into the item before calling `UpdateItem`.
+- **DB table name**: The SQLite table is still `todos` (renaming it would require a migration and is deferred). The Go struct is `store.Item`, Wails method is `UpdateItem`, etc. Do not rename the table without a proper migration plan.

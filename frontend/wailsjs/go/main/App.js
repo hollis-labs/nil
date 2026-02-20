@@ -6,16 +6,16 @@ export function Archive(arg1, arg2) {
   return window['go']['main']['App']['Archive'](arg1, arg2);
 }
 
+export function CreateItemFromLine(arg1) {
+  return window['go']['main']['App']['CreateItemFromLine'](arg1);
+}
+
 export function CreateNoteFromLine(arg1) {
   return window['go']['main']['App']['CreateNoteFromLine'](arg1);
 }
 
-export function CreateTodoFromLine(arg1) {
-  return window['go']['main']['App']['CreateTodoFromLine'](arg1);
-}
-
-export function DeleteTodo(arg1) {
-  return window['go']['main']['App']['DeleteTodo'](arg1);
+export function DeleteItem(arg1) {
+  return window['go']['main']['App']['DeleteItem'](arg1);
 }
 
 export function ExportTodoTxt() {
@@ -46,8 +46,8 @@ export function GetInboxItems(arg1) {
   return window['go']['main']['App']['GetInboxItems'](arg1);
 }
 
-export function GetTodo(arg1) {
-  return window['go']['main']['App']['GetTodo'](arg1);
+export function GetItem(arg1) {
+  return window['go']['main']['App']['GetItem'](arg1);
 }
 
 export function HasDemoData() {
@@ -90,6 +90,6 @@ export function ToggleComplete(arg1, arg2) {
   return window['go']['main']['App']['ToggleComplete'](arg1, arg2);
 }
 
-export function UpdateTodo(arg1) {
-  return window['go']['main']['App']['UpdateTodo'](arg1);
+export function UpdateItem(arg1) {
+  return window['go']['main']['App']['UpdateItem'](arg1);
 }
