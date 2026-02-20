@@ -30,6 +30,11 @@ function notesSummary(notesMd: string | undefined, maxLen = 120): string {
   return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
 }
 
+// Fixed scroll heights that mirror TerminalList's 450px approach.
+// Shrink the list when the batch bar is visible so it stays within the card.
+const SCROLL_H = 410;
+const SCROLL_H_WITH_BAR = 350;
+
 export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   const [items, setItems] = React.useState<TodoRow[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -222,9 +227,11 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
 
   const selCount = selectedIds.size;
 
-  // ── Checkbox component ─────────────────────────────────────────────────────
+  // ── Checkbox ───────────────────────────────────────────────────────────────
 
-  function Checkbox({ checked, indeterminate, onChange, title }: { checked: boolean; indeterminate?: boolean; onChange: () => void; title?: string }) {
+  function Checkbox({ checked, indeterminate, onChange, title }: {
+    checked: boolean; indeterminate?: boolean; onChange: () => void; title?: string;
+  }) {
     const ref = React.useRef<HTMLInputElement>(null);
     React.useEffect(() => {
       if (ref.current) ref.current.indeterminate = indeterminate ?? false;
@@ -236,13 +243,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
         checked={checked}
         onChange={onChange}
         title={title}
-        style={{
-          width: "14px",
-          height: "14px",
-          flexShrink: 0,
-          cursor: "pointer",
-          accentColor: "var(--term-accent)",
-        }}
+        style={{ width: "14px", height: "14px", flexShrink: 0, cursor: "pointer", accentColor: "var(--term-accent)" }}
       />
     );
   }
@@ -250,10 +251,10 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", position: "relative" }}>
+    <div className="terminal-card" style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
 
       {/* Search bar + select-all + count */}
-      <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
         <Checkbox
           checked={allSelected}
           indeterminate={someSelected}
@@ -282,12 +283,12 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
       </div>
 
       {/* Keyboard hints */}
-      <div style={{ fontSize: "11px", color: "var(--term-dim)", marginBottom: "8px", opacity: 0.6 }}>
+      <div style={{ fontSize: "11px", color: "var(--term-dim)", opacity: 0.6 }}>
         Click to edit · x select · p process · a archive · d delete · ↑↓ navigate
       </div>
 
-      {/* List */}
-      <CustomScrollbar style={{ flex: 1, paddingBottom: selCount > 0 ? "60px" : 0 }}>
+      {/* List — height shrinks to make room for the batch bar */}
+      <CustomScrollbar style={{ height: selCount > 0 ? SCROLL_H_WITH_BAR : SCROLL_H }}>
         {loading && items.length === 0 ? (
           <div style={{ textAlign: "center", color: "var(--term-dim)", padding: "40px 0", fontSize: "13px" }}>Loading…</div>
         ) : items.length === 0 ? (
@@ -322,14 +323,15 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                 >
                   {/* Row header: checkbox + type badge + title + date */}
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: summary ? "3px" : "6px" }}>
-                    {/* Checkbox — stops propagation so clicking it doesn't open edit */}
-                    <div onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }} style={{ display: "flex", alignItems: "center" }}>
+                    <div
+                      onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                      style={{ display: "flex", alignItems: "center" }}
+                    >
                       {isSelected
                         ? <CheckSquare size={15} style={{ color: "var(--term-accent)", flexShrink: 0 }} />
                         : <Square size={15} style={{ color: "var(--term-dim)", flexShrink: 0, opacity: 0.5 }} />
                       }
                     </div>
-
                     <span
                       className={`badge ${item.type === "note" ? "info" : "warn"}`}
                       style={{ fontSize: "10px", padding: "2px 5px", borderRadius: "3px", flexShrink: 0 }}
@@ -337,14 +339,11 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                       {item.type === "note" ? "NOTE" : "TODO"}
                     </span>
                     <span style={{
-                      flex: 1,
-                      fontSize: "13px",
+                      flex: 1, fontSize: "13px",
                       fontWeight: item.title ? 500 : 400,
                       color: item.title ? "var(--term-fg)" : "var(--term-dim)",
                       fontStyle: item.title ? "normal" : "italic",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
                       {item.title || "(untitled)"}
                     </span>
@@ -356,15 +355,9 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                   {/* Notes summary */}
                   {summary && (
                     <div style={{
-                      fontSize: "11px",
-                      color: "var(--term-dim)",
-                      marginBottom: "6px",
-                      lineHeight: "1.4",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                      opacity: 0.8,
-                      paddingLeft: "23px", // align under title (past checkbox + gap)
+                      fontSize: "11px", color: "var(--term-dim)", marginBottom: "6px",
+                      lineHeight: "1.4", overflow: "hidden", textOverflow: "ellipsis",
+                      whiteSpace: "nowrap", opacity: 0.8, paddingLeft: "23px",
                     }}>
                       {summary}
                     </div>
@@ -385,17 +378,13 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                     </div>
                   )}
 
-                  {/* Per-row actions — stop propagation so they don't trigger edit */}
+                  {/* Per-row actions */}
                   <div
                     style={{ display: "flex", gap: "6px", alignItems: "center", paddingLeft: "23px" }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <button
-                      className="badge"
-                      onClick={() => handleArchive(item.id)}
-                      style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}
-                      title="Archive"
-                    >
+                    <button className="badge" onClick={() => handleArchive(item.id)}
+                      style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
                       <Archive size={11} /> Archive
                     </button>
                     {isConfirmingDelete ? (
@@ -412,17 +401,12 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                       </>
                     ) : (
                       <button className="badge warn" onClick={() => handleDelete(item.id)}
-                        style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}
-                        title="Delete">
+                        style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
                         <Trash2 size={11} /> Delete
                       </button>
                     )}
-                    <button
-                      className="badge success"
-                      onClick={() => handleProcess(item.id)}
-                      style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px", marginLeft: "auto" }}
-                      title="Process — move out of inbox"
-                    >
+                    <button className="badge success" onClick={() => handleProcess(item.id)}
+                      style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px", marginLeft: "auto" }}>
                       <CheckCircle size={11} /> Process
                     </button>
                   </div>
@@ -433,80 +417,48 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
         )}
       </CustomScrollbar>
 
-      {/* Bulk action bar — absolutely pinned to bottom so overflow:hidden can't clip it */}
+      {/* Bulk action bar — normal flex child, list shrinks to make room */}
       {selCount > 0 && (
         <div style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
           padding: "10px 14px",
           background: "var(--term-panel)",
           border: "1px solid var(--term-border)",
-          borderTop: "1px solid var(--term-border)",
           borderRadius: "8px",
           display: "flex",
           alignItems: "center",
           gap: "8px",
           flexWrap: "wrap",
-          boxShadow: "0 -4px 12px rgba(0,0,0,0.3)",
         }}>
           <span style={{ fontSize: "12px", color: "var(--term-fg)", fontWeight: 600, marginRight: "4px" }}>
             {selCount} selected
           </span>
-
-          <button
-            className="badge success"
-            onClick={handleBulkProcess}
-            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
-            title="Move selected items out of inbox"
-          >
+          <button className="badge success" onClick={handleBulkProcess}
+            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
             <CheckCircle size={12} /> Process All
           </button>
-
-          <button
-            className="badge"
-            onClick={handleBulkArchive}
-            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
-            title="Archive selected items"
-          >
+          <button className="badge" onClick={handleBulkArchive}
+            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
             <Archive size={12} /> Archive All
           </button>
-
           {bulkDeleteConfirm ? (
             <>
-              <button
-                className="badge warn"
-                onClick={handleBulkDelete}
-                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
-              >
+              <button className="badge warn" onClick={handleBulkDelete}
+                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
                 <Trash2 size={12} /> Confirm Delete {selCount}
               </button>
-              <button
-                className="badge"
-                onClick={() => setBulkDeleteConfirm(false)}
-                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px" }}
-              >
+              <button className="badge" onClick={() => setBulkDeleteConfirm(false)}
+                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px" }}>
                 Cancel
               </button>
             </>
           ) : (
-            <button
-              className="badge warn"
-              onClick={handleBulkDelete}
-              style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
-              title="Delete selected items"
-            >
+            <button className="badge warn" onClick={handleBulkDelete}
+              style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
               <Trash2 size={12} /> Delete All
             </button>
           )}
-
-          <button
-            className="badge"
-            onClick={() => { setSelectedIds(new Set()); setBulkDeleteConfirm(false); }}
-            style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "5px", marginLeft: "auto", opacity: 0.7 }}
-            title="Clear selection"
-          >
+          <button className="badge" onClick={() => { setSelectedIds(new Set()); setBulkDeleteConfirm(false); }}
+            style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "5px", marginLeft: "auto", opacity: 0.7 }}>
             ✕ Clear
           </button>
         </div>
