@@ -9,5 +9,12 @@
   "author": {
     "name": "Chrispian",
     "email": "chrispian@gmail.com"
+  },
+  "info": {
+    "companyName": "Hollis Labs",
+    "productName": "PLANCK",
+    "productVersion": "1.1.0",
+    "copyright": "Copyright © 2026 Hollis Labs",
+    "comments": "A minimalist task management app"
   }
 }
