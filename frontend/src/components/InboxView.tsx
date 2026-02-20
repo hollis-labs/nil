@@ -2,7 +2,7 @@ import * as React from "react";
 import { TodoRow } from "./TerminalList";
 import CustomScrollbar from "./CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
-import { Archive, Trash2, CheckCircle } from "lucide-react";
+import { Archive, Trash2, CheckCircle, CheckSquare, Square } from "lucide-react";
 
 type Props = {
   onClose: () => void;
@@ -36,6 +36,8 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [focusedIndex, setFocusedIndex] = React.useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = React.useState(false);
   const debounceRef = React.useRef<NodeJS.Timeout | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -58,21 +60,25 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
     }
   }, []);
 
-  // Initial load
-  React.useEffect(() => {
-    loadItems("");
-  }, [loadItems]);
+  React.useEffect(() => { loadItems(""); }, [loadItems]);
 
   // Debounced search
   React.useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      loadItems(searchQuery);
-    }, 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
+    debounceRef.current = setTimeout(() => { loadItems(searchQuery); }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [searchQuery, loadItems]);
+
+  // Clear stale selections when items reload
+  React.useEffect(() => {
+    const validIds = new Set(items.map(i => i.id));
+    setSelectedIds(prev => {
+      const next = new Set<number>();
+      prev.forEach(id => { if (validIds.has(id)) next.add(id); });
+      return next.size === prev.size ? prev : next;
+    });
+    setFocusedIndex(0);
+  }, [items]);
 
   // Keyboard navigation
   React.useEffect(() => {
@@ -82,71 +88,83 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
 
       switch (e.key) {
         case "Escape":
-          e.preventDefault();
-          onClose();
+          if (selectedIds.size > 0) {
+            e.preventDefault();
+            setSelectedIds(new Set());
+            setBulkDeleteConfirm(false);
+          } else {
+            e.preventDefault();
+            onClose();
+          }
           break;
         case "ArrowDown":
-          if (!onSearchInput) {
-            e.preventDefault();
-            setFocusedIndex(i => Math.min(i + 1, items.length - 1));
-          }
+          if (!onSearchInput) { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, items.length - 1)); }
           break;
         case "ArrowUp":
-          if (!onSearchInput) {
-            e.preventDefault();
-            setFocusedIndex(i => Math.max(i - 1, 0));
-          }
+          if (!onSearchInput) { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
           break;
         case "Enter":
+          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) onEdit(items[focusedIndex]); }
+          break;
+        case "x":
           if (!onSearchInput) {
             e.preventDefault();
-            if (items[focusedIndex]) onEdit(items[focusedIndex]);
+            const item = items[focusedIndex];
+            if (item) toggleSelect(item.id);
           }
           break;
         case "p":
-        case " ":
-          if (!onSearchInput) {
-            e.preventDefault();
-            if (items[focusedIndex]) handleProcess(items[focusedIndex].id);
-          }
-          break;
-        case "d":
-          if (!onSearchInput) {
-            e.preventDefault();
-            if (items[focusedIndex]) handleDelete(items[focusedIndex].id);
-          }
+          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleProcess(items[focusedIndex].id); }
           break;
         case "a":
-          if (!onSearchInput) {
-            e.preventDefault();
-            if (items[focusedIndex]) handleArchive(items[focusedIndex].id);
-          }
+          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleArchive(items[focusedIndex].id); }
+          break;
+        case "d":
+          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleDelete(items[focusedIndex].id); }
           break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [items, focusedIndex, onClose, onEdit]);
+  }, [items, focusedIndex, selectedIds, onClose, onEdit]);
 
-  // Keep focused item scrolled into view
+  // Scroll focused item into view
   React.useEffect(() => {
     const row = listRef.current?.children[focusedIndex] as HTMLElement | undefined;
     row?.scrollIntoView({ block: "nearest" });
   }, [focusedIndex]);
 
-  // Reset focus when item count changes
-  React.useEffect(() => {
-    setFocusedIndex(0);
-  }, [items.length]);
+  // ── Selection helpers ──────────────────────────────────────────────────────
+
+  function toggleSelect(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+    setBulkDeleteConfirm(false);
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === items.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(items.map(i => i.id)));
+    }
+    setBulkDeleteConfirm(false);
+  }
+
+  const allSelected = items.length > 0 && selectedIds.size === items.length;
+  const someSelected = selectedIds.size > 0 && !allSelected;
+
+  // ── Single-item actions ────────────────────────────────────────────────────
 
   async function handleProcess(id: number) {
     try {
       await Backend.ProcessInboxItem(id);
       await loadItems(searchQuery);
       onProcessed();
-    } catch (err) {
-      console.error("Failed to process inbox item:", err);
-    }
+    } catch (err) { console.error("Failed to process:", err); }
   }
 
   async function handleArchive(id: number) {
@@ -154,36 +172,94 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
       await Backend.Archive(id, true);
       await loadItems(searchQuery);
       onProcessed();
-    } catch (err) {
-      console.error("Failed to archive inbox item:", err);
-    }
+    } catch (err) { console.error("Failed to archive:", err); }
   }
 
   async function handleDelete(id: number) {
-    if (showDeleteConfirm !== id) {
-      setShowDeleteConfirm(id);
-      return;
-    }
+    if (showDeleteConfirm !== id) { setShowDeleteConfirm(id); return; }
     try {
       await Backend.DeleteTodo(id);
       setShowDeleteConfirm(null);
       await loadItems(searchQuery);
       onProcessed();
-    } catch (err) {
-      console.error("Failed to delete inbox item:", err);
-    }
+    } catch (err) { console.error("Failed to delete:", err); }
   }
+
+  // ── Bulk actions ───────────────────────────────────────────────────────────
+
+  async function handleBulkProcess() {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id => Backend.ProcessInboxItem(id)));
+    setSelectedIds(new Set());
+    await loadItems(searchQuery);
+    onProcessed();
+  }
+
+  async function handleBulkArchive() {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id => Backend.Archive(id, true)));
+    setSelectedIds(new Set());
+    await loadItems(searchQuery);
+    onProcessed();
+  }
+
+  async function handleBulkDelete() {
+    if (!bulkDeleteConfirm) { setBulkDeleteConfirm(true); return; }
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map(id => Backend.DeleteTodo(id)));
+    setSelectedIds(new Set());
+    setBulkDeleteConfirm(false);
+    await loadItems(searchQuery);
+    onProcessed();
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   function formatDate(iso?: string) {
     if (!iso) return "";
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
   }
+
+  const selCount = selectedIds.size;
+
+  // ── Checkbox component ─────────────────────────────────────────────────────
+
+  function Checkbox({ checked, indeterminate, onChange, title }: { checked: boolean; indeterminate?: boolean; onChange: () => void; title?: string }) {
+    const ref = React.useRef<HTMLInputElement>(null);
+    React.useEffect(() => {
+      if (ref.current) ref.current.indeterminate = indeterminate ?? false;
+    }, [indeterminate]);
+    return (
+      <input
+        ref={ref}
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        title={title}
+        style={{
+          width: "14px",
+          height: "14px",
+          flexShrink: 0,
+          cursor: "pointer",
+          accentColor: "var(--term-accent)",
+        }}
+      />
+    );
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Search + item count */}
+
+      {/* Search bar + select-all + count */}
       <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "8px" }}>
+        <Checkbox
+          checked={allSelected}
+          indeterminate={someSelected}
+          onChange={toggleSelectAll}
+          title={allSelected ? "Deselect all" : "Select all"}
+        />
         <input
           className="inbox-search-input"
           type="text"
@@ -207,15 +283,13 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
 
       {/* Keyboard hints */}
       <div style={{ fontSize: "11px", color: "var(--term-dim)", marginBottom: "8px", opacity: 0.6 }}>
-        Click or Enter to edit · p process · a archive · d delete · ↑↓ navigate
+        Click to edit · x select · p process · a archive · d delete · ↑↓ navigate
       </div>
 
       {/* List */}
       <CustomScrollbar style={{ flex: 1 }}>
         {loading && items.length === 0 ? (
-          <div style={{ textAlign: "center", color: "var(--term-dim)", padding: "40px 0", fontSize: "13px" }}>
-            Loading…
-          </div>
+          <div style={{ textAlign: "center", color: "var(--term-dim)", padding: "40px 0", fontSize: "13px" }}>Loading…</div>
         ) : items.length === 0 ? (
           <div style={{ textAlign: "center", color: "var(--term-dim)", padding: "40px 0", fontSize: "13px" }}>
             {searchQuery ? "No matching inbox items." : "Inbox is clear ✓"}
@@ -225,27 +299,37 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
             {items.map((item, idx) => {
               const summary = notesSummary(item.notes_md);
               const isFocused = focusedIndex === idx;
+              const isSelected = selectedIds.has(item.id);
               const isConfirmingDelete = showDeleteConfirm === item.id;
 
               return (
                 <div
                   key={item.id}
-                  onClick={() => {
-                    setFocusedIndex(idx);
-                    onEdit(item);
-                  }}
+                  onClick={() => { setFocusedIndex(idx); onEdit(item); }}
                   style={{
                     padding: "10px 12px",
                     marginBottom: "4px",
                     borderRadius: "6px",
-                    background: isFocused ? "var(--term-panel)" : "transparent",
-                    border: isFocused ? "1px solid var(--term-border)" : "1px solid transparent",
+                    background: isSelected
+                      ? "color-mix(in srgb, var(--term-accent) 12%, var(--term-panel))"
+                      : isFocused ? "var(--term-panel)" : "transparent",
+                    border: isSelected
+                      ? "1px solid color-mix(in srgb, var(--term-accent) 40%, transparent)"
+                      : isFocused ? "1px solid var(--term-border)" : "1px solid transparent",
                     cursor: "pointer",
-                    transition: "background 0.1s",
+                    transition: "background 0.1s, border-color 0.1s",
                   }}
                 >
-                  {/* Row header: type badge + title + date */}
+                  {/* Row header: checkbox + type badge + title + date */}
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: summary ? "3px" : "6px" }}>
+                    {/* Checkbox — stops propagation so clicking it doesn't open edit */}
+                    <div onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }} style={{ display: "flex", alignItems: "center" }}>
+                      {isSelected
+                        ? <CheckSquare size={15} style={{ color: "var(--term-accent)", flexShrink: 0 }} />
+                        : <Square size={15} style={{ color: "var(--term-dim)", flexShrink: 0, opacity: 0.5 }} />
+                      }
+                    </div>
+
                     <span
                       className={`badge ${item.type === "note" ? "info" : "warn"}`}
                       style={{ fontSize: "10px", padding: "2px 5px", borderRadius: "3px", flexShrink: 0 }}
@@ -280,6 +364,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
                       opacity: 0.8,
+                      paddingLeft: "23px", // align under title (past checkbox + gap)
                     }}>
                       {summary}
                     </div>
@@ -287,7 +372,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
 
                   {/* Taxonomy chips */}
                   {((item.contexts?.length || 0) + (item.projects?.length || 0) + (item.tags?.length || 0)) > 0 && (
-                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "6px" }}>
+                    <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "6px", paddingLeft: "23px" }}>
                       {item.contexts?.map(c => (
                         <span key={c} style={{ fontSize: "11px", color: "var(--term-dim)", background: "var(--term-bgAlt)", padding: "1px 5px", borderRadius: "3px" }}>@{c}</span>
                       ))}
@@ -300,9 +385,9 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                     </div>
                   )}
 
-                  {/* Row actions — stop propagation so row click (edit) doesn't fire */}
+                  {/* Per-row actions — stop propagation so they don't trigger edit */}
                   <div
-                    style={{ display: "flex", gap: "6px", alignItems: "center" }}
+                    style={{ display: "flex", gap: "6px", alignItems: "center", paddingLeft: "23px" }}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -316,28 +401,19 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                     {isConfirmingDelete ? (
                       <>
                         <span style={{ fontSize: "11px", color: "var(--term-dim)" }}>Confirm?</span>
-                        <button
-                          className="badge warn"
-                          onClick={() => handleDelete(item.id)}
-                          style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}
-                        >
+                        <button className="badge warn" onClick={() => handleDelete(item.id)}
+                          style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
                           <Trash2 size={11} /> Yes, Delete
                         </button>
-                        <button
-                          className="badge"
-                          onClick={() => setShowDeleteConfirm(null)}
-                          style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px" }}
-                        >
+                        <button className="badge" onClick={() => setShowDeleteConfirm(null)}
+                          style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px" }}>
                           Cancel
                         </button>
                       </>
                     ) : (
-                      <button
-                        className="badge warn"
-                        onClick={() => handleDelete(item.id)}
+                      <button className="badge warn" onClick={() => handleDelete(item.id)}
                         style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}
-                        title="Delete"
-                      >
+                        title="Delete">
                         <Trash2 size={11} /> Delete
                       </button>
                     )}
@@ -356,6 +432,80 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
           </div>
         )}
       </CustomScrollbar>
+
+      {/* Bulk action bar — slides in when items are selected */}
+      {selCount > 0 && (
+        <div style={{
+          marginTop: "8px",
+          padding: "10px 14px",
+          background: "var(--term-panel)",
+          border: "1px solid var(--term-border)",
+          borderRadius: "8px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: "12px", color: "var(--term-fg)", fontWeight: 600, marginRight: "4px" }}>
+            {selCount} selected
+          </span>
+
+          <button
+            className="badge success"
+            onClick={handleBulkProcess}
+            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
+            title="Move selected items out of inbox"
+          >
+            <CheckCircle size={12} /> Process All
+          </button>
+
+          <button
+            className="badge"
+            onClick={handleBulkArchive}
+            style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
+            title="Archive selected items"
+          >
+            <Archive size={12} /> Archive All
+          </button>
+
+          {bulkDeleteConfirm ? (
+            <>
+              <button
+                className="badge warn"
+                onClick={handleBulkDelete}
+                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
+              >
+                <Trash2 size={12} /> Confirm Delete {selCount}
+              </button>
+              <button
+                className="badge"
+                onClick={() => setBulkDeleteConfirm(false)}
+                style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px" }}
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              className="badge warn"
+              onClick={handleBulkDelete}
+              style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}
+              title="Delete selected items"
+            >
+              <Trash2 size={12} /> Delete All
+            </button>
+          )}
+
+          <button
+            className="badge"
+            onClick={() => { setSelectedIds(new Set()); setBulkDeleteConfirm(false); }}
+            style={{ fontSize: "12px", padding: "4px 8px", borderRadius: "5px", marginLeft: "auto", opacity: 0.7 }}
+            title="Clear selection"
+          >
+            ✕ Clear
+          </button>
+        </div>
+      )}
     </div>
   );
 }

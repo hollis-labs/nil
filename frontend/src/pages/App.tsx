@@ -647,6 +647,7 @@ function Inner() {
           setQuickOpen(true);
         }}
         onToggleAppMode={() => setAppMode(prev => prev === 'todos' ? 'notes' : 'todos')}
+        onOpenInbox={openInbox}
       />
 
       <div style={{

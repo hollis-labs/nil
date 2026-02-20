@@ -5,9 +5,10 @@ type Props = {
   onEscape?: () => void;
   onQuickAddNote?: () => void;
   onToggleAppMode?: () => void;
+  onOpenInbox?: () => void;
 };
 
-export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode }: Props) {
+export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox }: Props) {
   React.useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "n") {
@@ -18,6 +19,11 @@ export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, on
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "m") {
         e.preventDefault();
         onToggleAppMode?.();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+        e.preventDefault();
+        onOpenInbox?.();
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
@@ -31,7 +37,7 @@ export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, on
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode]);
+  }, [onQuickAdd, onEscape, onQuickAddNote, onToggleAppMode, onOpenInbox]);
 
   return null;
 }
