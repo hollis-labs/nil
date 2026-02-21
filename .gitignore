@@ -3,8 +3,8 @@ node_modules
 frontend/dist
 test-build
 # Go build output
-nanite
-todo-app
+/nanite
+/todo-app
 # dist artifacts
 dist/
 # build temp files
