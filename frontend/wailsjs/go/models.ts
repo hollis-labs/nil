@@ -1,5 +1,44 @@
+export namespace config {
+	
+	export class Vault {
+	    id: string;
+	    name: string;
+	    path: string;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Vault(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.created_at = source["created_at"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
+	export class APIConfigResult {
+	    enabled: boolean;
+	    port: number;
+	    api_key: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new APIConfigResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.port = source["port"];
+	        this.api_key = source["api_key"];
+	    }
+	}
 	export class FiltersResult {
 	    projects: string[];
 	    contexts: string[];
@@ -38,6 +77,7 @@ export namespace store {
 	    pinned: boolean;
 	    type: string;
 	    inbox: boolean;
+	    api_source?: string;
 	    projects: string[];
 	    contexts: string[];
 	    tags: string[];
@@ -64,6 +104,7 @@ export namespace store {
 	        this.pinned = source["pinned"];
 	        this.type = source["type"];
 	        this.inbox = source["inbox"];
+	        this.api_source = source["api_source"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];

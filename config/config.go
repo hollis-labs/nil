@@ -1,14 +1,60 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 )
 
+// Vault represents a named SQLite database in the vault registry.
+type Vault struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	CreatedAt string `json:"created_at"`
+}
+
 type Config struct {
-	DatabasePath string `json:"databasePath"`
+	// Legacy field — kept for migration from pre-vault installs only.
+	DatabasePath string `json:"databasePath,omitempty"`
+
+	// Vault registry
+	ActiveVaultID string  `json:"activeVaultId"`
+	InboxPath     string  `json:"inboxPath"`
+	Vaults        []Vault `json:"vaults"`
+
+	// API config
+	APIEnabled bool   `json:"apiEnabled"`
+	APIPort    int    `json:"apiPort"`
+	APIKey     string `json:"apiKey"`
+}
+
+// EnsureDefaults sets APIPort and APIKey if they are zero/empty.
+// Returns true if any field was changed.
+func (c *Config) EnsureDefaults() bool {
+	changed := false
+	if c.APIPort == 0 {
+		c.APIPort = 7765
+		changed = true
+	}
+	if c.APIKey == "" {
+		b := make([]byte, 32)
+		_, _ = rand.Read(b)
+		c.APIKey = hex.EncodeToString(b)
+		changed = true
+	}
+	return changed
+}
+
+// GenerateID creates a random 8-byte hex ID suitable for vault IDs.
+func GenerateID() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // getConfigDir returns the OS-appropriate config directory
@@ -60,14 +106,13 @@ func getConfigPath() string {
 	return filepath.Join(getConfigDir(), "config.json")
 }
 
-// Load reads the config from disk, returns default if not found
+// Load reads the config from disk, returns empty config if not found
 func Load() (*Config, error) {
 	configPath := getConfigPath()
 
 	data, err := os.ReadFile(configPath)
 	if os.IsNotExist(err) {
-		// Config doesn't exist yet - return empty config (signals first run)
-		return &Config{DatabasePath: ""}, nil
+		return &Config{}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -81,14 +126,59 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// LoadOrDefault loads config or returns default values
+// LoadOrDefault loads config, performs any needed migrations, and ensures
+// at least one vault and an inbox path are configured. Always returns a usable config.
 func LoadOrDefault() *Config {
 	cfg, err := Load()
-	if err != nil || cfg.DatabasePath == "" {
-		return &Config{
-			DatabasePath: getDefaultDatabasePath(),
-		}
+	if err != nil {
+		cfg = &Config{}
 	}
+
+	changed := false
+
+	// Migrate legacy single-vault config (pre-vault-registry installs)
+	if cfg.DatabasePath != "" && len(cfg.Vaults) == 0 {
+		id := GenerateID()
+		cfg.Vaults = []Vault{{
+			ID:        id,
+			Name:      "Default",
+			Path:      cfg.DatabasePath,
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		}}
+		cfg.ActiveVaultID = id
+		cfg.DatabasePath = "" // clear legacy field
+		changed = true
+	}
+
+	// Fresh install: create the default vault
+	if len(cfg.Vaults) == 0 {
+		id := GenerateID()
+		cfg.Vaults = []Vault{{
+			ID:        id,
+			Name:      "Default",
+			Path:      getDefaultDatabasePath(),
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		}}
+		cfg.ActiveVaultID = id
+		changed = true
+	}
+
+	// Ensure ActiveVaultID is set
+	if cfg.ActiveVaultID == "" && len(cfg.Vaults) > 0 {
+		cfg.ActiveVaultID = cfg.Vaults[0].ID
+		changed = true
+	}
+
+	// Ensure InboxPath is set (co-located with first vault)
+	if cfg.InboxPath == "" {
+		cfg.InboxPath = filepath.Join(cfg.Vaults[0].Path, "inbox")
+		changed = true
+	}
+
+	if changed {
+		_ = Save(cfg)
+	}
+
 	return cfg
 }
 
@@ -96,18 +186,15 @@ func LoadOrDefault() *Config {
 func Save(cfg *Config) error {
 	configDir := getConfigDir()
 
-	// Ensure config directory exists
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return err
 	}
 
-	// Marshal config to JSON
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	// Write to file
 	configPath := getConfigPath()
 	return os.WriteFile(configPath, data, 0644)
 }

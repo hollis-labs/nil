@@ -1,6 +1,7 @@
 import * as React from "react";
 import TerminalList, { ItemRow } from "@/components/TerminalList";
 import InboxView from "@/components/InboxView";
+import VaultSwitcher from "@/components/VaultSwitcher";
 import KeyboardScope from "@/components/KeyboardScope";
 import NotesModal from "@/components/NotesModal";
 import EditItemModal from "@/components/EditItemModal";
@@ -23,6 +24,7 @@ import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
+import { config } from "../../wailsjs/go/models";
 import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
@@ -52,6 +54,9 @@ function Inner() {
   const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
   const [metaModalItem, setMetaModalItem] = React.useState<ItemRow | null>(null);
   const [inboxCount, setInboxCount] = React.useState(0);
+  const [vaults, setVaults] = React.useState<config.Vault[]>([]);
+  const [activeVault, setActiveVault] = React.useState<config.Vault | null>(null);
+  const [showVaultSwitcher, setShowVaultSwitcher] = React.useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = React.useState(false);
   const [prevAppMode, setPrevAppMode] = React.useState<'todos' | 'notes'>('todos');
   const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
@@ -127,6 +132,50 @@ function Inner() {
     }
   }, []);
 
+  const loadVaults = React.useCallback(async () => {
+    try {
+      const [allVaults, active] = await Promise.all([
+        Backend.GetVaults(),
+        Backend.GetActiveVault(),
+      ]);
+      setVaults(allVaults ?? []);
+      setActiveVault(active ?? null);
+    } catch (err) {
+      console.error('Failed to load vaults:', err);
+    }
+  }, []);
+
+  // Ref so handleVaultSwitch can call the latest runSearch without a forward-reference TDZ error
+  const runSearchRef = React.useRef<() => void>(() => {});
+
+  const handleVaultSwitch = React.useCallback(async (vault: config.Vault) => {
+    setShowVaultSwitcher(false);
+    try {
+      await Backend.SwitchVault(vault.id);
+      setActiveVault(vault);
+      runSearchRef.current();
+      refreshInboxCount();
+    } catch (err) {
+      console.error('Failed to switch vault:', err);
+    }
+  }, [refreshInboxCount]);
+
+  // Cmd+Shift+V / Ctrl+Shift+V → vault switcher; Cmd+, / Ctrl+, → settings
+  React.useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        setShowVaultSwitcher(v => !v);
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   function openInbox() {
     if (appMode !== 'inbox') setPrevAppMode(appMode as 'todos' | 'notes');
     setAppMode('inbox');
@@ -164,7 +213,8 @@ function Inner() {
     }
     updateSessionFilterCount();
     refreshInboxCount();
-  }, [updateSessionFilterCount, refreshInboxCount]);
+    loadVaults();
+  }, [updateSessionFilterCount, refreshInboxCount, loadVaults]);
 
   React.useEffect(() => {
     // Check if database is set up
@@ -325,6 +375,9 @@ function Inner() {
       setAllRows([]);
     }
   }, [query, activeTabId, settings.tabs, settings.showCompleted, appMode]);
+
+  // Keep ref in sync so vault switch (defined earlier) always calls the latest runSearch
+  runSearchRef.current = runSearch;
 
   React.useEffect(() => {
     console.log('[useEffect] Running search (inputMode does not affect search)');
@@ -739,6 +792,31 @@ function Inner() {
               Remove Tutorial
             </button>
           )}
+
+          {/* Vault indicator — right-aligned with the search bar buttons below */}
+          {activeVault && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setShowVaultSwitcher(true); }}
+              title={`Vault: ${activeVault.name} — Click or ⌘⇧V to switch`}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: 24,
+                padding: '2px 8px',
+                fontSize: '10px',
+                fontFamily: 'monospace',
+                background: 'var(--term-panel)',
+                border: '1px solid var(--term-border)',
+                borderRadius: '3px',
+                color: 'var(--term-dim)',
+                cursor: 'pointer',
+                // @ts-ignore
+                WebkitAppRegion: 'no-drag',
+              } as any}
+            >
+              {activeVault.name}
+            </button>
+          )}
         </div>
 
         <div
@@ -1035,114 +1113,66 @@ function Inner() {
             onProcessed={refreshInboxCount}
           />
         ) : (
-        <TerminalList
-          rows={rows}
-          onToggle={handleToggle}
-          onOpenNotes={handleOpenNotes}
-          onMoveSection={handleMoveSection}
-          onArchive={handleArchive}
-          onDelete={handleDeleteTodo}
-          showCompleted={settings.showCompleted}
-          onEditItem={handleEditItem}
-          viewMode={viewMode}
-          appMode={appMode as 'todos' | 'notes'}
-          onOpenRadialMenu={(todo, position) => setRadialMenuItem({todo, position})}
-          closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editItem !== null || radialMenuItem !== null || metaModalItem !== null}
-          hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
-          animatingRow={animatingRow}
-          settingsButton={
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                style={{
-                  padding: '8px',
-                  background: 'var(--term-panel)',
-                  border: '1px solid var(--term-border)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease',
-                  height: '32px',
-                  width: '32px'
-                }}
-                onClick={()=>setHelpOpen(true)}
-                title="Help & Guide"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-accent)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-border)';
-                }}
-              >
-                <HelpCircle size={16} color="var(--term-fg)" />
-              </button>
-              <button
-                style={{
-                  padding: '8px',
-                  background: 'var(--term-panel)',
-                  border: '1px solid var(--term-border)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease',
-                  height: '32px',
-                  width: '32px'
-                }}
-                onClick={()=>setSettingsOpen(true)}
-                title="Settings"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-accent)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-border)';
-                }}
-              >
-                <Settings size={16} color="var(--term-fg)" />
-              </button>
-              <button
-                style={{
-                  padding: '8px',
-                  background: 'var(--term-panel)',
-                  border: '1px solid var(--term-border)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s ease',
-                  height: '32px',
-                  width: '32px',
-                  pointerEvents: 'auto'
-                }}
-                onMouseDown={(e) => {
-                  console.log('Power button - mousedown');
-                  e.stopPropagation();
-                  e.preventDefault();
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setShowPowerMenu(true);
-                }}
-                title="Quit NANITE"
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-accent)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--term-border)';
-                }}
-              >
-                <Power size={16} color="var(--term-fg)" />
-              </button>
-            </div>
-          }
-        />
+          <TerminalList
+            rows={rows}
+            onToggle={handleToggle}
+            onOpenNotes={handleOpenNotes}
+            onMoveSection={handleMoveSection}
+            onArchive={handleArchive}
+            onDelete={handleDeleteTodo}
+            showCompleted={settings.showCompleted}
+            onEditItem={handleEditItem}
+            viewMode={viewMode}
+            appMode={appMode as 'todos' | 'notes'}
+            onOpenRadialMenu={(todo, position) => setRadialMenuItem({todo, position})}
+            closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editItem !== null || radialMenuItem !== null || metaModalItem !== null}
+            hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
+            animatingRow={animatingRow}
+          />
         )}
 
+        {/* Persistent footer — always visible regardless of content state */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingTop: '8px',
+        }}>
           <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {(['help', 'settings', 'power'] as const).map(btn => (
+              <button
+                key={btn}
+                style={{
+                  padding: '6px',
+                  background: 'var(--term-panel)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'border-color 0.15s ease',
+                  height: '28px',
+                  width: '28px',
+                }}
+                title={btn === 'help' ? 'Help & Guide' : btn === 'settings' ? 'Settings (⌘,)' : 'Quit NANITE'}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--term-accent)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--term-border)'; }}
+                onMouseDown={btn === 'power' ? (e) => { e.stopPropagation(); e.preventDefault(); } : undefined}
+                onClick={
+                  btn === 'help' ? () => setHelpOpen(true) :
+                  btn === 'settings' ? () => setSettingsOpen(true) :
+                  (e) => { e.stopPropagation(); e.preventDefault(); setShowPowerMenu(true); }
+                }
+              >
+                {btn === 'help' && <HelpCircle size={14} color="var(--term-fg)" />}
+                {btn === 'settings' && <Settings size={14} color="var(--term-fg)" />}
+                {btn === 'power' && <Power size={14} color="var(--term-fg)" />}
+              </button>
+            ))}
+          </div>
+        </div>
         </div>
       </div>
 
@@ -1248,7 +1278,7 @@ function Inner() {
         </div>
       )}
       <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
-      <SettingsModal open={settingsOpen} onOpenChange={(v) => { setSettingsOpen(v); if (!v) setSettingsInitialTab(undefined); }} initialTab={settingsInitialTab} />
+      <SettingsModal open={settingsOpen} onOpenChange={(v) => { setSettingsOpen(v); if (!v) { setSettingsInitialTab(undefined); runSearch(); loadVaults(); } }} initialTab={settingsInitialTab} />
 
       <ConfirmDialog
         open={confirmRemoveDemo}
@@ -1359,6 +1389,13 @@ function Inner() {
             setQuickOpen(true);
           }
         }}
+      />
+      <VaultSwitcher
+        open={showVaultSwitcher}
+        vaults={vaults}
+        activeVaultId={activeVault?.id ?? ''}
+        onSwitch={handleVaultSwitch}
+        onClose={() => setShowVaultSwitcher(false)}
       />
     </div>
   );

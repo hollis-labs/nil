@@ -15,7 +15,7 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-const currentSchemaVersion = 4
+const currentSchemaVersion = 5
 
 type migration struct {
 	version int
@@ -42,6 +42,10 @@ var migrations = []migration{
 	{
 		version: 4,
 		sql:     "ALTER TABLE todos ADD COLUMN inbox INTEGER NOT NULL DEFAULT 0",
+	},
+	{
+		version: 5,
+		sql:     "ALTER TABLE todos ADD COLUMN api_source TEXT DEFAULT NULL",
 	},
 }
 
@@ -150,6 +154,14 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 				if err != nil {
 					return err
 				}
+				continue
+			}
+		}
+		if m.version == 5 {
+			var count int
+			err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='api_source'").Scan(&count)
+			if err == nil && count > 0 {
+				_, _ = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
 				continue
 			}
 		}
@@ -272,9 +284,9 @@ func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 		t.Inbox = true
 	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox, api_source)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox, t.APISource,
 	)
 	if err != nil {
 		return nil, err
@@ -358,11 +370,12 @@ func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
 	var pri *string
 	var source sql.NullString
 	var notesMD sql.NullString
+	var apiSource sql.NullString
 	err := s.DB.QueryRowContext(ctx, `
-SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox
+SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox, api_source
 FROM todos WHERE id=?`, id).Scan(
 		&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox,
+		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource,
 	)
 	if err != nil {
 		return nil, err
@@ -370,6 +383,7 @@ FROM todos WHERE id=?`, id).Scan(
 	t.Priority = pri
 	t.Source = source.String
 	t.NotesMD = notesMD.String
+	t.APISource = apiSource.String
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
@@ -399,7 +413,7 @@ func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int6
 func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
-       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox
+       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source
 FROM todos t JOIN refs r ON r.source_id = t.id
 WHERE r.target_id = ?
 ORDER BY t.updated_at DESC`, targetID)
@@ -414,14 +428,16 @@ ORDER BY t.updated_at DESC`, targetID)
 		var pri *string
 		var source sql.NullString
 		var notesMD sql.NullString
+		var apiSource sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox)
+			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
@@ -569,7 +585,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -589,7 +605,8 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
+		var apiSource sql.NullString
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -597,6 +614,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		t.Section = section
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
@@ -649,7 +667,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -668,7 +686,8 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox)
+		var apiSource sql.NullString
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -676,6 +695,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		t.Section = section
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}

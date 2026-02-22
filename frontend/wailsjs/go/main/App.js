@@ -14,12 +14,28 @@ export function CreateNoteFromLine(arg1) {
   return window['go']['main']['App']['CreateNoteFromLine'](arg1);
 }
 
+export function CreateVault(arg1, arg2) {
+  return window['go']['main']['App']['CreateVault'](arg1, arg2);
+}
+
 export function DeleteItem(arg1) {
   return window['go']['main']['App']['DeleteItem'](arg1);
 }
 
+export function DeleteVault(arg1) {
+  return window['go']['main']['App']['DeleteVault'](arg1);
+}
+
 export function ExportTodoTxt() {
   return window['go']['main']['App']['ExportTodoTxt']();
+}
+
+export function GetAPIConfig() {
+  return window['go']['main']['App']['GetAPIConfig']();
+}
+
+export function GetActiveVault() {
+  return window['go']['main']['App']['GetActiveVault']();
 }
 
 export function GetBackrefs(arg1) {
@@ -50,6 +66,10 @@ export function GetItem(arg1) {
   return window['go']['main']['App']['GetItem'](arg1);
 }
 
+export function GetVaults() {
+  return window['go']['main']['App']['GetVaults']();
+}
+
 export function HasDemoData() {
   return window['go']['main']['App']['HasDemoData']();
 }
@@ -62,12 +82,16 @@ export function NeedsSetup() {
   return window['go']['main']['App']['NeedsSetup']();
 }
 
-export function ProcessInboxItem(arg1) {
-  return window['go']['main']['App']['ProcessInboxItem'](arg1);
+export function ProcessInboxItem(arg1, arg2) {
+  return window['go']['main']['App']['ProcessInboxItem'](arg1, arg2);
 }
 
 export function RemoveDemoData() {
   return window['go']['main']['App']['RemoveDemoData']();
+}
+
+export function RenameVault(arg1, arg2) {
+  return window['go']['main']['App']['RenameVault'](arg1, arg2);
 }
 
 export function Restart() {
@@ -82,8 +106,16 @@ export function SeedDemoData() {
   return window['go']['main']['App']['SeedDemoData']();
 }
 
+export function SetAPIEnabled(arg1) {
+  return window['go']['main']['App']['SetAPIEnabled'](arg1);
+}
+
 export function SetDatabasePath(arg1) {
   return window['go']['main']['App']['SetDatabasePath'](arg1);
+}
+
+export function SwitchVault(arg1) {
+  return window['go']['main']['App']['SwitchVault'](arg1);
 }
 
 export function ToggleComplete(arg1, arg2) {

@@ -73,12 +73,11 @@ type Props = {
   appMode?: AppMode;
   onOpenRadialMenu?: (todo: ItemRow, position: {x: number; y: number}) => void;
   closeRadialMenus?: boolean;
-  settingsButton?: React.ReactNode;
   hasActiveFilters?: boolean;
   animatingRow?: { id: number; action: string; phase?: 'collapsing' | 'expanding' } | null;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditItem, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, settingsButton, hasActiveFilters = false, animatingRow = null }: Props) {
+export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditItem, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, hasActiveFilters = false, animatingRow = null }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
@@ -611,7 +610,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
             alignItems: 'center'
           }}>
             <span>{rows.length} note{rows.length !== 1 ? 's' : ''}</span>
-            {settingsButton && <div>{settingsButton}</div>}
           </div>
         </div>
       </>
@@ -733,7 +731,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           <span>
             {pct}% complete · <span style={{ color: 'var(--term-success)' }}>{done} done</span> · <span style={{ color: 'var(--term-info)' }}>{pending} pending</span>
           </span>
-            {settingsButton && <div>{settingsButton}</div>}
           </div>
         </div>
     );
@@ -830,7 +827,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           <span>
             {pct}% complete · <span style={{ color: 'var(--term-success)' }}>{done} done</span> · <span style={{ color: 'var(--term-info)' }}>{pending} pending</span>
           </span>
-            {settingsButton && <div>{settingsButton}</div>}
           </div>
         </div>
         

@@ -17,6 +17,7 @@ type Item struct {
 	Pinned    bool    `json:"pinned"`
 	Type      string  `json:"type"`
 	Inbox     bool    `json:"inbox"`
+	APISource string  `json:"api_source,omitempty"`
 
 	Projects []string `json:"projects"`
 	Contexts []string `json:"contexts"`

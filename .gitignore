@@ -9,3 +9,7 @@ test-build
 dist/
 # build temp files
 build/windows/installer/tmp/
+# Local Claude Code settings (personal, not shared)
+.claude/settings.local.json
+# Worktrees (managed by Forge)
+.worktrees/

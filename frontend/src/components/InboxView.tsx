@@ -2,6 +2,7 @@ import * as React from "react";
 import { ItemRow } from "./TerminalList";
 import CustomScrollbar from "./CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
+import { config } from "../../wailsjs/go/models";
 import { Archive, Trash2, CheckCircle, CheckSquare, Square } from "lucide-react";
 
 type Props = {
@@ -43,6 +44,8 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState<number | null>(null);
   const [selectedIds, setSelectedIds] = React.useState<Set<number>>(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = React.useState(false);
+  const [vaults, setVaults] = React.useState<config.Vault[]>([]);
+  const [processVaultId, setProcessVaultId] = React.useState<string>("");
   const debounceRef = React.useRef<NodeJS.Timeout | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -66,6 +69,16 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   }, []);
 
   React.useEffect(() => { loadItems(""); }, [loadItems]);
+
+  // Load available vaults for the Process target picker
+  React.useEffect(() => {
+    Promise.all([Backend.GetVaults(), Backend.GetActiveVault()])
+      .then(([allVaults, active]) => {
+        setVaults(allVaults ?? []);
+        setProcessVaultId(active?.id ?? "");
+      })
+      .catch(() => { /* fail silently — defaults to active vault via empty string */ });
+  }, []);
 
   // Debounced search
   React.useEffect(() => {
@@ -167,7 +180,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   async function handleProcess(id: number) {
     setItems(prev => prev.filter(i => i.id !== id));
     try {
-      await Backend.ProcessInboxItem(id);
+      await Backend.ProcessInboxItem(id, processVaultId);
       onProcessed();
     } catch (err) {
       console.error("Failed to process:", err);
@@ -207,7 +220,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
     setItems(prev => prev.filter(i => !idsSet.has(i.id)));
     setSelectedIds(new Set());
     try {
-      for (const id of ids) await Backend.ProcessInboxItem(id);
+      for (const id of ids) await Backend.ProcessInboxItem(id, processVaultId);
       onProcessed();
     } catch (err) {
       console.error("Failed to bulk process:", err);
@@ -431,10 +444,28 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                         <Trash2 size={11} /> Delete
                       </button>
                     )}
-                    <button className="badge success" onClick={() => handleProcess(item.id)}
-                      style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px", marginLeft: "auto" }}>
-                      <CheckCircle size={11} /> Process
-                    </button>
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "4px" }}>
+                      {vaults.length > 1 && (
+                        <select
+                          value={processVaultId}
+                          onChange={e => setProcessVaultId(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            fontSize: "11px", padding: "2px 4px", borderRadius: "4px",
+                            background: "var(--term-bg)", border: "1px solid var(--term-border)",
+                            color: "var(--term-fg)", cursor: "pointer", maxWidth: "110px",
+                          }}
+                        >
+                          {vaults.map(v => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <button className="badge success" onClick={() => handleProcess(item.id)}
+                        style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "3px" }}>
+                        <CheckCircle size={11} /> Process
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -458,6 +489,21 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
           <span style={{ fontSize: "12px", color: "var(--term-fg)", fontWeight: 600, marginRight: "4px" }}>
             {selCount} selected
           </span>
+          {vaults.length > 1 && (
+            <select
+              value={processVaultId}
+              onChange={e => setProcessVaultId(e.target.value)}
+              style={{
+                fontSize: "11px", padding: "3px 6px", borderRadius: "4px",
+                background: "var(--term-bg)", border: "1px solid var(--term-border)",
+                color: "var(--term-fg)", cursor: "pointer",
+              }}
+            >
+              {vaults.map(v => (
+                <option key={v.id} value={v.id}>{v.name}</option>
+              ))}
+            </select>
+          )}
           <button className="badge success" onClick={handleBulkProcess}
             style={{ fontSize: "12px", padding: "4px 10px", borderRadius: "5px", display: "flex", alignItems: "center", gap: "4px" }}>
             <CheckCircle size={12} /> Process All

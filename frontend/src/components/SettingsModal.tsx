@@ -4,6 +4,7 @@ import { themePresets, TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import * as Backend from "../../wailsjs/go/main/App";
+import { config } from "../../wailsjs/go/models";
 import { Check } from "lucide-react";
 
 type Settings = {
@@ -23,7 +24,7 @@ type ScopeTab = {
   appMode?: 'todos' | 'notes'; // defaults to 'todos'
 };
 
-type SettingsTab = 'general' | 'tabs' | 'data'; // 'theme' hidden until Tailwind migration
+type SettingsTab = 'general' | 'tabs' | 'data' | 'vaults'; // 'theme' hidden until Tailwind migration
 
 type Props = {
   open: boolean;
@@ -109,6 +110,16 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
   const [databasePath, setDatabasePath] = React.useState<string>('');
   const [changingDbPath, setChangingDbPath] = React.useState(false);
   const [showRestartPrompt, setShowRestartPrompt] = React.useState(false);
+  const [apiConfig, setApiConfig] = React.useState<{ enabled: boolean; port: number; api_key: string } | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = React.useState(false);
+  const [vaults, setVaults] = React.useState<config.Vault[]>([]);
+  const [activeVaultId, setActiveVaultId] = React.useState<string>('');
+  const [editingVaultId, setEditingVaultId] = React.useState<string | null>(null);
+  const [editingVaultName, setEditingVaultName] = React.useState('');
+  const [newVaultName, setNewVaultName] = React.useState('');
+  const [newVaultDir, setNewVaultDir] = React.useState('');
+  const [showNewVaultForm, setShowNewVaultForm] = React.useState(false);
+  const [confirmDeleteVaultId, setConfirmDeleteVaultId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -139,6 +150,24 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
       }).catch((err: any) => {
         console.error('Failed to load database path:', err);
         setDatabasePath('./data'); // fallback
+      });
+
+      // Load API config
+      (Backend as any).GetAPIConfig?.().then((cfg: { enabled: boolean; port: number; api_key: string }) => {
+        setApiConfig(cfg);
+      }).catch((err: any) => {
+        console.error('Failed to load API config:', err);
+      });
+
+      // Load vaults
+      Promise.all([
+        Backend.GetVaults(),
+        Backend.GetActiveVault(),
+      ]).then(([allVaults, active]) => {
+        setVaults(allVaults ?? []);
+        setActiveVaultId(active?.id ?? '');
+      }).catch((err: any) => {
+        console.error('Failed to load vaults:', err);
       });
     }
   }, [open, settings, theme]);
@@ -291,6 +320,34 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
                 }}
               >
                 Scope Tabs
+              </button>
+              <button
+                onClick={() => setActiveTab('data')}
+                className={`badge ${activeTab === 'data' ? 'success' : ''}`}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '0',
+                  border: 'none',
+                  borderLeft: '1px solid var(--term-border)',
+                  opacity: activeTab === 'data' ? 1 : 0.8
+                }}
+              >
+                Data
+              </button>
+              <button
+                onClick={() => setActiveTab('vaults')}
+                className={`badge ${activeTab === 'vaults' ? 'success' : ''}`}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '0 4px 4px 0',
+                  border: 'none',
+                  borderLeft: '1px solid var(--term-border)',
+                  opacity: activeTab === 'vaults' ? 1 : 0.8
+                }}
+              >
+                Vaults
               </button>
               {/* HIDDEN until Tailwind migration:
               <button
@@ -715,6 +772,200 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
             </div>
           )}
 
+          {/* Vaults Settings */}
+          {activeTab === 'vaults' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Vaults</h3>
+                <button
+                  className="badge success"
+                  onClick={() => setShowNewVaultForm(v => !v)}
+                  style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+                >
+                  {showNewVaultForm ? 'Cancel' : '+ New Vault'}
+                </button>
+              </div>
+              <div style={{ fontSize: '11px', marginBottom: '16px' }} className="text-dim">
+                Each vault is a separate SQLite database. Use ⌘⇧V to quickly switch between them.
+              </div>
+
+              {/* New vault form */}
+              {showNewVaultForm && (
+                <div style={{
+                  padding: '12px',
+                  background: 'var(--term-panel)',
+                  border: '1px solid var(--term-border)',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <input
+                    type="text"
+                    placeholder="Vault name (e.g. Work, RPG World, Research)"
+                    value={newVaultName}
+                    onChange={e => setNewVaultName(e.target.value)}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'var(--term-bg)',
+                      border: '1px solid var(--term-border)',
+                      borderRadius: '4px',
+                      color: 'var(--term-fg)',
+                      fontSize: '13px'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Directory path (e.g. /Users/you/Vaults/Work)"
+                    value={newVaultDir}
+                    onChange={e => setNewVaultDir(e.target.value)}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'var(--term-bg)',
+                      border: '1px solid var(--term-border)',
+                      borderRadius: '4px',
+                      color: 'var(--term-fg)',
+                      fontSize: '13px',
+                      fontFamily: 'monospace'
+                    }}
+                  />
+                  <button
+                    className="badge success"
+                    disabled={!newVaultName.trim() || !newVaultDir.trim()}
+                    onClick={async () => {
+                      try {
+                        const created = await Backend.CreateVault(newVaultName.trim(), newVaultDir.trim());
+                        if (created) setVaults(prev => [...prev, created]);
+                        setNewVaultName('');
+                        setNewVaultDir('');
+                        setShowNewVaultForm(false);
+                      } catch (err: any) {
+                        alert(`Failed to create vault: ${err.message || err}`);
+                      }
+                    }}
+                    style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', alignSelf: 'flex-start' }}
+                  >
+                    Create Vault
+                  </button>
+                </div>
+              )}
+
+              {/* Vault list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {vaults.map(vault => {
+                  const isActive = vault.id === activeVaultId;
+                  const isEditing = editingVaultId === vault.id;
+                  return (
+                    <div
+                      key={vault.id}
+                      style={{
+                        padding: '10px 12px',
+                        background: isActive ? 'rgba(var(--term-accent-rgb, 122, 162, 247), 0.06)' : 'var(--term-panel)',
+                        border: `1px solid ${isActive ? 'var(--term-accent)' : 'var(--term-border)'}`,
+                        borderRadius: '6px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      {/* Name (editable inline) */}
+                      <div style={{ flex: 1 }}>
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            value={editingVaultName}
+                            onChange={e => setEditingVaultName(e.target.value)}
+                            onKeyDown={async e => {
+                              if (e.key === 'Enter') {
+                                try {
+                                  await Backend.RenameVault(vault.id, editingVaultName.trim());
+                                  setVaults(prev => prev.map(v => v.id === vault.id ? { ...v, name: editingVaultName.trim() } : v));
+                                } catch (err: any) {
+                                  alert(`Failed to rename: ${err.message || err}`);
+                                }
+                                setEditingVaultId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingVaultId(null);
+                              }
+                            }}
+                            onBlur={() => setEditingVaultId(null)}
+                            style={{
+                              padding: '2px 6px',
+                              background: 'var(--term-bg)',
+                              border: '1px solid var(--term-accent)',
+                              borderRadius: '3px',
+                              color: 'var(--term-fg)',
+                              fontSize: '13px',
+                              width: '100%'
+                            }}
+                          />
+                        ) : (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: isActive ? 600 : 400 }}>
+                                {vault.name}
+                              </span>
+                              {isActive && (
+                                <span className="badge success" style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '3px' }}>active</span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--term-dim)', fontFamily: 'monospace', marginTop: '2px' }}>
+                              {vault.path}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        {!isActive && (
+                          <button
+                            className="badge info"
+                            onClick={async () => {
+                              try {
+                                await Backend.SwitchVault(vault.id);
+                                setActiveVaultId(vault.id);
+                              } catch (err: any) {
+                                alert(`Failed to switch: ${err.message || err}`);
+                              }
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                          >
+                            Switch To
+                          </button>
+                        )}
+                        <button
+                          className="badge"
+                          onClick={() => {
+                            setEditingVaultId(vault.id);
+                            setEditingVaultName(vault.name);
+                          }}
+                          style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                        >
+                          Rename
+                        </button>
+                        {vaults.length > 1 && !isActive && (
+                          <button
+                            className="badge warn"
+                            onClick={() => setConfirmDeleteVaultId(vault.id)}
+                            style={{ padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ marginTop: '16px', fontSize: '11px', lineHeight: '1.6' }} className="text-dim">
+                Deleting a vault removes it from the registry only — the database files on disk are preserved.
+              </div>
+            </div>
+          )}
+
           {/* Theme Settings — HIDDEN until Tailwind migration */}
           {false && (
             <div>
@@ -979,7 +1230,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
             </div>
           )}
 
-          {/* Import/Export Settings */}
+          {/* Import/Export + API Settings */}
           {activeTab === 'data' && (
             <div>
               <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Import/Export</h3>
@@ -1037,6 +1288,101 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
                   }}
                 />
               </div>
+
+              {/* API Access */}
+              <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--term-border)' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>API Access</h3>
+                <div style={{ fontSize: '11px', marginBottom: '16px' }} className="text-dim">
+                  Enable a local HTTP API so external agents and scripts can push items to your inbox or query your data.
+                </div>
+
+                {apiConfig ? (
+                  <div>
+                    {/* Enable toggle */}
+                    <div
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', cursor: 'pointer' }}
+                      onClick={async () => {
+                        const newEnabled = !apiConfig.enabled;
+                        try {
+                          await (Backend as any).SetAPIEnabled(newEnabled);
+                          setApiConfig({ ...apiConfig, enabled: newEnabled });
+                        } catch (err: any) {
+                          alert(`Error: ${err.message || err}`);
+                        }
+                      }}
+                    >
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        border: '1px solid var(--term-border)',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: apiConfig.enabled ? 'var(--term-accent)' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        flexShrink: 0,
+                      }}>
+                        {apiConfig.enabled && <Check size={14} style={{ color: '#000' }} />}
+                      </div>
+                      <label style={{ cursor: 'pointer', fontSize: '13px' }}>
+                        Enable local HTTP API
+                      </label>
+                      {apiConfig.enabled && (
+                        <span style={{ fontSize: '11px', color: 'var(--term-accent)', marginLeft: '4px' }}>
+                          — listening on port {apiConfig.port}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* API Key */}
+                    <div style={{ marginBottom: '8px' }}>
+                      <label style={{ fontSize: '12px', display: 'block', marginBottom: '6px' }} className="text-dim">
+                        API Key
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{
+                          flex: 1,
+                          padding: '8px 12px',
+                          background: 'var(--term-panel)',
+                          border: '1px solid var(--term-border)',
+                          borderRadius: '6px',
+                          fontFamily: 'monospace',
+                          fontSize: '11px',
+                          color: 'var(--term-fg)',
+                          overflowX: 'auto',
+                          whiteSpace: 'nowrap',
+                          userSelect: 'all',
+                          opacity: 0.9,
+                        }}>
+                          {apiConfig.api_key}
+                        </div>
+                        <button
+                          type="button"
+                          className="badge"
+                          onClick={() => {
+                            navigator.clipboard.writeText(apiConfig.api_key);
+                            setApiKeyCopied(true);
+                            setTimeout(() => setApiKeyCopied(false), 2000);
+                          }}
+                          style={{ padding: '8px 12px', fontSize: '12px', borderRadius: '6px', whiteSpace: 'nowrap' }}
+                        >
+                          {apiKeyCopied ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '11px', marginTop: '10px', lineHeight: '1.6' }} className="text-dim">
+                      Send <code style={{ fontFamily: 'monospace', background: 'var(--term-panel)', padding: '1px 4px', borderRadius: '3px' }}>X-API-Key</code> header to authenticate.
+                      {' '}Use <code style={{ fontFamily: 'monospace', background: 'var(--term-panel)', padding: '1px 4px', borderRadius: '3px' }}>X-Agent-Source</code> to identify your agent.
+                      <br />
+                      Endpoint: <code style={{ fontFamily: 'monospace', background: 'var(--term-panel)', padding: '1px 4px', borderRadius: '3px' }}>POST http://127.0.0.1:{apiConfig.port}/api/v1/inbox</code>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '12px' }} className="text-dim">Loading API config…</div>
+                )}
+              </div>
             </div>
           )}
             </div>
@@ -1074,6 +1420,25 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
           setShowRestartPrompt(false);
           onOpenChange(false);
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteVaultId !== null}
+        title="Delete Vault"
+        message={`Remove "${vaults.find(v => v.id === confirmDeleteVaultId)?.name ?? ''}" from the registry? Database files on disk will be preserved.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={async () => {
+          if (!confirmDeleteVaultId) return;
+          try {
+            await Backend.DeleteVault(confirmDeleteVaultId);
+            setVaults(prev => prev.filter(v => v.id !== confirmDeleteVaultId));
+          } catch (err: any) {
+            alert(`Failed to delete vault: ${err.message || err}`);
+          }
+          setConfirmDeleteVaultId(null);
+        }}
+        onCancel={() => setConfirmDeleteVaultId(null)}
       />
     </>
   );

@@ -3,19 +3,25 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
+	"time"
 
 	"nanite/config"
 	"nanite/parse"
 	"nanite/store"
+	"nanite/vault"
 )
 
 type App struct {
-	ctx        context.Context
-	Store      *store.Store
+	ctx       context.Context
+	vaultMgr  *vault.Manager
 	needsSetup bool
+	apiServer  *http.Server
+	apiMu      sync.Mutex
 }
 
 func NewApp() *App {
@@ -25,41 +31,80 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// Load config
-	cfg, err := config.Load()
-	if err != nil {
-		panic(err)
+	// Load config (with migration and auto-defaults)
+	cfg := config.LoadOrDefault()
+
+	// Ensure API defaults (port, key) are present; save if anything changed
+	if cfg.EnsureDefaults() {
+		_ = config.Save(cfg)
 	}
 
-	// If no database path configured, signal setup needed
-	if cfg.DatabasePath == "" {
+	// Initialize vault manager (opens active vault + shared inbox)
+	vm, err := vault.NewManager(ctx, cfg)
+	if err != nil {
+		println("Failed to initialize vault manager:", err.Error())
 		a.needsSetup = true
 		return
 	}
+	a.vaultMgr = vm
 
-	// Open database
-	s, err := store.Open(ctx, cfg.DatabasePath)
-	if err != nil {
-		panic(err)
+	if cfg.APIEnabled {
+		a.startAPIServer(cfg)
 	}
-	a.Store = s
 }
+
+func (a *App) shutdown(ctx context.Context) {
+	a.stopAPIServer()
+	if a.vaultMgr != nil {
+		a.vaultMgr.CloseAll()
+	}
+}
+
+func (a *App) startAPIServer(cfg *config.Config) {
+	if a.vaultMgr == nil {
+		return
+	}
+	a.apiMu.Lock()
+	defer a.apiMu.Unlock()
+	if a.apiServer != nil {
+		return // already running
+	}
+	srv := NewAPIServer(cfg, a.vaultMgr)
+	a.apiServer = srv
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			println("API server error:", err.Error())
+		}
+	}()
+}
+
+func (a *App) stopAPIServer() {
+	a.apiMu.Lock()
+	defer a.apiMu.Unlock()
+	if a.apiServer == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	_ = a.apiServer.Shutdown(ctx)
+	a.apiServer = nil
+}
+
+// --- Setup / config methods ---
 
 // NeedsSetup returns true if the app needs initial database configuration
 func (a *App) NeedsSetup() bool {
 	return a.needsSetup
 }
 
-// GetDatabasePath returns the current configured database path
+// GetDatabasePath returns the active vault's directory path
 func (a *App) GetDatabasePath() (string, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return "", err
+	if a.vaultMgr != nil {
+		if v := a.vaultMgr.GetActiveVault(); v != nil {
+			return v.Path, nil
+		}
 	}
-	if cfg.DatabasePath == "" {
-		return config.GetDefaultDatabasePath(), nil
-	}
-	return cfg.DatabasePath, nil
+	return config.GetDefaultDatabasePath(), nil
 }
 
 // GetDefaultDatabasePath returns the OS-appropriate default path
@@ -67,38 +112,154 @@ func (a *App) GetDefaultDatabasePath() string {
 	return config.GetDefaultDatabasePath()
 }
 
-// SetDatabasePath validates and saves the database path, then opens the database
+// SetDatabasePath updates the active vault's path. Kept for backward compat
+// with the setup/settings UI; new code should use vault CRUD methods.
 func (a *App) SetDatabasePath(path string) error {
 	// Validate path exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("directory does not exist: %s", path)
 	}
-
-	// Check if writable
 	testFile := path + "/.nanite-write-test"
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		return fmt.Errorf("directory not writable: %s", path)
 	}
 	os.Remove(testFile)
 
-	// Save config
-	cfg := &config.Config{DatabasePath: path}
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = &config.Config{}
+	}
+	// Update the active vault's path in registry
+	for i := range cfg.Vaults {
+		if cfg.Vaults[i].ID == cfg.ActiveVaultID {
+			cfg.Vaults[i].Path = path
+			break
+		}
+	}
+	// Fallback: legacy single-path field
+	if len(cfg.Vaults) == 0 {
+		cfg.DatabasePath = path
+	}
+	return config.Save(cfg)
+}
+
+// --- Vault management methods (Wails-bound) ---
+
+// GetVaults returns all registered vaults.
+func (a *App) GetVaults() ([]config.Vault, error) {
+	if a.vaultMgr == nil {
+		return nil, fmt.Errorf("vault manager not initialized")
+	}
+	return a.vaultMgr.GetVaults(), nil
+}
+
+// GetActiveVault returns the currently active vault metadata.
+func (a *App) GetActiveVault() (*config.Vault, error) {
+	if a.vaultMgr == nil {
+		return nil, fmt.Errorf("vault manager not initialized")
+	}
+	v := a.vaultMgr.GetActiveVault()
+	if v == nil {
+		return nil, fmt.Errorf("no active vault")
+	}
+	return v, nil
+}
+
+// CreateVault registers a new vault at the given directory path.
+func (a *App) CreateVault(name, dir string) (*config.Vault, error) {
+	if a.vaultMgr == nil {
+		return nil, fmt.Errorf("vault manager not initialized")
+	}
+	return a.vaultMgr.CreateVault(name, dir)
+}
+
+// RenameVault updates the display name of a vault.
+func (a *App) RenameVault(id, name string) error {
+	if a.vaultMgr == nil {
+		return fmt.Errorf("vault manager not initialized")
+	}
+	return a.vaultMgr.RenameVault(id, name)
+}
+
+// DeleteVault removes a vault from the registry (files on disk are preserved).
+func (a *App) DeleteVault(id string) error {
+	if a.vaultMgr == nil {
+		return fmt.Errorf("vault manager not initialized")
+	}
+	return a.vaultMgr.DeleteVault(id)
+}
+
+// SwitchVault changes the active vault. Returns the new active vault's metadata.
+func (a *App) SwitchVault(id string) (*config.Vault, error) {
+	if a.vaultMgr == nil {
+		return nil, fmt.Errorf("vault manager not initialized")
+	}
+	if err := a.vaultMgr.SwitchVault(id); err != nil {
+		return nil, err
+	}
+	return a.vaultMgr.GetActiveVault(), nil
+}
+
+// --- API config ---
+
+// APIConfigResult is the shape returned to the Settings UI.
+type APIConfigResult struct {
+	Enabled bool   `json:"enabled"`
+	Port    int    `json:"port"`
+	APIKey  string `json:"api_key"`
+}
+
+// GetAPIConfig returns the current API configuration for display in Settings.
+func (a *App) GetAPIConfig() (*APIConfigResult, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	cfg.EnsureDefaults()
+	return &APIConfigResult{
+		Enabled: cfg.APIEnabled,
+		Port:    cfg.APIPort,
+		APIKey:  cfg.APIKey,
+	}, nil
+}
+
+// SetAPIEnabled enables or disables the local HTTP API at runtime.
+func (a *App) SetAPIEnabled(enabled bool) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	cfg.EnsureDefaults()
+	cfg.APIEnabled = enabled
 	if err := config.Save(cfg); err != nil {
 		return err
 	}
-
-	// Open database if we have a context
-	if a.ctx != nil {
-		s, err := store.Open(a.ctx, path)
-		if err != nil {
-			return err
-		}
-		a.Store = s
-		a.needsSetup = false
+	if enabled {
+		a.startAPIServer(cfg)
+	} else {
+		a.stopAPIServer()
 	}
-
 	return nil
 }
+
+// --- Helper: find which store holds an item by ID ---
+
+// storeForItemID tries the active vault then the inbox store to locate an item.
+func (a *App) storeForItemID(id int64) (*store.Store, error) {
+	if s := a.vaultMgr.ActiveStore(); s != nil {
+		if _, err := s.GetItem(a.ctx, id); err == nil {
+			return s, nil
+		}
+	}
+	if s := a.vaultMgr.InboxStore(); s != nil {
+		if _, err := s.GetItem(a.ctx, id); err == nil {
+			return s, nil
+		}
+	}
+	return nil, fmt.Errorf("item %d not found", id)
+}
+
+// --- Item CRUD ---
 
 func (a *App) CreateItemFromLine(line string) (*store.Item, error) {
 	p := parse.ParseLine(line)
@@ -113,7 +274,12 @@ func (a *App) CreateItemFromLine(line string) (*store.Item, error) {
 		Source:    line,
 		Type:      "todo",
 	}
-	return a.Store.CreateItem(a.ctx, t)
+	// Route blank-title items to the shared inbox store
+	if strings.TrimSpace(t.Title) == "" {
+		t.Inbox = true
+		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
+	}
+	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
 }
 
 func (a *App) CreateNoteFromLine(line string) (*store.Item, error) {
@@ -126,13 +292,139 @@ func (a *App) CreateNoteFromLine(line string) (*store.Item, error) {
 		Source:   line,
 		Type:     "note",
 	}
-	return a.Store.CreateItem(a.ctx, t)
+	// Route blank-title items to the shared inbox store
+	if strings.TrimSpace(t.Title) == "" {
+		t.Inbox = true
+		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
+	}
+	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
 }
+
+func (a *App) GetItem(id int64) (*store.Item, error) {
+	// Try active store first, then inbox
+	if s := a.vaultMgr.ActiveStore(); s != nil {
+		if item, err := s.GetItem(a.ctx, id); err == nil {
+			return item, nil
+		}
+	}
+	if s := a.vaultMgr.InboxStore(); s != nil {
+		if item, err := s.GetItem(a.ctx, id); err == nil {
+			return item, nil
+		}
+	}
+	return nil, fmt.Errorf("item %d not found", id)
+}
+
+func (a *App) GetBackrefs(id int64) ([]store.Item, error) {
+	return a.vaultMgr.ActiveStore().GetBackrefs(a.ctx, id)
+}
+
+// UpdateItem routes the update to the correct store based on the item's inbox flag.
+// If an item with inbox=true exists in the active vault, it is moved to the inbox store.
+func (a *App) UpdateItem(t store.Item) error {
+	if t.Inbox {
+		// Check if item currently lives in the active vault (explicit "→ Inbox" routing)
+		if s := a.vaultMgr.ActiveStore(); s != nil {
+			if _, err := s.GetItem(a.ctx, t.ID); err == nil {
+				// Move: create copy in inbox store, delete from active vault
+				newItem := t
+				newItem.ID = 0
+				if _, err := a.vaultMgr.InboxStore().CreateItem(a.ctx, &newItem); err != nil {
+					return fmt.Errorf("creating item in inbox: %w", err)
+				}
+				return s.DeleteItem(a.ctx, t.ID)
+			}
+		}
+		// Item is already in inbox store — update in place
+		return a.vaultMgr.InboxStore().UpdateItem(a.ctx, &t)
+	}
+	return a.vaultMgr.ActiveStore().UpdateItem(a.ctx, &t)
+}
+
+func (a *App) ToggleComplete(id int64, completed bool) error {
+	s, err := a.storeForItemID(id)
+	if err != nil {
+		return err
+	}
+	return s.ToggleComplete(a.ctx, id, completed)
+}
+
+func (a *App) Archive(id int64, archived bool) error {
+	s, err := a.storeForItemID(id)
+	if err != nil {
+		return err
+	}
+	return s.Archive(a.ctx, id, archived)
+}
+
+func (a *App) DeleteItem(id int64) error {
+	s, err := a.storeForItemID(id)
+	if err != nil {
+		return err
+	}
+	return s.DeleteItem(a.ctx, id)
+}
+
+func (a *App) Search(req store.SearchRequest) ([]store.Item, error) {
+	req.Query = strings.TrimSpace(req.Query)
+	println("Backend search query:", req.Query, "statuses:", len(req.Statuses))
+	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
+	println("Backend search returned:", len(results), "results, error:", err)
+	return results, err
+}
+
+type FiltersResult struct {
+	Projects []string `json:"projects"`
+	Contexts []string `json:"contexts"`
+	Tags     []string `json:"tags"`
+}
+
+func (a *App) GetFilters() (*FiltersResult, error) {
+	projects, contexts, tags, err := a.vaultMgr.ActiveStore().GetFilterValues(a.ctx)
+	if err != nil {
+		return nil, err
+	}
+	if projects == nil {
+		projects = []string{}
+	}
+	if contexts == nil {
+		contexts = []string{}
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+	return &FiltersResult{
+		Projects: projects,
+		Contexts: contexts,
+		Tags:     tags,
+	}, nil
+}
+
+// --- Inbox methods ---
+
+func (a *App) GetInboxCount() (int, error) {
+	return a.vaultMgr.InboxStore().GetInboxCount(a.ctx)
+}
+
+func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Item, error) {
+	return a.vaultMgr.InboxStore().GetInboxItems(a.ctx, req)
+}
+
+// ProcessInboxItem moves an inbox item to the target vault.
+// If targetVaultID is empty, defaults to the currently active vault.
+func (a *App) ProcessInboxItem(id int64, targetVaultID string) error {
+	if targetVaultID == "" {
+		targetVaultID = a.vaultMgr.GetActiveVaultID()
+	}
+	return a.vaultMgr.MoveItemToVault(a.ctx, id, targetVaultID)
+}
+
+// --- Demo data ---
 
 const demoDataTag = "nanite-demo"
 
 func (a *App) HasDemoData() (bool, error) {
-	if a.Store == nil {
+	if a.vaultMgr == nil || a.vaultMgr.ActiveStore() == nil {
 		return false, nil
 	}
 	req := store.SearchRequest{
@@ -140,7 +432,7 @@ func (a *App) HasDemoData() (bool, error) {
 		PageSize: 1,
 		Type:     "todo",
 	}
-	results, err := a.Store.Search(a.ctx, req)
+	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
 		return false, err
 	}
@@ -154,13 +446,11 @@ type todoWithMeta struct {
 }
 
 func (a *App) SeedDemoData() error {
-	if a.Store == nil {
+	if a.vaultMgr == nil || a.vaultMgr.ActiveStore() == nil {
 		return fmt.Errorf("database not initialized")
 	}
 
-	// Tutorial todos organized by section with markdown notes
 	demos := []todoWithMeta{
-		// NOW section - Top priorities to start
 		{
 			line:    "(A) Welcome to NANITE! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
 			section: "now",
@@ -176,8 +466,6 @@ func (a *App) SeedDemoData() error {
 			section: "now",
 			notes:   "# Search Power\n\n**Examples:**\n- `welcome` - keyword search\n- `+tutorial` - project filter\n- `#now` - tag filter\n- `pri:A` - priority\n- `+work -meeting` - exclude with minus\n\nTry searching for `#now` right now!",
 		},
-
-		// SOON section
 		{
 			line:    "(B) Explore Now/Soon/Anytime scope views due:2025-10-28 +tutorial @features #soon",
 			section: "soon",
@@ -198,8 +486,6 @@ func (a *App) SeedDemoData() error {
 			section: "soon",
 			notes:   "# Dates\n\n**due:** - Deadline\n**t:** - Hide until (threshold)\n\nExample: `Buy gifts due:2025-12-20 t:2025-12-01` hides until December\n\nSwitch between Scope and Date views with buttons",
 		},
-
-		// ANYTIME section
 		{
 			line:    "(C) Sync with iCloud Drive across devices due:2025-12-01 +tutorial @sync #icloud #anytime",
 			section: "anytime",
@@ -226,36 +512,6 @@ func (a *App) SeedDemoData() error {
 			notes:   "# Import & Export\n\nSettings → Import/Export section\n\n**Export** - Backup as todo.txt\n**Import** - Migrate from other apps\n\nStandard todo.txt format works everywhere!",
 		},
 		{
-			line:    "Priority tips: (A)=critical (B)=important (C)=nice-to-have +tutorial @organization #anytime",
-			section: "anytime",
-			notes:   "# Priorities\n\n**(A)** - Must do\n**(B)** - Should do (use most)\n**(C)** - Could do\n**None** - Someday/maybe\n\nDon't overuse (A)!",
-		},
-		{
-			line:    "Negative filters with minus: +work -meeting excludes meetings +tutorial @advanced #anytime",
-			section: "anytime",
-			notes:   "# Exclude with Minus\n\n`+work -meeting` - work, no meetings\n`pri:A -#waiting` - priority A, not waiting\n`@computer -+personal` - computer work tasks\n\nCombine any filters!",
-		},
-		{
-			line:    "Add markdown notes to any todo (like this one!) +tutorial @features #anytime",
-			section: "anytime",
-			notes:   "# Markdown Support\n\n**Formatting:**\n- Headers: # ## ###\n- **Bold**, *italic*\n- Lists: - item\n- Links: [text](url)\n- Code: `inline` or blocks\n\nClick any todo to add notes!",
-		},
-		{
-			line:    "x Completed format: checkmark or 'x' prefix in todo.txt +tutorial @getting-started #anytime",
-			section: "anytime",
-			notes:   "# Completed Todos\n\nThis one is done!\n\nFormat: `x 2025-10-23 Task name`\n\nToggle with checkbox or Settings → Show Completed",
-		},
-		{
-			line:    "Try the Date view (calendar icon) vs Scope view due:2025-11-10 +tutorial @features #anytime",
-			section: "anytime",
-			notes:   "# View Modes\n\n**Scope** - Groups by Now/Soon/Anytime\n**Date** - Groups by due dates\n\nToggle with buttons near tabs",
-		},
-		{
-			line:    "Create your first real todo with ⌘N now! due:2025-10-24 +tutorial @shortcuts #anytime",
-			section: "anytime",
-			notes:   "# Practice Time\n\nPress ⌘N and try:\n\n`(A) Call dentist @phone due:2025-10-25`\n`Buy groceries @errands #personal`\n`(B) Review report +work @computer`\n\nUse what you learned!",
-		},
-		{
 			line:    "Remove all tutorial data with header button when ready +tutorial @getting-started #anytime",
 			section: "anytime",
 			notes:   "# Clean Up\n\nWhen comfortable:\n\n1. Click \"Remove Tutorial\" button in header\n2. All tutorial todos deleted\n3. Your todos stay!\n4. Start fresh\n\nGood luck! 🚀",
@@ -276,112 +532,32 @@ func (a *App) SeedDemoData() error {
 			NotesMD:   demo.notes,
 			Section:   demo.section,
 		}
-		_, err := a.Store.CreateItem(a.ctx, todo)
-		if err != nil {
+		if _, err := a.vaultMgr.ActiveStore().CreateItem(a.ctx, todo); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 func (a *App) RemoveDemoData() error {
-	if a.Store == nil {
+	if a.vaultMgr == nil || a.vaultMgr.ActiveStore() == nil {
 		return fmt.Errorf("database not initialized")
 	}
-
 	req := store.SearchRequest{
 		Tags:     []string{demoDataTag},
 		PageSize: 500,
 		Type:     "todo",
 	}
-	results, err := a.Store.Search(a.ctx, req)
+	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
 		return err
 	}
-
 	for _, todo := range results {
-		err = a.Store.DeleteItem(a.ctx, int64(todo.ID))
-		if err != nil {
+		if err := a.vaultMgr.ActiveStore().DeleteItem(a.ctx, int64(todo.ID)); err != nil {
 			return err
 		}
 	}
-
 	return nil
-}
-
-func (a *App) GetItem(id int64) (*store.Item, error) {
-	return a.Store.GetItem(a.ctx, id)
-}
-
-func (a *App) GetBackrefs(id int64) ([]store.Item, error) {
-	return a.Store.GetBackrefs(a.ctx, id)
-}
-
-func (a *App) UpdateItem(t store.Item) error {
-	return a.Store.UpdateItem(a.ctx, &t)
-}
-
-func (a *App) ToggleComplete(id int64, completed bool) error {
-	return a.Store.ToggleComplete(a.ctx, id, completed)
-}
-
-func (a *App) Archive(id int64, archived bool) error {
-	return a.Store.Archive(a.ctx, id, archived)
-}
-
-func (a *App) DeleteItem(id int64) error {
-	return a.Store.DeleteItem(a.ctx, id)
-}
-
-func (a *App) GetInboxCount() (int, error) {
-	return a.Store.GetInboxCount(a.ctx)
-}
-
-func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Item, error) {
-	return a.Store.GetInboxItems(a.ctx, req)
-}
-
-func (a *App) ProcessInboxItem(id int64) error {
-	return a.Store.ProcessInboxItem(a.ctx, id)
-}
-
-func (a *App) Search(req store.SearchRequest) ([]store.Item, error) {
-	req.Query = strings.TrimSpace(req.Query)
-	println("Backend search query:", req.Query, "statuses:", len(req.Statuses))
-	results, err := a.Store.Search(a.ctx, req)
-	println("Backend search returned:", len(results), "results, error:", err)
-	return results, err
-}
-
-type FiltersResult struct {
-	Projects []string `json:"projects"`
-	Contexts []string `json:"contexts"`
-	Tags     []string `json:"tags"`
-}
-
-func (a *App) GetFilters() (*FiltersResult, error) {
-	projects, contexts, tags, err := a.Store.GetFilterValues(a.ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure we return empty arrays instead of nil
-	if projects == nil {
-		projects = []string{}
-	}
-	if contexts == nil {
-		contexts = []string{}
-	}
-	if tags == nil {
-		tags = []string{}
-	}
-
-	return &FiltersResult{
-		Projects: projects,
-		Contexts: contexts,
-		Tags:     tags,
-	}, nil
 }
 
 func (a *App) ExportTodoTxt() (string, error) {
@@ -393,11 +569,10 @@ func (a *App) ExportTodoTxt() (string, error) {
 		SortDir:  "asc",
 		Type:     "todo",
 	}
-	todos, err := a.Store.Search(a.ctx, req)
+	todos, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
 		return "", err
 	}
-
 	var lines []string
 	for _, t := range todos {
 		lines = append(lines, t.Source)
@@ -412,8 +587,7 @@ func (a *App) ImportTodoTxt(content string) error {
 		if line == "" {
 			continue
 		}
-		_, err := a.CreateItemFromLine(line)
-		if err != nil {
+		if _, err := a.CreateItemFromLine(line); err != nil {
 			return err
 		}
 	}
@@ -422,23 +596,17 @@ func (a *App) ImportTodoTxt(content string) error {
 
 // Restart restarts the application
 func (a *App) Restart() error {
-	// Get the executable path
 	executable, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get executable path: %w", err)
 	}
-
-	// Start a new instance
 	cmd := exec.Command(executable, os.Args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to restart: %w", err)
 	}
-
-	// Exit current process
 	os.Exit(0)
 	return nil
 }
