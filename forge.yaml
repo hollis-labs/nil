@@ -1,0 +1,63 @@
+version: 1
+
+project:
+  id: nanite
+  name: NANITE
+
+storage:
+  backend: files
+  files:
+    root: ".forge/tasks"
+
+observability:
+  verbosity: verbose
+  write_run_log: true
+  write_decision_log: true
+  redact_secrets: true
+  log_dir: ".forge/logs"
+
+git:
+  use_worktrees: false
+  branch_prefix: "forge/"
+  pr_mode: optional
+  pr:
+    base_branch: main
+    title_prefix: "forge:"
+    body_template: ".forge/templates/pr-body.md"
+
+pcc:
+  enabled: true
+  location: ".forge/pcc"
+  commit_to_git: true
+  refresh:
+    on_workflow_start: true
+    on_git_change: false
+    scheduled: false
+  limits:
+    max_files: 10
+    max_section_words: 400
+
+workflows:
+  inception:
+    enabled: true
+  new_feature:
+    enabled: true
+    defaults:
+      track_tasks: true
+      require_spec: true
+  update_docs:
+    enabled: false
+  quality_loop:
+    enabled: false
+
+bootstrap:
+  enabled: true
+  path: .forge/bootstrap.md
+  history_path: .forge/bootstrap/history
+  max_tasks_per_run: 6
+  completion_token: DONE
+
+quality:
+  modes: [correctness, security]
+  on_issue:
+    default_action: create_task
