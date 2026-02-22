@@ -1,5 +1,240 @@
+export namespace chat {
+	
+	export class ActionProposal {
+	    id: number;
+	    session_id: number;
+	    message_id?: number;
+	    action_type: string;
+	    item_type: string;
+	    vault_id: string;
+	    payload: store.Item;
+	    diff?: Record<string, any>;
+	    status: string;
+	    created_at: string;
+	    resolved_at?: string;
+	    error_msg?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionProposal(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.session_id = source["session_id"];
+	        this.message_id = source["message_id"];
+	        this.action_type = source["action_type"];
+	        this.item_type = source["item_type"];
+	        this.vault_id = source["vault_id"];
+	        this.payload = this.convertValues(source["payload"], store.Item);
+	        this.diff = source["diff"];
+	        this.status = source["status"];
+	        this.created_at = source["created_at"];
+	        this.resolved_at = source["resolved_at"];
+	        this.error_msg = source["error_msg"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ActionResult {
+	    proposal_id: number;
+	    item_id?: number;
+	    dry_run: boolean;
+	    outcome: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.proposal_id = source["proposal_id"];
+	        this.item_id = source["item_id"];
+	        this.dry_run = source["dry_run"];
+	        this.outcome = source["outcome"];
+	    }
+	}
+	export class AuditEntry {
+	    id: number;
+	    proposal_id?: number;
+	    action_type: string;
+	    item_type: string;
+	    vault_id: string;
+	    item_id?: number;
+	    outcome: string;
+	    payload_json: string;
+	    actor: string;
+	    timestamp: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AuditEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.proposal_id = source["proposal_id"];
+	        this.action_type = source["action_type"];
+	        this.item_type = source["item_type"];
+	        this.vault_id = source["vault_id"];
+	        this.item_id = source["item_id"];
+	        this.outcome = source["outcome"];
+	        this.payload_json = source["payload_json"];
+	        this.actor = source["actor"];
+	        this.timestamp = source["timestamp"];
+	    }
+	}
+	export class ChatMessage {
+	    id: number;
+	    session_id: number;
+	    role: string;
+	    content: string;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.session_id = source["session_id"];
+	        this.role = source["role"];
+	        this.content = source["content"];
+	        this.created_at = source["created_at"];
+	    }
+	}
+	export class ChatResponse {
+	    message: ChatMessage;
+	    proposal_id?: number;
+	    proposal?: ActionProposal;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.message = this.convertValues(source["message"], ChatMessage);
+	        this.proposal_id = source["proposal_id"];
+	        this.proposal = this.convertValues(source["proposal"], ActionProposal);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ChatSession {
+	    id: number;
+	    vault_id: string;
+	    started_at: string;
+	    ended_at?: string;
+	    dry_run: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.vault_id = source["vault_id"];
+	        this.started_at = source["started_at"];
+	        this.ended_at = source["ended_at"];
+	        this.dry_run = source["dry_run"];
+	    }
+	}
+
+}
+
 export namespace config {
 	
+	export class VaultCap {
+	    read: boolean;
+	    write: boolean;
+	    delete: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new VaultCap(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.read = source["read"];
+	        this.write = source["write"];
+	        this.delete = source["delete"];
+	    }
+	}
+	export class ChatConfig {
+	    enabled: boolean;
+	    apiKey: string;
+	    model: string;
+	    dryRun: boolean;
+	    vaultCaps: Record<string, VaultCap>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChatConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.apiKey = source["apiKey"];
+	        this.model = source["model"];
+	        this.dryRun = source["dryRun"];
+	        this.vaultCaps = this.convertValues(source["vaultCaps"], VaultCap, true);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Vault {
 	    id: string;
 	    name: string;

@@ -1,15 +1,15 @@
 ---
 intent: bootstrap
-iteration: 2
+iteration: 3
 generated: 2026-02-22
 source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/
 ---
 
 # NANITE Forge Bootstrap
 
-**Iteration**: 2 (next to run)
+**Iteration**: 3 (next to run)
 **Generated**: 2026-02-22
-**Feature**: F5 — Vault Chat (Inception complete; execution phase starting)
+**Feature**: F5 — Vault Chat (M0 complete; M1 frontend phase starting)
 
 ---
 
@@ -17,60 +17,60 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/
 
 | Status | Count |
 |---|---|
-| todo | 10 |
-| doing | 0 |
-| blocked | 0 |
-| done | 0 (meta-tasks from Inception) |
+| todo | 5 |
+| done | 5 (TASK-001 through 005 — M0 foundation) |
 | backlog | 5 |
 | **total tasks** | **10** |
 
 ---
 
-## Top Next Tasks (A priority, oldest first)
+## Top Next Tasks (B priority — all unblocked)
 
-1. **TASK-20260222-001** (A) — Chat DB schema + migration: create `chat/` package, `ChatStore`, schema for `chat_sessions`, `chat_messages`, `action_proposals`, `action_audit` tables in `chat.db`. ← **START HERE**
-2. **TASK-20260222-002** (A) — Go: ChatMessage model + Store methods ← blocked on 001
-3. **TASK-20260222-003** (A) — Go: LLM bridge (Claude API + parse action) ← blocked on 002
-4. **TASK-20260222-004** (A) — Go: ActionProposal flow ← blocked on 003
-5. **TASK-20260222-005** (A) — Wails bindings: expose chat methods ← blocked on 004
+1. **TASK-20260222-006** (B) — Frontend: ChatPanel component (`src/components/ChatPanel.tsx`, `ChatMessage.tsx`)
+2. **TASK-20260222-007** (B) — Frontend: ActionCard component (`src/components/ActionCard.tsx`)
+3. **TASK-20260222-008** (B) — Frontend: wire ChatPanel into App.tsx with `Cmd+Shift+C` shortcut ← blocked on 006+007
+4. **TASK-20260222-009** (B) — Frontend: vault selector in chat ← blocked on 006
+5. **TASK-20260222-010** (C) — Settings: chat config section ← blocked on 005 (done ✓ — unblocked)
 
----
-
-## Backlog (captured, not yet promoted)
-
-5 items in `.forge/backlog/`:
-1. **(B) BACKLOG-20260222-001** — Saved named chat sessions
-2. **(B) BACKLOG-20260222-002** — Chat-driven inbox triage mode
-3. **(C) BACKLOG-20260222-003** — Multi-vault cross-search
-4. **(C) BACKLOG-20260222-004** — Deterministic action classifier
-5. **(C) BACKLOG-20260222-005** — Chat transcript export
+**Start with 006 and 007 (can be written in any order).**
 
 ---
 
 ## Blockers
 
-- None. All A-priority tasks unblocked in sequence. 001 is the first executable task.
+- None. M0 backend complete. All M1 frontend tasks unblocked.
+
+---
+
+## M0 Summary (iteration 2)
+
+Complete backend foundation:
+- `chat/` package: `models.go`, `store.go` (ChatStore + chat.db), `bridge.go` (Claude API), `actions.go` (propose/approve/deny + audit)
+- `config.ChatConfig` + `VaultCap` in config
+- 9 Wails-bound methods in `app.go`: `StartChatSession`, `EndChatSession`, `SendChatMessage`, `ApproveChatAction`, `DenyChatAction`, `GetChatHistory`, `GetActionAudit`, `GetChatConfig`, `SetChatConfig`
+- TypeScript bindings regenerated (`wails generate module` ✓)
+- `go build ./...` clean ✓
 
 ---
 
 ## Latest Run Log
 
-`.forge/logs/run-20260222-iter01.md`
-Inception iteration — GitHub repo created, Forge installed, all artifacts written (PCC ×5, MVP, PRD-lite, Spec-lite, Plan, Tasks ×10, Backlog ×5).
+`.forge/logs/run-20260222-iter02.md`
+5 tasks completed (TASK-001–005): chat package, bridge, action flow, Wails bindings.
 
 ---
 
-## Quick Start (Iteration 2)
+## Quick Start (Iteration 3)
 
 ```
-# Iteration 2
-# Pick TASK-20260222-001 (A) — Chat DB schema
-# 1. Create chat/ package directory
-# 2. Write chat/models.go (ChatSession, ChatMessage, ActionProposal, AuditEntry structs)
-# 3. Write chat/store.go (ChatStore: open chat.db at configDir, init schema, CRUD methods)
-# 4. go build . — verify compiles
-# 5. Mark 001 done, start 002
-# Commit: "forge(chat): add chat package with ChatStore and chat.db schema"
+# Iteration 3 — M1 Frontend
+# Start with TASK-20260222-006: ChatPanel + ChatMessage components
+# 1. Read frontend/src/pages/App.tsx to understand state patterns
+# 2. Create frontend/src/components/ChatPanel.tsx (session lifecycle, thread, input)
+# 3. Create frontend/src/components/ChatMessage.tsx (single turn renderer)
+# 4. go build ./... still passes (no Go changes needed this iteration)
+# Then: TASK-20260222-007 — ActionCard component
+# Commit: "forge(chat): add ChatPanel and ActionCard frontend components"
 ```
 
 ---
@@ -79,7 +79,6 @@ Inception iteration — GitHub repo created, Forge installed, all artifacts writ
 
 - Storage: file backend → `.forge/tasks/`
 - PCC: `.forge/pcc/` (5 files) ✓
-- Artifacts: `.forge/artifacts/` (mvp.md, prd-lite.md, spec-lite.md, plan.md) ✓
-- Git: branch `main`; repo `hollis-labs/nanite` (private); iteration 1 commit pending
-- Milestones: M0 (foundation) → M1 (frontend) → M2 (settings/audit)
-- Schema version: 4 (chat will use separate chat.db, not vault DB migration)
+- Milestones: M0 ✓ → M1 (in progress) → M2
+- Git: branch `main`; iteration 2 commit pending
+- Backend: `go build ./...` clean; Wails bindings up to date

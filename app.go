@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"nanite/chat"
 	"nanite/config"
 	"nanite/parse"
 	"nanite/store"
@@ -17,11 +19,16 @@ import (
 )
 
 type App struct {
-	ctx       context.Context
-	vaultMgr  *vault.Manager
+	ctx        context.Context
+	vaultMgr   *vault.Manager
 	needsSetup bool
 	apiServer  *http.Server
 	apiMu      sync.Mutex
+
+	// Chat addon (F5)
+	chatStore  *chat.ChatStore
+	chatRunner *chat.ActionRunner
+	chatBridge *chat.Bridge
 }
 
 func NewApp() *App {
@@ -51,12 +58,25 @@ func (a *App) startup(ctx context.Context) {
 	if cfg.APIEnabled {
 		a.startAPIServer(cfg)
 	}
+
+	// Initialise chat addon
+	cs, err := chat.Open(ctx, config.GetConfigDir())
+	if err != nil {
+		println("Failed to initialize chat store:", err.Error())
+	} else {
+		a.chatStore = cs
+		a.chatRunner = chat.NewActionRunner(cs)
+		a.chatBridge = &chat.Bridge{}
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {
 	a.stopAPIServer()
 	if a.vaultMgr != nil {
 		a.vaultMgr.CloseAll()
+	}
+	if a.chatStore != nil {
+		_ = a.chatStore.Close()
 	}
 }
 
@@ -592,6 +612,205 @@ func (a *App) ImportTodoTxt(content string) error {
 		}
 	}
 	return nil
+}
+
+// --- Chat addon (F5) ---
+
+// chatReady returns an error if the chat subsystem failed to initialise.
+func (a *App) chatReady() error {
+	if a.chatStore == nil || a.chatBridge == nil || a.chatRunner == nil {
+		return fmt.Errorf("chat subsystem not initialised")
+	}
+	return nil
+}
+
+// StartChatSession opens a new chat session against the active vault.
+func (a *App) StartChatSession() (*chat.ChatSession, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	dryRun := cfg.Chat.DryRun
+	vaultID := ""
+	if a.vaultMgr != nil {
+		vaultID = a.vaultMgr.GetActiveVaultID()
+	}
+	return a.chatStore.CreateSession(a.ctx, vaultID, dryRun)
+}
+
+// EndChatSession closes the given session.
+func (a *App) EndChatSession(sessionID int64) error {
+	if err := a.chatReady(); err != nil {
+		return err
+	}
+	return a.chatStore.EndSession(a.ctx, sessionID)
+}
+
+// SendChatMessage sends a user message, calls the LLM, and returns the response.
+// If the LLM proposes an action, the proposal is persisted and its ID returned.
+func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatResponse, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	// Persist the user message.
+	userMsg, err := a.chatStore.AddMessage(a.ctx, &chat.ChatMessage{
+		SessionID: sessionID,
+		Role:      "user",
+		Content:   content,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("chat: store user message: %w", err)
+	}
+
+	// Load session for context.
+	sess, err := a.chatStore.GetSession(a.ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get active vault metadata.
+	vaultName := "Default"
+	caps := chat.VaultCaps{Read: true}
+	if a.vaultMgr != nil {
+		if v := a.vaultMgr.GetActiveVault(); v != nil {
+			vaultName = v.Name
+			if vc, ok := cfg.Chat.VaultCaps[v.ID]; ok {
+				caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete}
+			}
+		}
+	}
+
+	// Run a vault search to provide context to the LLM.
+	searchCtx := ""
+	if a.vaultMgr != nil && a.vaultMgr.ActiveStore() != nil {
+		results, _ := a.vaultMgr.ActiveStore().Search(a.ctx, store.SearchRequest{
+			Query:    content,
+			PageSize: 10,
+		})
+		if len(results) > 0 {
+			b, _ := json.Marshal(results)
+			searchCtx = string(b)
+		}
+	}
+
+	// Load message history for context window.
+	history, _ := a.chatStore.GetMessages(a.ctx, sessionID)
+	_ = userMsg // already in history
+
+	// Call the LLM.
+	resp, err := a.chatBridge.Send(a.ctx, chat.BridgeRequest{
+		APIKey:      cfg.Chat.APIKey,
+		Model:       cfg.Chat.Model,
+		VaultID:     sess.VaultID,
+		VaultName:   vaultName,
+		Caps:        caps,
+		DryRun:      sess.DryRun,
+		History:     history,
+		UserMessage: content,
+		SearchCtx:   searchCtx,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Persist the assistant message.
+	resp.Message.SessionID = sessionID
+	assistantMsg, err := a.chatStore.AddMessage(a.ctx, &resp.Message)
+	if err != nil {
+		return nil, fmt.Errorf("chat: store assistant message: %w", err)
+	}
+	resp.Message = *assistantMsg
+
+	// If the LLM proposed an action, persist it.
+	if resp.Proposal != nil {
+		resp.Proposal.SessionID = sessionID
+		resp.Proposal.MessageID = &assistantMsg.ID
+		proposalID, err := a.chatRunner.Propose(a.ctx, resp.Proposal)
+		if err != nil {
+			return resp, fmt.Errorf("chat: persist proposal: %w", err)
+		}
+		resp.ProposalID = &proposalID
+		// Reload full proposal with DB-assigned fields.
+		full, _ := a.chatStore.GetProposal(a.ctx, proposalID)
+		resp.Proposal = full
+	}
+
+	return resp, nil
+}
+
+// ApproveChatAction executes an approved ActionProposal.
+func (a *App) ApproveChatAction(proposalID int64) (*chat.ActionResult, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := a.chatStore.GetProposal(a.ctx, proposalID)
+	if err != nil {
+		return nil, err
+	}
+
+	caps := chat.VaultCaps{Read: true}
+	if vc, ok := cfg.Chat.VaultCaps[p.VaultID]; ok {
+		caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete}
+	}
+
+	return a.chatRunner.Approve(a.ctx, proposalID, a.vaultMgr.ActiveStore(), cfg.Chat.DryRun, caps)
+}
+
+// DenyChatAction rejects a pending ActionProposal.
+func (a *App) DenyChatAction(proposalID int64) error {
+	if err := a.chatReady(); err != nil {
+		return err
+	}
+	return a.chatRunner.Deny(a.ctx, proposalID)
+}
+
+// GetChatHistory returns all messages for a session.
+func (a *App) GetChatHistory(sessionID int64) ([]chat.ChatMessage, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	return a.chatStore.GetMessages(a.ctx, sessionID)
+}
+
+// GetActionAudit returns the most recent audit entries.
+func (a *App) GetActionAudit(limit int) ([]chat.AuditEntry, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	return a.chatStore.GetAudit(a.ctx, limit)
+}
+
+// GetChatConfig returns the current chat configuration.
+func (a *App) GetChatConfig() (*config.ChatConfig, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	return &cfg.Chat, nil
+}
+
+// SetChatConfig persists updated chat configuration.
+func (a *App) SetChatConfig(chatCfg config.ChatConfig) error {
+	cfg, err := config.Load()
+	if err != nil {
+		cfg = &config.Config{}
+	}
+	cfg.Chat = chatCfg
+	// Reload bridge with new API key/model on next send (stateless Bridge, no action needed).
+	return config.Save(cfg)
 }
 
 // Restart restarts the application

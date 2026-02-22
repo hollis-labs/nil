@@ -18,6 +18,23 @@ type Vault struct {
 	CreatedAt string `json:"created_at"`
 }
 
+// VaultCap describes which chat operations are permitted on a given vault.
+// Default (zero value) is read-only.
+type VaultCap struct {
+	Read   bool `json:"read"`
+	Write  bool `json:"write"`
+	Delete bool `json:"delete"`
+}
+
+// ChatConfig holds settings for the Vault Chat addon (F5).
+type ChatConfig struct {
+	Enabled   bool                `json:"enabled"`
+	APIKey    string              `json:"apiKey"`
+	Model     string              `json:"model"`   // e.g. "claude-haiku-4-5-20251001"
+	DryRun    bool                `json:"dryRun"`
+	VaultCaps map[string]VaultCap `json:"vaultCaps"` // key: vault ID
+}
+
 type Config struct {
 	// Legacy field — kept for migration from pre-vault installs only.
 	DatabasePath string `json:"databasePath,omitempty"`
@@ -31,6 +48,9 @@ type Config struct {
 	APIEnabled bool   `json:"apiEnabled"`
 	APIPort    int    `json:"apiPort"`
 	APIKey     string `json:"apiKey"`
+
+	// Chat addon config
+	Chat ChatConfig `json:"chat"`
 }
 
 // EnsureDefaults sets APIPort and APIKey if they are zero/empty.
@@ -202,4 +222,9 @@ func Save(cfg *Config) error {
 // GetDefaultDatabasePath exposes the default path for UI display
 func GetDefaultDatabasePath() string {
 	return getDefaultDatabasePath()
+}
+
+// GetConfigDir exposes the OS-appropriate config directory for use by sub-packages.
+func GetConfigDir() string {
+	return getConfigDir()
 }
