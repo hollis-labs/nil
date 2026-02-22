@@ -2,6 +2,7 @@ import * as React from "react";
 import TerminalList, { ItemRow } from "@/components/TerminalList";
 import InboxView from "@/components/InboxView";
 import VaultSwitcher from "@/components/VaultSwitcher";
+import ChatPanel from "@/components/ChatPanel";
 import KeyboardScope from "@/components/KeyboardScope";
 import NotesModal from "@/components/NotesModal";
 import EditItemModal from "@/components/EditItemModal";
@@ -58,6 +59,7 @@ function Inner() {
   const [activeVault, setActiveVault] = React.useState<config.Vault | null>(null);
   const [showVaultSwitcher, setShowVaultSwitcher] = React.useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = React.useState(false);
+  const [chatOpen, setChatOpen] = React.useState(false);
   const [prevAppMode, setPrevAppMode] = React.useState<'todos' | 'notes'>('todos');
   const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
   const appModeLPFired = React.useRef(false);
@@ -161,6 +163,7 @@ function Inner() {
   }, [refreshInboxCount]);
 
   // Cmd+Shift+V / Ctrl+Shift+V → vault switcher; Cmd+, / Ctrl+, → settings
+  // Cmd+Shift+C / Ctrl+Shift+C → chat panel
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'v') {
@@ -170,6 +173,10 @@ function Inner() {
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === ',') {
         e.preventDefault();
         setSettingsOpen(v => !v);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setChatOpen(v => !v);
       }
     };
     window.addEventListener('keydown', handler);
@@ -1397,6 +1404,8 @@ function Inner() {
         onSwitch={handleVaultSwitch}
         onClose={() => setShowVaultSwitcher(false)}
       />
+      {/* Chat panel — Cmd+Shift+C / Ctrl+Shift+C */}
+      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
     </div>
   );
 }

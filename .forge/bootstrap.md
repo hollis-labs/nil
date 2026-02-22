@@ -1,15 +1,15 @@
 ---
 intent: bootstrap
-iteration: 3
+iteration: 4
 generated: 2026-02-22
 source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/
 ---
 
 # NANITE Forge Bootstrap
 
-**Iteration**: 3 (next to run)
+**Iteration**: 4 (next to run)
 **Generated**: 2026-02-22
-**Feature**: F5 — Vault Chat (M0 complete; M1 frontend phase starting)
+**Feature**: F5 — Vault Chat (M1 complete; one task remains for M2)
 
 ---
 
@@ -17,60 +17,77 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/
 
 | Status | Count |
 |---|---|
-| todo | 5 |
-| done | 5 (TASK-001 through 005 — M0 foundation) |
+| todo | 1 |
+| done | 9 (TASK-001 through 009) |
 | backlog | 5 |
 | **total tasks** | **10** |
 
 ---
 
-## Top Next Tasks (B priority — all unblocked)
+## Top Next Task
 
-1. **TASK-20260222-006** (B) — Frontend: ChatPanel component (`src/components/ChatPanel.tsx`, `ChatMessage.tsx`)
-2. **TASK-20260222-007** (B) — Frontend: ActionCard component (`src/components/ActionCard.tsx`)
-3. **TASK-20260222-008** (B) — Frontend: wire ChatPanel into App.tsx with `Cmd+Shift+C` shortcut ← blocked on 006+007
-4. **TASK-20260222-009** (B) — Frontend: vault selector in chat ← blocked on 006
-5. **TASK-20260222-010** (C) — Settings: chat config section ← blocked on 005 (done ✓ — unblocked)
+1. **TASK-20260222-010** (C) — Settings: chat config section
+   - Add "Chat" tab to SettingsModal
+   - API key field (masked), model selector, dry-run toggle, vault capability table
+   - Read `SettingsModal.tsx` fully before modifying (it is large)
+   - ← **START HERE**
 
-**Start with 006 and 007 (can be written in any order).**
+After TASK-010: **all 10 MVP tasks complete** — MVP Definition of Done can be verified.
+
+---
+
+## Backlog (not yet promoted)
+
+| ID | Priority | Title |
+|---|---|---|
+| BACKLOG-20260222-001 | B | Saved named chat sessions |
+| BACKLOG-20260222-002 | B | Chat-driven inbox triage mode |
+| BACKLOG-20260222-003 | C | Multi-vault cross-search |
+| BACKLOG-20260222-004 | C | Deterministic action classifier |
+| BACKLOG-20260222-005 | C | Chat transcript export |
 
 ---
 
 ## Blockers
 
-- None. M0 backend complete. All M1 frontend tasks unblocked.
+- None. TASK-010 is unblocked (depends only on TASK-005, which is done).
 
 ---
 
-## M0 Summary (iteration 2)
+## M1 Summary (iteration 3)
 
-Complete backend foundation:
-- `chat/` package: `models.go`, `store.go` (ChatStore + chat.db), `bridge.go` (Claude API), `actions.go` (propose/approve/deny + audit)
-- `config.ChatConfig` + `VaultCap` in config
-- 9 Wails-bound methods in `app.go`: `StartChatSession`, `EndChatSession`, `SendChatMessage`, `ApproveChatAction`, `DenyChatAction`, `GetChatHistory`, `GetActionAudit`, `GetChatConfig`, `SetChatConfig`
-- TypeScript bindings regenerated (`wails generate module` ✓)
-- `go build ./...` clean ✓
+Complete frontend for F5 Vault Chat:
+- `ActionCard.tsx`: create/update/delete proposal renderer with approve/deny (WKWebView-safe `<button>`)
+- `ChatMessage.tsx`: user/assistant turn with embedded ActionCard for proposals
+- `ChatPanel.tsx`: right-side drawer (400px), session lifecycle, vault selector, thread, input
+- `App.tsx`: `chatOpen` state, `Cmd+Shift+C` shortcut, `ChatPanel` mounted
+- TypeScript: `npx tsc --noEmit` clean ✓ | Go: `go build .` clean ✓
 
 ---
 
 ## Latest Run Log
 
-`.forge/logs/run-20260222-iter02.md`
-5 tasks completed (TASK-001–005): chat package, bridge, action flow, Wails bindings.
+`.forge/logs/run-20260222-iter03.md`
+4 tasks completed (TASK-006–009): ActionCard, ChatMessage, ChatPanel, App.tsx wiring + vault selector.
 
 ---
 
-## Quick Start (Iteration 3)
+## Quick Start (Iteration 4)
 
 ```
-# Iteration 3 — M1 Frontend
-# Start with TASK-20260222-006: ChatPanel + ChatMessage components
-# 1. Read frontend/src/pages/App.tsx to understand state patterns
-# 2. Create frontend/src/components/ChatPanel.tsx (session lifecycle, thread, input)
-# 3. Create frontend/src/components/ChatMessage.tsx (single turn renderer)
-# 4. go build ./... still passes (no Go changes needed this iteration)
-# Then: TASK-20260222-007 — ActionCard component
-# Commit: "forge(chat): add ChatPanel and ActionCard frontend components"
+# Iteration 4 — M2 Settings
+# TASK-20260222-010: Settings chat config section
+# 1. Read frontend/src/components/SettingsModal.tsx fully
+# 2. Add "Chat" tab type to SettingsTab union
+# 3. Add tab button in tab bar
+# 4. Add chat config section content:
+#    - API key (password input, masked)
+#    - Model selector (haiku / sonnet)
+#    - Dry-run toggle
+#    - Vault caps table (per vault: Read/Write/Delete checkboxes)
+# 5. Load via Backend.GetChatConfig(); save via Backend.SetChatConfig()
+# 6. npx tsc --noEmit + go build . green
+# After: MVP complete — verify DoD checklist in .forge/artifacts/mvp.md
 ```
 
 ---
@@ -79,6 +96,6 @@ Complete backend foundation:
 
 - Storage: file backend → `.forge/tasks/`
 - PCC: `.forge/pcc/` (5 files) ✓
-- Milestones: M0 ✓ → M1 (in progress) → M2
-- Git: branch `main`; iteration 2 commit pending
-- Backend: `go build ./...` clean; Wails bindings up to date
+- Milestones: M0 ✓ → M1 ✓ → M2 (1 task remaining)
+- Git: branch `main`; iteration 3 commit pending
+- Verified: `go build .` clean; `npx tsc --noEmit` clean
