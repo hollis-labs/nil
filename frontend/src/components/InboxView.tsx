@@ -335,7 +335,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
             {searchQuery ? "No matching inbox items." : "Inbox is clear ✓"}
           </div>
         ) : (
-          <div ref={listRef}>
+          <div ref={listRef} style={{ paddingRight: "20px" }}>
             {items.map((item, idx) => {
               const summary = notesSummary(item.notes_md);
               const isFocused = focusedIndex === idx;
@@ -451,9 +451,19 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                           onChange={e => setProcessVaultId(e.target.value)}
                           onClick={e => e.stopPropagation()}
                           style={{
-                            fontSize: "11px", padding: "2px 4px", borderRadius: "4px",
-                            background: "var(--term-bg)", border: "1px solid var(--term-border)",
-                            color: "var(--term-fg)", cursor: "pointer", maxWidth: "110px",
+                            fontSize: "11px",
+                            padding: "3px 28px 3px 8px",
+                            borderRadius: "4px",
+                            background: "var(--term-bg)",
+                            border: "1px solid var(--term-border)",
+                            color: "var(--term-fg)",
+                            cursor: "pointer",
+                            maxWidth: "120px",
+                            appearance: "none",
+                            backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                            backgroundRepeat: "no-repeat",
+                            backgroundPosition: "right 6px center",
+                            backgroundSize: "14px",
                           }}
                         >
                           {vaults.map(v => (
@@ -494,9 +504,18 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
               value={processVaultId}
               onChange={e => setProcessVaultId(e.target.value)}
               style={{
-                fontSize: "11px", padding: "3px 6px", borderRadius: "4px",
-                background: "var(--term-bg)", border: "1px solid var(--term-border)",
-                color: "var(--term-fg)", cursor: "pointer",
+                fontSize: "12px",
+                padding: "4px 30px 4px 10px",
+                borderRadius: "5px",
+                background: "var(--term-bg)",
+                border: "1px solid var(--term-border)",
+                color: "var(--term-fg)",
+                cursor: "pointer",
+                appearance: "none",
+                backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 8px center",
+                backgroundSize: "14px",
               }}
             >
               {vaults.map(v => (
