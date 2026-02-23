@@ -87,6 +87,20 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: number; position: { x: number; y: number } } | null>(null);
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
   const deleteTriggered = React.useRef<boolean>(false);
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const [scrollHeight, setScrollHeight] = React.useState(450);
+
+  React.useLayoutEffect(() => {
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setScrollHeight(entry.contentRect.height);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   React.useEffect(() => {
     if (closeRadialMenus) {
@@ -570,8 +584,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           .row-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.15); backdrop-filter: blur(1px); z-index: 10; pointer-events: none; }
         `}</style>
         <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <CustomScrollbar style={{ height: '100%' }}>
+          <div ref={scrollAreaRef} style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: scrollHeight }}>
               <div style={{ paddingBottom: '20px' }}>
                 {noteSections.pinned.length > 0 && (
                   <div style={{ marginBottom: '20px' }}>
@@ -622,8 +636,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   if (viewMode === 'date') {
     return (
         <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <CustomScrollbar style={{ height: '100%' }}>
+          <div ref={scrollAreaRef} style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: scrollHeight }}>
             <div style={{ paddingBottom: '20px' }}>
               {dateGroups.length === 0 ? (
                   <div style={{ textAlign: 'center', color: 'var(--term-dim)', padding: '40px 20px' }}>
@@ -809,8 +823,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <CustomScrollbar style={{ height: '100%' }}>
+          <div ref={scrollAreaRef} style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: scrollHeight }}>
               <div style={{ paddingBottom: '20px' }}>
                 {renderSection('Now', sections.now, 'now', true)}
                 {renderSection('Soon', sections.soon, 'soon', true)}
