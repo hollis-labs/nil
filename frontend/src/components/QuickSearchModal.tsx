@@ -38,7 +38,7 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
         page_size: 20,
         sort_by: "created_at",
         sort_dir: "desc",
-        type,
+        type: type === "" ? "all" : type,
         include_inbox: false,
       } as any);
       setResults(Array.isArray(res) ? (res as ItemRow[]) : []);

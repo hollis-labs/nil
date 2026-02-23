@@ -7,7 +7,7 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 
 # NANITE Forge Bootstrap
 
-**Iteration**: 12 (next to run)
+**Iteration**: 13 (next to run)
 **Generated**: 2026-02-22
 **Active Epic**: EPIC-E1 — Chat Intelligence (Sprint 3)
 
@@ -49,10 +49,10 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 
 ---
 
-## Quick Start (Iteration 12)
+## Quick Start (Iteration 13)
 
 ```
-# Iteration 12 — Sprint 3, TASK-020: Save-prompt UX
+# Iteration 13 — Sprint 3, TASK-020: Save-prompt UX
 # 1. Read .forge/backlog/BACKLOG-E1-S3-003.md for full spec
 # 2. Understand the suggest_template action block pattern from ADR-005
 # 3. Add suggest_template action type to extractAction() in chat/bridge.go

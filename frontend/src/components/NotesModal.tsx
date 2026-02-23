@@ -34,7 +34,8 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
     content: todo?.notes_md || "",
     editorProps: {
       attributes: {
-        class: "prose prose-sm max-w-none min-h-[200px] p-3 border rounded focus:outline-none bg-transparent",
+        class: "prose",
+        style: "min-height: 200px; padding: 12px; border: 1px solid var(--term-border); border-radius: 4px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; outline: none; overflow-x: hidden;",
       },
     },
   });
@@ -93,10 +94,10 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="terminal-card w-[720px] max-w-[95vw] p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="font-semibold">Notes: {todo?.title}</div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+      <div className="terminal-card" style={{ width: "720px", maxWidth: "95vw", padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+          <div style={{ fontWeight: 600, fontSize: "14px" }}>Notes: {todo?.title}</div>
           <button
             className="badge"
             onClick={() => onOpenChange(false)}
@@ -167,7 +168,7 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
           </div>
         )}
 
-        <div className="flex justify-end gap-2 mt-4">
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "16px" }}>
           <button
             className="badge"
             onClick={() => onOpenChange(false)}
