@@ -1,6 +1,20 @@
 package chat
 
-import "nanite/store"
+import (
+	"context"
+	"encoding/json"
+	"nanite/store"
+	"sync"
+)
+
+// BridgeStore is the subset of store.Store the Bridge needs for tool execution.
+type BridgeStore interface {
+	Search(ctx context.Context, req store.SearchRequest) ([]store.Item, error)
+	GetItem(ctx context.Context, id int64) (*store.Item, error)
+	CreateItem(ctx context.Context, t *store.Item) (*store.Item, error)
+	GetTaxonomyWithCounts(ctx context.Context) (projects, contexts, tags []store.TaxonomyItem, err error)
+	GetStats(ctx context.Context) (*store.VaultStats, error)
+}
 
 // ChatSession represents one open chat session against a vault.
 type ChatSession struct {
@@ -51,13 +65,74 @@ type AuditEntry struct {
 	Timestamp  string `json:"timestamp"`
 }
 
+// ToolCallRecord captures one tool invocation made during an agentic loop turn.
+type ToolCallRecord struct {
+	ToolName   string `json:"tool_name"`
+	InputJSON  string `json:"input_json"`
+	ResultJSON string `json:"result_json"`
+	CacheHit   bool   `json:"cache_hit,omitempty"`
+}
+
 // ChatResponse is returned by SendChatMessage. It contains the assistant's
 // reply message and, if the LLM emitted a mutating action, a pending proposal.
 type ChatResponse struct {
-	Message    ChatMessage     `json:"message"`
-	ProposalID *int64          `json:"proposal_id,omitempty"`
-	Proposal   *ActionProposal `json:"proposal,omitempty"`
-	Error      string          `json:"error,omitempty"`
+	Message    ChatMessage      `json:"message"`
+	ProposalID *int64           `json:"proposal_id,omitempty"`
+	Proposal   *ActionProposal  `json:"proposal,omitempty"`
+	ToolCalls  []ToolCallRecord `json:"tool_calls,omitempty"`
+	Error      string           `json:"error,omitempty"`
+}
+
+// ToolCache is an in-memory, session-scoped LRU cache for tool results.
+// It prevents redundant DB queries when Claude repeats the same search
+// (e.g. "sort that by title instead") within one conversation session.
+type ToolCache struct {
+	mu      sync.Mutex
+	entries []toolCacheEntry
+	maxSize int
+}
+
+type toolCacheEntry struct {
+	key    string // toolName + ":" + inputJSON
+	result string
+}
+
+// NewToolCache creates a cache that holds up to maxSize recent tool results.
+func NewToolCache(maxSize int) *ToolCache {
+	if maxSize <= 0 {
+		maxSize = 20
+	}
+	return &ToolCache{maxSize: maxSize}
+}
+
+// Get returns a cached result for the given tool call, or ("", false) on miss.
+func (c *ToolCache) Get(toolName string, input json.RawMessage) (string, bool) {
+	key := toolName + ":" + string(input)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.entries {
+		if e.key == key {
+			return e.result, true
+		}
+	}
+	return "", false
+}
+
+// Set stores a tool result. If the key already exists it is not duplicated.
+// The oldest entry is evicted when the cache is full.
+func (c *ToolCache) Set(toolName string, input json.RawMessage, result string) {
+	key := toolName + ":" + string(input)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, e := range c.entries {
+		if e.key == key {
+			return
+		}
+	}
+	if len(c.entries) >= c.maxSize {
+		c.entries = c.entries[1:] // evict oldest (FIFO)
+	}
+	c.entries = append(c.entries, toolCacheEntry{key: key, result: result})
 }
 
 // ActionResult is returned by ApproveChatAction.

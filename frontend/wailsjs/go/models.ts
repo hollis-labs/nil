@@ -120,10 +120,29 @@ export namespace chat {
 	        this.created_at = source["created_at"];
 	    }
 	}
+	export class ToolCallRecord {
+	    tool_name: string;
+	    input_json: string;
+	    result_json: string;
+	    cache_hit?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolCallRecord(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tool_name = source["tool_name"];
+	        this.input_json = source["input_json"];
+	        this.result_json = source["result_json"];
+	        this.cache_hit = source["cache_hit"];
+	    }
+	}
 	export class ChatResponse {
 	    message: ChatMessage;
 	    proposal_id?: number;
 	    proposal?: ActionProposal;
+	    tool_calls?: ToolCallRecord[];
 	    error?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -135,6 +154,7 @@ export namespace chat {
 	        this.message = this.convertValues(source["message"], ChatMessage);
 	        this.proposal_id = source["proposal_id"];
 	        this.proposal = this.convertValues(source["proposal"], ActionProposal);
+	        this.tool_calls = this.convertValues(source["tool_calls"], ToolCallRecord);
 	        this.error = source["error"];
 	    }
 	
@@ -185,6 +205,7 @@ export namespace config {
 	    read: boolean;
 	    write: boolean;
 	    delete: boolean;
+	    directCreate: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new VaultCap(source);
@@ -195,6 +216,7 @@ export namespace config {
 	        this.read = source["read"];
 	        this.write = source["write"];
 	        this.delete = source["delete"];
+	        this.directCreate = source["directCreate"];
 	    }
 	}
 	export class ChatConfig {
@@ -308,6 +330,7 @@ export namespace store {
 	    recurrence_rule?: string;
 	    source_line: string;
 	    notes_md: string;
+	    notes_text?: string;
 	    section: string;
 	    pinned: boolean;
 	    type: string;
@@ -335,6 +358,7 @@ export namespace store {
 	        this.recurrence_rule = source["recurrence_rule"];
 	        this.source_line = source["source_line"];
 	        this.notes_md = source["notes_md"];
+	        this.notes_text = source["notes_text"];
 	        this.section = source["section"];
 	        this.pinned = source["pinned"];
 	        this.type = source["type"];

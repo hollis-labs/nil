@@ -57,6 +57,18 @@ CREATE TABLE IF NOT EXISTS action_audit (
   actor       TEXT NOT NULL DEFAULT 'user',
   timestamp   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS chat_tool_calls (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id  INTEGER NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+  message_id  INTEGER NOT NULL REFERENCES chat_messages(id) ON DELETE CASCADE,
+  tool_name   TEXT NOT NULL,
+  input_json  TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  cache_hit   INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON chat_tool_calls(session_id);
 `
 
 // ChatStore manages the chat.db SQLite database.
@@ -312,6 +324,49 @@ func (s *ChatStore) GetAudit(ctx context.Context, limit int) ([]AuditEntry, erro
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// --- Tool calls ---
+
+// PersistToolCall records one tool invocation tied to a session and assistant message.
+func (s *ChatStore) PersistToolCall(ctx context.Context, sessionID, messageID int64, tc ToolCallRecord) error {
+	cacheHit := 0
+	if tc.CacheHit {
+		cacheHit = 1
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO chat_tool_calls (session_id, message_id, tool_name, input_json, result_json, cache_hit)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		sessionID, messageID, tc.ToolName, tc.InputJSON, tc.ResultJSON, cacheHit,
+	)
+	return err
+}
+
+// GetRecentToolCalls returns up to limit tool calls for a session, newest-first.
+func (s *ChatStore) GetRecentToolCalls(ctx context.Context, sessionID int64, limit int) ([]ToolCallRecord, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT tool_name, input_json, result_json, cache_hit
+		 FROM chat_tool_calls WHERE session_id = ? ORDER BY id DESC LIMIT ?`,
+		sessionID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var calls []ToolCallRecord
+	for rows.Next() {
+		var tc ToolCallRecord
+		var cacheHit int
+		if err := rows.Scan(&tc.ToolName, &tc.InputJSON, &tc.ResultJSON, &cacheHit); err != nil {
+			return nil, err
+		}
+		tc.CacheHit = cacheHit == 1
+		calls = append(calls, tc)
+	}
+	return calls, rows.Err()
 }
 
 // --- helpers ---

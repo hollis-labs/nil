@@ -21,9 +21,10 @@ type Vault struct {
 // VaultCap describes which chat operations are permitted on a given vault.
 // Default (zero value) is read-only.
 type VaultCap struct {
-	Read   bool `json:"read"`
-	Write  bool `json:"write"`
-	Delete bool `json:"delete"`
+	Read         bool `json:"read"`
+	Write        bool `json:"write"`
+	Delete       bool `json:"delete"`
+	DirectCreate bool `json:"directCreate"` // allow create_item tool to bypass the Propose→Approve flow
 }
 
 // ChatConfig holds settings for the Vault Chat addon (F5).

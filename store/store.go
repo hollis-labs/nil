@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -15,7 +17,38 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-const currentSchemaVersion = 5
+// reHTMLBR matches <br> / <br/> variants.
+var reHTMLBR = regexp.MustCompile(`(?i)<br\s*/?>`)
+
+// reHTMLBlock matches closing block-level tags whose content ends a "paragraph".
+var reHTMLBlock = regexp.MustCompile(`(?i)</(p|div|h[1-6]|li|blockquote)>`)
+
+// reHTMLTag strips any remaining HTML tag.
+var reHTMLTag = regexp.MustCompile(`<[^>]+>`)
+
+// reMultiNL collapses 3+ consecutive newlines to 2.
+var reMultiNL = regexp.MustCompile(`\n{3,}`)
+
+// stripHTML converts TipTap HTML to plain text for FTS5 indexing and AI context.
+// It preserves paragraph breaks and handles common HTML entities. No CGo required.
+func stripHTML(s string) string {
+	if s == "" {
+		return ""
+	}
+	s = reHTMLBR.ReplaceAllString(s, "\n")
+	s = reHTMLBlock.ReplaceAllString(s, "\n\n")
+	s = reHTMLTag.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	s = strings.ReplaceAll(s, "&quot;", `"`)
+	s = strings.ReplaceAll(s, "&#39;", "'")
+	s = strings.ReplaceAll(s, "&nbsp;", " ")
+	s = reMultiNL.ReplaceAllString(s, "\n\n")
+	return strings.TrimSpace(s)
+}
+
+const currentSchemaVersion = 6
 
 type migration struct {
 	version int
@@ -46,6 +79,10 @@ var migrations = []migration{
 	{
 		version: 5,
 		sql:     "ALTER TABLE todos ADD COLUMN api_source TEXT DEFAULT NULL",
+	},
+	{
+		version: 6,
+		sql:     "ALTER TABLE todos ADD COLUMN notes_text TEXT DEFAULT ''",
 	},
 }
 
@@ -164,6 +201,77 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 				_, _ = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
 				continue
 			}
+		}
+		if m.version == 6 {
+			// Idempotency: skip if notes_text already exists.
+			var count int
+			if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='notes_text'").Scan(&count); err == nil && count > 0 {
+				_, _ = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version)
+				continue
+			}
+			// 1. Add the column.
+			if _, err := db.ExecContext(ctx, m.sql); err != nil {
+				return fmt.Errorf("migration v6 add column: %w", err)
+			}
+			// 2. Backfill notes_text from notes_md (Go-side stripHTML).
+			bRows, err := db.QueryContext(ctx, "SELECT id, notes_md FROM todos WHERE notes_md != '' AND (notes_text = '' OR notes_text IS NULL)")
+			if err != nil {
+				return fmt.Errorf("migration v6 backfill query: %w", err)
+			}
+			type bf struct {
+				id    int64
+				notes string
+			}
+			var bItems []bf
+			for bRows.Next() {
+				var b bf
+				if scanErr := bRows.Scan(&b.id, &b.notes); scanErr == nil {
+					bItems = append(bItems, b)
+				}
+			}
+			bRows.Close()
+			for _, b := range bItems {
+				if _, err := db.ExecContext(ctx, "UPDATE todos SET notes_text = ? WHERE id = ?", stripHTML(b.notes), b.id); err != nil {
+					return fmt.Errorf("migration v6 backfill update id=%d: %w", b.id, err)
+				}
+			}
+			// 3. Drop old FTS triggers (they reference notes_md).
+			for _, stmt := range []string{
+				"DROP TRIGGER IF EXISTS todos_ai",
+				"DROP TRIGGER IF EXISTS todos_ad",
+				"DROP TRIGGER IF EXISTS todos_au",
+			} {
+				if _, err := db.ExecContext(ctx, stmt); err != nil {
+					return fmt.Errorf("migration v6 drop trigger: %w", err)
+				}
+			}
+			// 4. Drop and recreate FTS5 virtual table with notes_text.
+			if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS todos_fts"); err != nil {
+				return fmt.Errorf("migration v6 drop fts: %w", err)
+			}
+			if _, err := db.ExecContext(ctx, "CREATE VIRTUAL TABLE todos_fts USING fts5(title, notes_text, content='todos', content_rowid='id')"); err != nil {
+				return fmt.Errorf("migration v6 create fts: %w", err)
+			}
+			// 5. Recreate triggers referencing notes_text.
+			triggers := []string{
+				`CREATE TRIGGER todos_ai AFTER INSERT ON todos BEGIN INSERT INTO todos_fts(rowid, title, notes_text) VALUES (new.id, new.title, new.notes_text); END`,
+				`CREATE TRIGGER todos_ad AFTER DELETE ON todos BEGIN INSERT INTO todos_fts(todos_fts, rowid, title, notes_text) VALUES('delete', old.id, old.title, old.notes_text); END`,
+				`CREATE TRIGGER todos_au AFTER UPDATE ON todos BEGIN INSERT INTO todos_fts(todos_fts, rowid, title, notes_text) VALUES('delete', old.id, old.title, old.notes_text); INSERT INTO todos_fts(rowid, title, notes_text) VALUES (new.id, new.title, new.notes_text); END`,
+			}
+			for _, stmt := range triggers {
+				if _, err := db.ExecContext(ctx, stmt); err != nil {
+					return fmt.Errorf("migration v6 create trigger: %w", err)
+				}
+			}
+			// 6. Rebuild FTS5 index from content table.
+			if _, err := db.ExecContext(ctx, "INSERT INTO todos_fts(todos_fts) VALUES('rebuild')"); err != nil {
+				return fmt.Errorf("migration v6 fts rebuild: %w", err)
+			}
+			// Record migration.
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
 		}
 
 		// Run migration
@@ -284,9 +392,9 @@ func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 		t.Inbox = true
 	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox, api_source)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox, t.APISource,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, notes_text, section, pinned, type, inbox, api_source)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, stripHTML(t.NotesMD), t.Section, t.Pinned, t.Type, t.Inbox, t.APISource,
 	)
 	if err != nil {
 		return nil, err
@@ -317,8 +425,8 @@ func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
 		t.Type = "todo"
 	}
 	_, err := s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, section=?, pinned=?, type=?, inbox=? WHERE id=?`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, t.Section, t.Pinned, t.Type, t.Inbox, t.ID,
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, notes_text=?, section=?, pinned=?, type=?, inbox=? WHERE id=?`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, stripHTML(t.NotesMD), t.Section, t.Pinned, t.Type, t.Inbox, t.ID,
 	)
 	if err != nil {
 		return err
@@ -370,12 +478,13 @@ func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
 	var pri *string
 	var source sql.NullString
 	var notesMD sql.NullString
+	var notesText sql.NullString
 	var apiSource sql.NullString
 	err := s.DB.QueryRowContext(ctx, `
-SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, section, pinned, type, inbox, api_source
+SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, notes_text, section, pinned, type, inbox, api_source
 FROM todos WHERE id=?`, id).Scan(
 		&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource,
+		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource,
 	)
 	if err != nil {
 		return nil, err
@@ -383,6 +492,7 @@ FROM todos WHERE id=?`, id).Scan(
 	t.Priority = pri
 	t.Source = source.String
 	t.NotesMD = notesMD.String
+	t.NotesText = notesText.String
 	t.APISource = apiSource.String
 	if t.Section == "" {
 		t.Section = "anytime"
@@ -413,7 +523,7 @@ func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int6
 func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
-       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source
+       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source
 FROM todos t JOIN refs r ON r.source_id = t.id
 WHERE r.target_id = ?
 ORDER BY t.updated_at DESC`, targetID)
@@ -428,15 +538,17 @@ ORDER BY t.updated_at DESC`, targetID)
 		var pri *string
 		var source sql.NullString
 		var notesMD sql.NullString
+		var notesText sql.NullString
 		var apiSource sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.NotesText = notesText.String
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -585,13 +697,12 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
 	sqlStr += " WHERE " + strings.Join(q.where, " AND ") + q.order + q.limit
 
-	println("SQL Query:", sqlStr)
 	rows, err := s.DB.QueryContext(ctx, sqlStr, q.args...)
 	if err != nil {
 		return []Item{}, err
@@ -605,8 +716,9 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
+		var notesText sql.NullString
 		var apiSource sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -614,6 +726,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		t.Section = section
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.NotesText = notesText.String
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -667,7 +780,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -686,8 +799,9 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		var section string
 		var source sql.NullString
 		var notesMD sql.NullString
+		var notesText sql.NullString
 		var apiSource sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -695,6 +809,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		t.Section = section
 		t.Source = source.String
 		t.NotesMD = notesMD.String
+		t.NotesText = notesText.String
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -714,6 +829,79 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 func (s *Store) ProcessInboxItem(ctx context.Context, id int64) error {
 	_, err := s.DB.ExecContext(ctx, "UPDATE todos SET inbox = 0 WHERE id = ?", id)
 	return err
+}
+
+// GetStats returns aggregate counts for the vault.
+func (s *Store) GetStats(ctx context.Context) (*VaultStats, error) {
+	var st VaultStats
+	err := s.DB.QueryRowContext(ctx, `
+SELECT
+    COUNT(*) AS total,
+    SUM(CASE WHEN completed=0 AND archived=0 AND inbox=0 THEN 1 ELSE 0 END) AS open,
+    SUM(CASE WHEN completed=1 THEN 1 ELSE 0 END) AS completed,
+    SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) AS archived,
+    SUM(CASE WHEN completed=0 AND archived=0 AND due_at IS NOT NULL AND due_at < date('now') THEN 1 ELSE 0 END) AS overdue,
+    SUM(CASE WHEN inbox=1 AND archived=0 THEN 1 ELSE 0 END) AS inbox,
+    SUM(CASE WHEN type='note' THEN 1 ELSE 0 END) AS notes,
+    SUM(CASE WHEN type='todo' THEN 1 ELSE 0 END) AS todos,
+    SUM(CASE WHEN section='now'     AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_now,
+    SUM(CASE WHEN section='soon'    AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_soon,
+    SUM(CASE WHEN section='anytime' AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_anytime
+FROM todos
+`).Scan(&st.Total, &st.Open, &st.Completed, &st.Archived,
+		&st.Overdue, &st.Inbox, &st.Notes, &st.Todos,
+		&st.BySection.Now, &st.BySection.Soon, &st.BySection.Anytime)
+	if err != nil {
+		return nil, err
+	}
+	return &st, nil
+}
+
+// GetTaxonomyWithCounts returns all projects, contexts, and tags with the number
+// of items that reference each one.
+func (s *Store) GetTaxonomyWithCounts(ctx context.Context) (projects, contexts, tags []TaxonomyItem, err error) {
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT p.name, COUNT(tp.todo_id) FROM projects p
+LEFT JOIN todo_projects tp ON tp.project_id = p.id
+GROUP BY p.id, p.name ORDER BY COUNT(tp.todo_id) DESC, p.name`)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var ti TaxonomyItem
+		rows.Scan(&ti.Name, &ti.Count)
+		projects = append(projects, ti)
+	}
+	rows.Close()
+
+	rows, err = s.DB.QueryContext(ctx, `
+SELECT c.name, COUNT(tc.todo_id) FROM contexts c
+LEFT JOIN todo_contexts tc ON tc.context_id = c.id
+GROUP BY c.id, c.name ORDER BY COUNT(tc.todo_id) DESC, c.name`)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var ti TaxonomyItem
+		rows.Scan(&ti.Name, &ti.Count)
+		contexts = append(contexts, ti)
+	}
+	rows.Close()
+
+	rows, err = s.DB.QueryContext(ctx, `
+SELECT t.name, COUNT(tt.todo_id) FROM tags t
+LEFT JOIN todo_tags tt ON tt.tag_id = t.id
+GROUP BY t.id, t.name ORDER BY COUNT(tt.todo_id) DESC, t.name`)
+	if err != nil {
+		return
+	}
+	for rows.Next() {
+		var ti TaxonomyItem
+		rows.Scan(&ti.Name, &ti.Count)
+		tags = append(tags, ti)
+	}
+	rows.Close()
+	return
 }
 
 func (s *Store) GetFilterValues(ctx context.Context) (projects, contexts, tags []string, err error) {

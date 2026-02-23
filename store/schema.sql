@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS todos (
   recurrence_rule TEXT DEFAULT NULL,
   source_line TEXT,
   notes_md TEXT DEFAULT '',
+  notes_text TEXT DEFAULT '',
   section TEXT DEFAULT 'anytime',
   pinned INTEGER NOT NULL DEFAULT 0,
   type TEXT NOT NULL DEFAULT 'todo',
@@ -68,16 +69,16 @@ CREATE TABLE IF NOT EXISTS refs (
 
 -- FTS5
 CREATE VIRTUAL TABLE IF NOT EXISTS todos_fts USING fts5(
-  title, notes_md, content='todos', content_rowid='id'
+  title, notes_text, content='todos', content_rowid='id'
 );
 
 CREATE TRIGGER IF NOT EXISTS todos_ai AFTER INSERT ON todos BEGIN
-  INSERT INTO todos_fts(rowid, title, notes_md) VALUES (new.id, new.title, new.notes_md);
+  INSERT INTO todos_fts(rowid, title, notes_text) VALUES (new.id, new.title, new.notes_text);
 END;
 CREATE TRIGGER IF NOT EXISTS todos_ad AFTER DELETE ON todos BEGIN
-  INSERT INTO todos_fts(todos_fts, rowid, title, notes_md) VALUES('delete', old.id, old.title, old.notes_md);
+  INSERT INTO todos_fts(todos_fts, rowid, title, notes_text) VALUES('delete', old.id, old.title, old.notes_text);
 END;
 CREATE TRIGGER IF NOT EXISTS todos_au AFTER UPDATE ON todos BEGIN
-  INSERT INTO todos_fts(todos_fts, rowid, title, notes_md) VALUES('delete', old.id, old.title, old.notes_md);
-  INSERT INTO todos_fts(rowid, title, notes_md) VALUES (new.id, new.title, new.notes_md);
+  INSERT INTO todos_fts(todos_fts, rowid, title, notes_text) VALUES('delete', old.id, old.title, old.notes_text);
+  INSERT INTO todos_fts(rowid, title, notes_text) VALUES (new.id, new.title, new.notes_text);
 END;

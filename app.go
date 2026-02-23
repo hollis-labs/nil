@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,9 +25,11 @@ type App struct {
 	apiMu      sync.Mutex
 
 	// Chat addon (F5)
-	chatStore  *chat.ChatStore
-	chatRunner *chat.ActionRunner
-	chatBridge *chat.Bridge
+	chatStore       *chat.ChatStore
+	chatRunner      *chat.ActionRunner
+	chatBridge      *chat.Bridge
+	sessionCaches   map[int64]*chat.ToolCache
+	sessionCachesMu sync.Mutex
 }
 
 func NewApp() *App {
@@ -641,11 +642,34 @@ func (a *App) StartChatSession() (*chat.ChatSession, error) {
 	return a.chatStore.CreateSession(a.ctx, vaultID, dryRun)
 }
 
-// EndChatSession closes the given session.
+// getSessionCache returns (creating if needed) the in-memory tool cache for a session.
+func (a *App) getSessionCache(sessionID int64) *chat.ToolCache {
+	a.sessionCachesMu.Lock()
+	defer a.sessionCachesMu.Unlock()
+	if a.sessionCaches == nil {
+		a.sessionCaches = make(map[int64]*chat.ToolCache)
+	}
+	if c, ok := a.sessionCaches[sessionID]; ok {
+		return c
+	}
+	c := chat.NewToolCache(20)
+	a.sessionCaches[sessionID] = c
+	return c
+}
+
+// dropSessionCache frees the in-memory cache when a session ends.
+func (a *App) dropSessionCache(sessionID int64) {
+	a.sessionCachesMu.Lock()
+	defer a.sessionCachesMu.Unlock()
+	delete(a.sessionCaches, sessionID)
+}
+
+// EndChatSession closes the given session and frees its tool cache.
 func (a *App) EndChatSession(sessionID int64) error {
 	if err := a.chatReady(); err != nil {
 		return err
 	}
+	a.dropSessionCache(sessionID)
 	return a.chatStore.EndSession(a.ctx, sessionID)
 }
 
@@ -683,21 +707,8 @@ func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatRespon
 		if v := a.vaultMgr.GetActiveVault(); v != nil {
 			vaultName = v.Name
 			if vc, ok := cfg.Chat.VaultCaps[v.ID]; ok {
-				caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete}
+				caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete, DirectCreate: vc.DirectCreate}
 			}
-		}
-	}
-
-	// Run a vault search to provide context to the LLM.
-	searchCtx := ""
-	if a.vaultMgr != nil && a.vaultMgr.ActiveStore() != nil {
-		results, _ := a.vaultMgr.ActiveStore().Search(a.ctx, store.SearchRequest{
-			Query:    content,
-			PageSize: 10,
-		})
-		if len(results) > 0 {
-			b, _ := json.Marshal(results)
-			searchCtx = string(b)
 		}
 	}
 
@@ -705,7 +716,15 @@ func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatRespon
 	history, _ := a.chatStore.GetMessages(a.ctx, sessionID)
 	_ = userMsg // already in history
 
-	// Call the LLM.
+	// Determine the active store for tool execution.
+	var activeStore chat.BridgeStore
+	if a.vaultMgr != nil {
+		if s := a.vaultMgr.ActiveStore(); s != nil {
+			activeStore = s
+		}
+	}
+
+	// Call the LLM (agentic tool-use loop inside Bridge.Send).
 	resp, err := a.chatBridge.Send(a.ctx, chat.BridgeRequest{
 		APIKey:      cfg.Chat.APIKey,
 		Model:       cfg.Chat.Model,
@@ -715,7 +734,8 @@ func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatRespon
 		DryRun:      sess.DryRun,
 		History:     history,
 		UserMessage: content,
-		SearchCtx:   searchCtx,
+		Store:       activeStore,
+		ToolCache:   a.getSessionCache(sessionID),
 	})
 	if err != nil {
 		return nil, err
@@ -728,6 +748,11 @@ func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatRespon
 		return nil, fmt.Errorf("chat: store assistant message: %w", err)
 	}
 	resp.Message = *assistantMsg
+
+	// Persist tool calls made during this turn (best-effort; non-fatal on error).
+	for _, tc := range resp.ToolCalls {
+		_ = a.chatStore.PersistToolCall(a.ctx, sessionID, assistantMsg.ID, tc)
+	}
 
 	// If the LLM proposed an action, persist it.
 	if resp.Proposal != nil {
@@ -763,7 +788,7 @@ func (a *App) ApproveChatAction(proposalID int64) (*chat.ActionResult, error) {
 
 	caps := chat.VaultCaps{Read: true}
 	if vc, ok := cfg.Chat.VaultCaps[p.VaultID]; ok {
-		caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete}
+		caps = chat.VaultCaps{Read: true, Write: vc.Write, Delete: vc.Delete, DirectCreate: vc.DirectCreate}
 	}
 
 	return a.chatRunner.Approve(a.ctx, proposalID, a.vaultMgr.ActiveStore(), cfg.Chat.DryRun, caps)
