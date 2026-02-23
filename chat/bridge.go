@@ -45,6 +45,7 @@ For SEARCH or READ queries:
 - When asked "what's in my vault", "what projects/contexts/tags exist", or any taxonomy question, call list_taxonomy — it is faster and more accurate than searching.
 - When a search result contains a truncated note and you need the full content, call get_item with the item's id.
 - For "how many items", weekly reviews, or progress summaries, call get_vault_stats.
+- For recurring workflows, reports, reviews, or audits, call list_templates first to discover available templates, then call use_template with the appropriate parameters to render it before executing.
 
 For MUTATING requests (create / update / delete):
 - For CREATE requests: if DirectCreate is true in Capabilities, call the create_item tool to create items immediately. Otherwise, emit a JSON action block for the user to review.
@@ -94,8 +95,9 @@ type BridgeRequest struct {
 	DryRun      bool
 	History     []ChatMessage // prior turns (for context window)
 	UserMessage string
-	Store       BridgeStore // for tool execution; nil disables tools
-	ToolCache   *ToolCache  // optional in-session result cache; nil disables caching
+	Store       BridgeStore   // for tool execution; nil disables tools
+	Templates   TemplateStore // for list_templates / use_template; nil disables those tools
+	ToolCache   *ToolCache    // optional in-session result cache; nil disables caching
 }
 
 // Bridge calls the Claude API and parses the response.
@@ -290,6 +292,33 @@ func buildTools() []toolDef {
 				"properties": map[string]any{},
 			},
 		},
+		{
+			Name:        "list_templates",
+			Description: "List all available workflow templates. Returns [{slug, name, description, type, parameters}]. Call this when the user asks for a weekly review, audit, report, or any recurring workflow — then call use_template with the chosen slug.",
+			InputSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+		},
+		{
+			Name:        "use_template",
+			Description: "Render a workflow template by substituting {{param}} placeholders with the provided values. Returns the rendered prompt string. Execute the rendered prompt as your next set of instructions.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"slug": map[string]any{
+						"type":        "string",
+						"description": "The template slug from list_templates.",
+					},
+					"params": map[string]any{
+						"type":                 "object",
+						"description":          "Key-value pairs for {{param}} substitution. Keys match the template's parameters list. Missing keys are left as-is.",
+						"additionalProperties": map[string]any{"type": "string"},
+					},
+				},
+				"required": []string{"slug"},
+			},
+		},
 	}
 }
 
@@ -359,7 +388,7 @@ func (b *Bridge) Send(ctx context.Context, req BridgeRequest) (*ChatResponse, er
 				if block.Type != "tool_use" {
 					continue
 				}
-				result, cacheHit := b.executeTool(ctx, block, req.Store, req.Caps, req.ToolCache)
+				result, cacheHit := b.executeTool(ctx, block, req.Store, req.Caps, req.ToolCache, req.Templates)
 				allToolCalls = append(allToolCalls, ToolCallRecord{
 					ToolName:   block.Name,
 					InputJSON:  string(block.Input),
@@ -452,7 +481,27 @@ func (b *Bridge) callAPI(ctx context.Context, apiKey, model, system string, msgs
 
 // executeTool dispatches a tool_use block to the appropriate implementation.
 // Returns (result, cacheHit). Cache is checked before execution and populated after.
-func (b *Bridge) executeTool(ctx context.Context, block apiContent, st BridgeStore, caps VaultCaps, cache *ToolCache) (string, bool) {
+func (b *Bridge) executeTool(ctx context.Context, block apiContent, st BridgeStore, caps VaultCaps, cache *ToolCache, tmpl TemplateStore) (string, bool) {
+	// Template tools don't require the vault store.
+	if block.Name == "list_templates" || block.Name == "use_template" {
+		if cache != nil {
+			if cached, ok := cache.Get(block.Name, block.Input); ok {
+				return cached, true
+			}
+		}
+		var result string
+		switch block.Name {
+		case "list_templates":
+			result = b.executeListTemplates(ctx, tmpl)
+		case "use_template":
+			result = b.executeUseTemplate(ctx, block.Input, tmpl)
+		}
+		if cache != nil {
+			cache.Set(block.Name, block.Input, result)
+		}
+		return result, false
+	}
+
 	if st == nil {
 		return `{"error": "vault not available"}`, false
 	}
@@ -707,6 +756,64 @@ func (b *Bridge) executeCreateItem(ctx context.Context, inputJSON json.RawMessag
 		"type":       created.Type,
 		"section":    created.Section,
 		"created_at": created.CreatedAt,
+	})
+	return string(out)
+}
+
+// executeListTemplates returns a slim listing of all templates (no prompt body to save tokens).
+func (b *Bridge) executeListTemplates(ctx context.Context, tmpl TemplateStore) string {
+	if tmpl == nil {
+		return `{"error": "template store not available"}`
+	}
+	templates, err := tmpl.ListTemplates(ctx)
+	if err != nil {
+		return fmt.Sprintf(`{"error": %q}`, err.Error())
+	}
+	type slimTemplate struct {
+		Slug        string `json:"slug"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Type        string `json:"type"`
+		Parameters  string `json:"parameters"`
+	}
+	slim := make([]slimTemplate, 0, len(templates))
+	for _, t := range templates {
+		slim = append(slim, slimTemplate{
+			Slug:        t.Slug,
+			Name:        t.Name,
+			Description: t.Description,
+			Type:        t.Type,
+			Parameters:  t.Parameters,
+		})
+	}
+	out, _ := json.Marshal(map[string]any{"templates": slim, "count": len(slim)})
+	return string(out)
+}
+
+// executeUseTemplate renders a template by substituting {{param}} placeholders.
+func (b *Bridge) executeUseTemplate(ctx context.Context, inputJSON json.RawMessage, tmpl TemplateStore) string {
+	if tmpl == nil {
+		return `{"error": "template store not available"}`
+	}
+	var input struct {
+		Slug   string            `json:"slug"`
+		Params map[string]string `json:"params"`
+	}
+	if err := json.Unmarshal(inputJSON, &input); err != nil || input.Slug == "" {
+		return `{"error": "use_template requires a slug"}`
+	}
+	t, err := tmpl.GetTemplate(ctx, input.Slug)
+	if err != nil {
+		return fmt.Sprintf(`{"error": "template %q not found"}`, input.Slug)
+	}
+	rendered := t.Prompt
+	for k, v := range input.Params {
+		rendered = strings.ReplaceAll(rendered, "{{"+k+"}}", v)
+	}
+	out, _ := json.Marshal(map[string]any{
+		"slug":            t.Slug,
+		"name":            t.Name,
+		"rendered_prompt": rendered,
 	})
 	return string(out)
 }

@@ -735,6 +735,7 @@ func (a *App) SendChatMessage(sessionID int64, content string) (*chat.ChatRespon
 		History:     history,
 		UserMessage: content,
 		Store:       activeStore,
+		Templates:   a.chatStore,
 		ToolCache:   a.getSessionCache(sessionID),
 	})
 	if err != nil {

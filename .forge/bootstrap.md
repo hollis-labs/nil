@@ -1,13 +1,13 @@
 ---
 intent: bootstrap
-iteration: 11
+iteration: 12
 generated: 2026-02-22
 source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/epics/, .forge/adr/
 ---
 
 # NANITE Forge Bootstrap
 
-**Iteration**: 11 (next to run)
+**Iteration**: 12 (next to run)
 **Generated**: 2026-02-22
 **Active Epic**: EPIC-E1 — Chat Intelligence (Sprint 3)
 
@@ -18,8 +18,8 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 | Status | Count |
 |---|---|
 | todo | 0 (Sprint 3 in progress) |
-| done | 18 (TASK-001 through TASK-018) |
-| backlog | 8 (E1 sprints 3–5, minus TASK-018) |
+| done | 19 (TASK-001 through TASK-019) |
+| backlog | 7 (E1 sprints 3–5, minus TASK-018/019) |
 
 ---
 
@@ -28,7 +28,7 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 | Task | Status |
 |------|--------|
 | TASK-018: Template storage (SQLite table + CRUD) | ✓ done |
-| TASK-019: Template tools (`list_templates`, `use_template`) | backlog |
+| TASK-019: Template tools (`list_templates`, `use_template`) | ✓ done |
 | TASK-020: Save-prompt UX when agent uses new pattern | backlog |
 | TASK-021: Template management UI in Settings | backlog |
 
@@ -45,20 +45,21 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 
 ## Blockers
 
-- None. TASK-019 is unblocked.
+- None. TASK-020 is unblocked.
 
 ---
 
-## Quick Start (Iteration 11)
+## Quick Start (Iteration 12)
 
 ```
-# Iteration 11 — Sprint 3, TASK-019: Template tools
-# 1. Read .forge/backlog/BACKLOG-E1-S3-002.md for full spec
-# 2. Read chat/bridge.go for current buildTools() and executeTool patterns
-# 3. Add list_templates tool: calls ChatStore.ListTemplates via BridgeStore extension (or pass store separately)
-# 4. Add use_template tool: renders {{param}} substitution, returns rendered prompt
-# 5. Update BridgeRequest to carry TemplateStore (or extend BridgeStore interface)
-# 6. go build . + npx tsc --noEmit
+# Iteration 12 — Sprint 3, TASK-020: Save-prompt UX
+# 1. Read .forge/backlog/BACKLOG-E1-S3-003.md for full spec
+# 2. Understand the suggest_template action block pattern from ADR-005
+# 3. Add suggest_template action type to extractAction() in chat/bridge.go
+# 4. Add SaveTemplateSuggestion struct to chat/models.go
+# 5. Update ChatResponse to carry TemplateSuggestion when detected
+# 6. Frontend: detect suggestion in ChatPanel, show inline save prompt
+# 7. go build . + npx tsc --noEmit
 ```
 
 ---
@@ -69,4 +70,4 @@ source_of_truth: forge.yaml, .forge/tasks/, .forge/pcc/, .forge/logs/, .forge/ep
 - PCC: `.forge/pcc/` (5 files) ✓
 - Milestones: M0 ✓ → M1 ✓ → M2 ✓ → M3 ✓ → E1-S1 ✓ → E1-S2 ✓ → E1-S3 (in progress)
 - Git: branch `main`
-- Verified: `go build .` clean (iter 10); `npx tsc --noEmit` clean (iter 10)
+- Verified: `go build .` clean (iter 11); `npx tsc --noEmit` clean (iter 11)

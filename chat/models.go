@@ -16,6 +16,12 @@ type BridgeStore interface {
 	GetStats(ctx context.Context) (*store.VaultStats, error)
 }
 
+// TemplateStore is the subset of ChatStore the Bridge needs for template tool execution.
+type TemplateStore interface {
+	ListTemplates(ctx context.Context) ([]Template, error)
+	GetTemplate(ctx context.Context, slug string) (*Template, error)
+}
+
 // ChatSession represents one open chat session against a vault.
 type ChatSession struct {
 	ID        int64  `json:"id"`
