@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS chat_tool_calls (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON chat_tool_calls(session_id);
+
+CREATE TABLE IF NOT EXISTS templates (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug          TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  type          TEXT NOT NULL DEFAULT 'generation',
+  prompt        TEXT NOT NULL,
+  parameters    TEXT NOT NULL DEFAULT '[]',
+  output_format TEXT NOT NULL DEFAULT 'markdown',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // ChatStore manages the chat.db SQLite database.
@@ -94,7 +107,9 @@ func Open(ctx context.Context, configDir string) (*ChatStore, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("chat: init schema: %w", err)
 	}
-	return &ChatStore{db: db}, nil
+	cs := &ChatStore{db: db}
+	cs.seedBuiltinTemplates(ctx)
+	return cs, nil
 }
 
 // Close closes the underlying database connection.
@@ -367,6 +382,151 @@ func (s *ChatStore) GetRecentToolCalls(ctx context.Context, sessionID int64, lim
 		calls = append(calls, tc)
 	}
 	return calls, rows.Err()
+}
+
+// --- Templates ---
+
+// CreateTemplate inserts a new template and returns it with the DB-assigned ID and timestamps.
+func (s *ChatStore) CreateTemplate(ctx context.Context, t *Template) (*Template, error) {
+	res, err := s.db.ExecContext(ctx,
+		`INSERT INTO templates (slug, name, description, type, prompt, parameters, output_format)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.Slug, t.Name, t.Description, t.Type, t.Prompt, t.Parameters, t.OutputFormat,
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	return s.getTemplateByID(ctx, id)
+}
+
+// GetTemplate returns a template by slug.
+func (s *ChatStore) GetTemplate(ctx context.Context, slug string) (*Template, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, slug, name, description, type, prompt, parameters, output_format, created_at, updated_at
+		 FROM templates WHERE slug = ?`, slug)
+	return scanTemplate(row)
+}
+
+// ListTemplates returns all templates ordered by name.
+func (s *ChatStore) ListTemplates(ctx context.Context) ([]Template, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, slug, name, description, type, prompt, parameters, output_format, created_at, updated_at
+		 FROM templates ORDER BY name ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Template
+	for rows.Next() {
+		t, err := scanTemplateRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *t)
+	}
+	return out, rows.Err()
+}
+
+// UpdateTemplate updates an existing template by slug.
+func (s *ChatStore) UpdateTemplate(ctx context.Context, t *Template) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE templates SET name=?, description=?, type=?, prompt=?, parameters=?, output_format=?,
+		                      updated_at=datetime('now')
+		 WHERE slug=?`,
+		t.Name, t.Description, t.Type, t.Prompt, t.Parameters, t.OutputFormat, t.Slug,
+	)
+	return err
+}
+
+// DeleteTemplate removes a template by slug.
+func (s *ChatStore) DeleteTemplate(ctx context.Context, slug string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM templates WHERE slug = ?`, slug)
+	return err
+}
+
+func (s *ChatStore) getTemplateByID(ctx context.Context, id int64) (*Template, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, slug, name, description, type, prompt, parameters, output_format, created_at, updated_at
+		 FROM templates WHERE id = ?`, id)
+	return scanTemplate(row)
+}
+
+type templateScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTemplate(row templateScanner) (*Template, error) {
+	var t Template
+	if err := row.Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.Type,
+		&t.Prompt, &t.Parameters, &t.OutputFormat, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func scanTemplateRow(rows *sql.Rows) (*Template, error) {
+	var t Template
+	if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Description, &t.Type,
+		&t.Prompt, &t.Parameters, &t.OutputFormat, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// seedBuiltinTemplates inserts the built-in templates on first run (idempotent via INSERT OR IGNORE).
+func (s *ChatStore) seedBuiltinTemplates(ctx context.Context) {
+	builtins := []Template{
+		{
+			Slug:         "weekly-review",
+			Name:         "Weekly Review",
+			Description:  "Generate a structured weekly review: completions, overdue items, and next-week focus.",
+			Type:         "analysis",
+			OutputFormat: "markdown",
+			Parameters:   `["vault_name","week_start","week_end"]`,
+			Prompt: `Generate a weekly review for {{vault_name}} for the week of {{week_start}} to {{week_end}}.
+
+Steps:
+1. Call get_vault_stats for current counts.
+2. Call search_vault with a query to find recently completed items.
+3. Call search_vault to identify overdue items.
+4. Write the review with these sections:
+   - What was completed this week
+   - What was not completed / carried over
+   - Overdue items that need attention
+   - Suggested focus for next week
+   - Any patterns or opportunities worth noting`,
+		},
+		{
+			Slug:         "vault-audit",
+			Name:         "Vault Audit",
+			Description:  "Audit vault health: stale items, taxonomy hygiene, Now section review, and recommended actions.",
+			Type:         "analysis",
+			OutputFormat: "markdown",
+			Parameters:   `["vault_name"]`,
+			Prompt: `Perform a vault audit for {{vault_name}}.
+
+Steps:
+1. Call get_vault_stats for an overview of counts and status.
+2. Call list_taxonomy to review all projects, contexts, and tags.
+3. Call search_vault to identify overdue items.
+4. Call search_vault with section:now to review the Now section.
+5. Write the audit report with these sections:
+   - Vault health summary (counts, completion rate)
+   - Now section review (is it focused? over-loaded?)
+   - Stale and overdue items
+   - Taxonomy hygiene (unused tags, overlapping contexts)
+   - Recommended actions (prioritised)`,
+		},
+	}
+
+	for _, tmpl := range builtins {
+		_, _ = s.db.ExecContext(ctx,
+			`INSERT OR IGNORE INTO templates (slug, name, description, type, prompt, parameters, output_format)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			tmpl.Slug, tmpl.Name, tmpl.Description, tmpl.Type, tmpl.Prompt, tmpl.Parameters, tmpl.OutputFormat,
+		)
+	}
 }
 
 // --- helpers ---

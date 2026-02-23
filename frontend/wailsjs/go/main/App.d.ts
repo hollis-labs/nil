@@ -15,6 +15,8 @@ export function CreateNoteFromLine(arg1:string):Promise<store.Item>;
 
 export function CreateVault(arg1:string,arg2:string):Promise<config.Vault>;
 
+export function DeleteChatTemplate(arg1:string):Promise<void>;
+
 export function DeleteItem(arg1:number):Promise<void>;
 
 export function DeleteVault(arg1:string):Promise<void>;
@@ -55,6 +57,8 @@ export function HasDemoData():Promise<boolean>;
 
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
+export function ListChatTemplates():Promise<Array<chat.Template>>;
+
 export function NeedsSetup():Promise<boolean>;
 
 export function ProcessInboxItem(arg1:number,arg2:string):Promise<void>;
@@ -64,6 +68,8 @@ export function RemoveDemoData():Promise<void>;
 export function RenameVault(arg1:string,arg2:string):Promise<void>;
 
 export function Restart():Promise<void>;
+
+export function SaveChatTemplate(arg1:chat.Template):Promise<chat.Template>;
 
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
 

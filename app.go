@@ -838,6 +838,53 @@ func (a *App) SetChatConfig(chatCfg config.ChatConfig) error {
 	return config.Save(cfg)
 }
 
+// ListChatTemplates returns all templates stored in chat.db.
+func (a *App) ListChatTemplates() ([]chat.Template, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	tmpl, err := a.chatStore.ListTemplates(a.ctx)
+	if tmpl == nil {
+		tmpl = []chat.Template{}
+	}
+	return tmpl, err
+}
+
+// SaveChatTemplate creates or updates a template.
+// If a template with the same slug already exists it is updated; otherwise it is created.
+func (a *App) SaveChatTemplate(t chat.Template) (*chat.Template, error) {
+	if err := a.chatReady(); err != nil {
+		return nil, err
+	}
+	// Ensure defaults.
+	if t.Parameters == "" {
+		t.Parameters = "[]"
+	}
+	if t.OutputFormat == "" {
+		t.OutputFormat = "markdown"
+	}
+	if t.Type == "" {
+		t.Type = "generation"
+	}
+	// Upsert: check if slug exists.
+	existing, _ := a.chatStore.GetTemplate(a.ctx, t.Slug)
+	if existing != nil {
+		if err := a.chatStore.UpdateTemplate(a.ctx, &t); err != nil {
+			return nil, err
+		}
+		return a.chatStore.GetTemplate(a.ctx, t.Slug)
+	}
+	return a.chatStore.CreateTemplate(a.ctx, &t)
+}
+
+// DeleteChatTemplate removes a template by slug.
+func (a *App) DeleteChatTemplate(slug string) error {
+	if err := a.chatReady(); err != nil {
+		return err
+	}
+	return a.chatStore.DeleteTemplate(a.ctx, slug)
+}
+
 // Restart restarts the application
 func (a *App) Restart() error {
 	executable, err := os.Executable()

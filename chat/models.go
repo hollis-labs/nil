@@ -135,6 +135,20 @@ func (c *ToolCache) Set(toolName string, input json.RawMessage, result string) {
 	c.entries = append(c.entries, toolCacheEntry{key: key, result: result})
 }
 
+// Template is a reusable agentic workflow pattern stored in chat.db.
+type Template struct {
+	ID           int64  `json:"id"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Type         string `json:"type"`          // generation | query | analysis
+	Prompt       string `json:"prompt"`
+	Parameters   string `json:"parameters"`    // JSON array of param names
+	OutputFormat string `json:"output_format"` // markdown
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+}
+
 // ActionResult is returned by ApproveChatAction.
 type ActionResult struct {
 	ProposalID int64  `json:"proposal_id"`

@@ -196,6 +196,36 @@ export namespace chat {
 	        this.dry_run = source["dry_run"];
 	    }
 	}
+	export class Template {
+	    id: number;
+	    slug: string;
+	    name: string;
+	    description: string;
+	    type: string;
+	    prompt: string;
+	    parameters: string;
+	    output_format: string;
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Template(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.slug = source["slug"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.type = source["type"];
+	        this.prompt = source["prompt"];
+	        this.parameters = source["parameters"];
+	        this.output_format = source["output_format"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
 
 }
 

@@ -22,6 +22,10 @@ export function CreateVault(arg1, arg2) {
   return window['go']['main']['App']['CreateVault'](arg1, arg2);
 }
 
+export function DeleteChatTemplate(arg1) {
+  return window['go']['main']['App']['DeleteChatTemplate'](arg1);
+}
+
 export function DeleteItem(arg1) {
   return window['go']['main']['App']['DeleteItem'](arg1);
 }
@@ -102,6 +106,10 @@ export function ImportTodoTxt(arg1) {
   return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
 
+export function ListChatTemplates() {
+  return window['go']['main']['App']['ListChatTemplates']();
+}
+
 export function NeedsSetup() {
   return window['go']['main']['App']['NeedsSetup']();
 }
@@ -120,6 +128,10 @@ export function RenameVault(arg1, arg2) {
 
 export function Restart() {
   return window['go']['main']['App']['Restart']();
+}
+
+export function SaveChatTemplate(arg1) {
+  return window['go']['main']['App']['SaveChatTemplate'](arg1);
 }
 
 export function Search(arg1) {
