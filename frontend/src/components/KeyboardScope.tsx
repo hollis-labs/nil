@@ -14,10 +14,15 @@ export default function KeyboardScope({ onQuickAdd, onEscape, onQuickAddNote, on
 
   React.useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Shift+Shift (double-tap within 500ms) → Quick Search
+      // Any non-Shift key resets the double-tap window so normal typing never triggers it.
+      if (e.key !== 'Shift') {
+        lastShiftRef.current = 0;
+      }
+
+      // Shift+Shift (double-tap within 300ms) → Quick Search
       if (e.key === 'Shift' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const now = Date.now();
-        if (now - lastShiftRef.current < 500) {
+        if (now - lastShiftRef.current < 300) {
           e.preventDefault();
           onOpenQuickSearch?.();
           lastShiftRef.current = 0;

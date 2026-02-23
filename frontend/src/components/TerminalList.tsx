@@ -369,7 +369,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
     return (
         <div className="terminal-card" style={{
           padding: '20px',
-          height: '450px',
+          flex: 1,
+          minHeight: '300px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center'
@@ -568,8 +569,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           .row-expanding { animation: rowExpand 0.24s ease-out forwards; transform-origin: center; overflow: hidden; }
           .row-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.15); backdrop-filter: blur(1px); z-index: 10; pointer-events: none; }
         `}</style>
-        <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <CustomScrollbar style={{ height: '450px' }}>
+        <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <CustomScrollbar style={{ height: '100%' }}>
             <div style={{ paddingBottom: '20px' }}>
               {noteSections.pinned.length > 0 && (
                 <div style={{ marginBottom: '20px' }}>
@@ -618,10 +619,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
 
   if (viewMode === 'date') {
     return (
-        <div className="terminal-card" style={{ padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <CustomScrollbar style={{
-            height: '450px'
-          }}>
+        <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <CustomScrollbar style={{ height: '100%' }}>
             <div style={{ paddingBottom: '20px' }}>
               {dateGroups.length === 0 ? (
                   <div style={{ textAlign: 'center', color: 'var(--term-dim)', padding: '40px 20px' }}>
@@ -799,14 +798,14 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           }
         `}</style>
         <div className="terminal-card" style={{
+          flex: 1,
+          minHeight: 0,
           padding: '20px',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <CustomScrollbar style={{
-            height: '450px'
-          }}>
+          <CustomScrollbar style={{ height: '100%' }}>
             <div style={{ paddingBottom: '20px' }}>
               {renderSection('Now', sections.now, 'now', true)}
               {renderSection('Soon', sections.soon, 'soon', true)}

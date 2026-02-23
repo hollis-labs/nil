@@ -249,7 +249,10 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     const initial = initialValuesRef.current;
     if (!initial) return false;
     const currentNotes = editor?.getHTML() || '';
-    const norm = (s: string) => (s === '<p></p>' ? '' : s);
+    const norm = (s: string) => {
+      const t = s.trim();
+      return (!t || t === '<p></p>' || t === '<p><br></p>') ? '' : t;
+    };
     const arrSame = (a: string[], b: string[]) =>
       JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
     return (

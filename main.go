@@ -42,11 +42,10 @@ func main() {
 	// Create application with options
 	err := wails.Run(&options.App{
 		Title:         "NANITE",
-		Width:         800,
-		Height:        830,
-		MinWidth:      800,
-		MinHeight:     830,
-		DisableResize: true,
+		Width:     800,
+		Height:    830,
+		MinWidth:  800,
+		MinHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

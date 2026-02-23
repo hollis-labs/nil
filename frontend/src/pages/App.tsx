@@ -693,15 +693,13 @@ function Inner() {
 
   return (
     <div style={{
-      width: '800px',
-      height: '830px',
+      width: '100vw',
+      height: '100vh',
       overflow: 'hidden',
       display: 'flex',
       flexDirection: 'column',
-      padding: '16',
       background: 'var(--term-bg)',
-      boxShadow: '0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.8), 0 16px 32px rgba(0, 0, 0, 0.4), 0 16px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 2px var(--term-border)',
-      borderRadius: '12px',
+      border: '1px solid var(--term-border)',
     }}>
       <KeyboardScope
         onQuickAdd={()=>setQuickOpen(true)}
@@ -717,7 +715,8 @@ function Inner() {
 
       <div style={{
         width: '100%',
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
         padding: '10px',
         overflow: 'hidden',
         display: 'flex',
@@ -1113,30 +1112,32 @@ function Inner() {
           </div>
         </div>
 
-        {appMode === 'inbox' ? (
-          <InboxView
-            onClose={closeInbox}
-            onEdit={(row) => { setEditItem(row); setQuickOpen(true); }}
-            onProcessed={refreshInboxCount}
-          />
-        ) : (
-          <TerminalList
-            rows={rows}
-            onToggle={handleToggle}
-            onOpenNotes={handleOpenNotes}
-            onMoveSection={handleMoveSection}
-            onArchive={handleArchive}
-            onDelete={handleDeleteTodo}
-            showCompleted={settings.showCompleted}
-            onEditItem={handleEditItem}
-            viewMode={viewMode}
-            appMode={appMode as 'todos' | 'notes'}
-            onOpenRadialMenu={(todo, position) => setRadialMenuItem({todo, position})}
-            closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editItem !== null || radialMenuItem !== null || metaModalItem !== null}
-            hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
-            animatingRow={animatingRow}
-          />
-        )}
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {appMode === 'inbox' ? (
+            <InboxView
+              onClose={closeInbox}
+              onEdit={(row) => { setEditItem(row); setQuickOpen(true); }}
+              onProcessed={refreshInboxCount}
+            />
+          ) : (
+            <TerminalList
+              rows={rows}
+              onToggle={handleToggle}
+              onOpenNotes={handleOpenNotes}
+              onMoveSection={handleMoveSection}
+              onArchive={handleArchive}
+              onDelete={handleDeleteTodo}
+              showCompleted={settings.showCompleted}
+              onEditItem={handleEditItem}
+              viewMode={viewMode}
+              appMode={appMode as 'todos' | 'notes'}
+              onOpenRadialMenu={(todo, position) => setRadialMenuItem({todo, position})}
+              closeRadialMenus={quickOpen || notesOpen || settingsOpen || sessionContextOpen || editItem !== null || radialMenuItem !== null || metaModalItem !== null}
+              hasActiveFilters={query.trim().length > 0 || sessionAsFilter || (settings.tabs.find(t => t.id === activeTabId)?.query?.trim().length || 0) > 0}
+              animatingRow={animatingRow}
+            />
+          )}
+        </div>
 
         {/* Persistent footer — always visible regardless of content state */}
         <div style={{
