@@ -570,36 +570,38 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           .row-overlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.15); backdrop-filter: blur(1px); z-index: 10; pointer-events: none; }
         `}</style>
         <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <CustomScrollbar style={{ height: '100%' }}>
-            <div style={{ paddingBottom: '20px' }}>
-              {noteSections.pinned.length > 0 && (
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: '100%' }}>
+              <div style={{ paddingBottom: '20px' }}>
+                {noteSections.pinned.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <div className="date-header" style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', marginRight: '25px'
+                    }}>
+                      <span>Pinned</span>
+                      <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.pinned.length})</span>
+                    </div>
+                    {noteSections.pinned.map((r, idx) => renderNoteRow(r, idx, noteSections.pinned.length))}
+                  </div>
+                )}
                 <div style={{ marginBottom: '20px' }}>
                   <div className="date-header" style={{
                     display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', marginRight: '25px'
                   }}>
-                    <span>Pinned</span>
-                    <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.pinned.length})</span>
+                    <span>Notes</span>
+                    <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.notes.length})</span>
                   </div>
-                  {noteSections.pinned.map((r, idx) => renderNoteRow(r, idx, noteSections.pinned.length))}
+                  {noteSections.notes.length === 0 ? (
+                    <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
+                      No notes yet
+                    </div>
+                  ) : (
+                    noteSections.notes.map((r, idx) => renderNoteRow(r, idx, noteSections.notes.length))
+                  )}
                 </div>
-              )}
-              <div style={{ marginBottom: '20px' }}>
-                <div className="date-header" style={{
-                  display: 'flex', alignItems: 'center', gap: '8px', userSelect: 'none', marginRight: '25px'
-                }}>
-                  <span>Notes</span>
-                  <span style={{ fontSize: '0.75em', opacity: 0.6 }}>({noteSections.notes.length})</span>
-                </div>
-                {noteSections.notes.length === 0 ? (
-                  <div style={{ padding: '12px', textAlign: 'center', color: 'var(--term-dim)', fontSize: '12px' }}>
-                    No notes yet
-                  </div>
-                ) : (
-                  noteSections.notes.map((r, idx) => renderNoteRow(r, idx, noteSections.notes.length))
-                )}
               </div>
-            </div>
-          </CustomScrollbar>
+            </CustomScrollbar>
+          </div>
 
           <div className="summary" style={{
             background: 'var(--term-panel)',
@@ -620,7 +622,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   if (viewMode === 'date') {
     return (
         <div className="terminal-card" style={{ flex: 1, minHeight: 0, padding: '20px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <CustomScrollbar style={{ height: '100%' }}>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: '100%' }}>
             <div style={{ paddingBottom: '20px' }}>
               {dateGroups.length === 0 ? (
                   <div style={{ textAlign: 'center', color: 'var(--term-dim)', padding: '40px 20px' }}>
@@ -716,7 +719,8 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                   ))
               )}
             </div>
-          </CustomScrollbar>
+            </CustomScrollbar>
+          </div>
 
           <div className="summary" style={{
             background: 'var(--term-panel)',
@@ -805,14 +809,16 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
           display: 'flex',
           flexDirection: 'column'
         }}>
-          <CustomScrollbar style={{ height: '100%' }}>
-            <div style={{ paddingBottom: '20px' }}>
-              {renderSection('Now', sections.now, 'now', true)}
-              {renderSection('Soon', sections.soon, 'soon', true)}
-              {renderSection('Anytime', sections.anytime, 'anytime', true)}
-              {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
-            </div>
-          </CustomScrollbar>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <CustomScrollbar style={{ height: '100%' }}>
+              <div style={{ paddingBottom: '20px' }}>
+                {renderSection('Now', sections.now, 'now', true)}
+                {renderSection('Soon', sections.soon, 'soon', true)}
+                {renderSection('Anytime', sections.anytime, 'anytime', true)}
+                {showCompleted && sections.done.length > 0 && renderSection('Done', sections.done, 'done', true)}
+              </div>
+            </CustomScrollbar>
+          </div>
 
           <div className="summary" style={{
             background: 'var(--term-panel)',
