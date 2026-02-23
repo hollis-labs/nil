@@ -20,7 +20,7 @@ import MetaModal from "@/components/MetaModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Search, Calendar, List, Target, Power, HelpCircle, FileText, CheckSquare } from "lucide-react";
+import { Settings, Plus, Search, Target, Power, HelpCircle, FileText, CheckSquare } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
@@ -1025,34 +1025,7 @@ function Inner() {
           })()}
 
           <div style={{marginLeft: 'auto', display: 'flex', gap: '4px'}}>
-            {appMode === 'todos' && (
-            <button
-                className="badge info"
-                onClick={() => setViewMode(viewMode === 'scope' ? 'date' : 'scope')}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                title={viewMode === 'scope' ? 'Switch to Date View' : 'Switch to Scope View'}
-            >
-              {viewMode === 'scope' ? (
-                <>
-                  <List size={12} />
-                  Scope
-                </>
-              ) : (
-                <>
-                  <Calendar size={12} />
-                  Date
-                </>
-              )}
-            </button>
-            )}
+            {/* Scope/Date toggle hidden — view mode UI to be redesigned */}
             <button
                 className="badge info"
                 draggable
