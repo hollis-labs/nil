@@ -9,7 +9,9 @@
       "Bash(go build:*)",
       "Bash(wails generate:*)",
       "Bash(npx tsc:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(head:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
