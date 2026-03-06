@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 	"nanite/config"
 	"nanite/vault"
 
+	tiamatotel "github.com/hollis-labs/tiamat-otel"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -21,6 +23,15 @@ import (
 var assets embed.FS
 
 func main() {
+	// Initialise OpenTelemetry (best-effort; non-fatal on failure).
+	otelCtx := context.Background()
+	otelShutdown, otelErr := tiamatotel.Init(otelCtx, tiamatotel.WithServiceName("nanite"))
+	if otelErr != nil {
+		log.Printf("warning: OTel init failed: %v", otelErr)
+	} else {
+		defer otelShutdown(otelCtx)
+	}
+
 	// Intercept CLI subcommands before launching the Wails GUI.
 	// A bare word first argument (no leading "-") is treated as a subcommand.
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
