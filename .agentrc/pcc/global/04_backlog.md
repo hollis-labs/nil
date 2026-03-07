@@ -8,7 +8,7 @@ updated_at: "2026-03-04"
 
 ## Task tracking
 
-Nanite uses `forge.yaml` (legacy; not yet migrated to Volon). No `.volon/tasks/` directory. Priorities tracked in CLAUDE.md and ROADMAP.md.
+Nanite uses `forge.yaml` (legacy; not yet migrated to Volon). No `.agentrc/tasks/` directory. Priorities tracked in CLAUDE.md and ROADMAP.md.
 
 ## Immediate priorities (from CLAUDE.md)
 
