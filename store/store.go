@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	tiamatotel "github.com/hollis-labs/tiamat-otel"
+	tiamatotel "github.com/hollis-labs/otel"
 	_ "modernc.org/sqlite"
 )
 

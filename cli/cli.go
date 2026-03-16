@@ -136,7 +136,8 @@ type envelope struct {
 // cmdHelp prints available commands or detailed usage for a specific command.
 func cmdHelp(ctx context.Context, args []string, env *commandEnv) {
 	if len(args) == 0 {
-		fmt.Println("Usage: nanite <command> [arguments]\n")
+		fmt.Println("Usage: nanite <command> [arguments]")
+		fmt.Println()
 		fmt.Println("Commands:")
 		for _, cmd := range commandRegistry {
 			if cmd.name == "help" {

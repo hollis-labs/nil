@@ -12,7 +12,7 @@ import (
 	"nanite/config"
 	"nanite/vault"
 
-	tiamatotel "github.com/hollis-labs/tiamat-otel"
+	tiamatotel "github.com/hollis-labs/otel"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -52,7 +52,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:         "NANITE",
+		Title:     "NANITE",
 		Width:     800,
 		Height:    830,
 		MinWidth:  800,

@@ -3,7 +3,7 @@ module nanite
 go 1.25.0
 
 require (
-	github.com/hollis-labs/tiamat-otel v0.0.0
+	github.com/hollis-labs/otel v0.0.0
 	github.com/wailsapp/wails/v2 v2.10.2
 	modernc.org/sqlite v1.39.1
 )
@@ -62,6 +62,6 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/hollis-labs/tiamat-otel => ../tiamat-otel
+replace github.com/hollis-labs/otel => ../otel
 
 // replace github.com/wailsapp/wails/v2 v2.10.2 => /Users/chrispian/go/pkg/mod
