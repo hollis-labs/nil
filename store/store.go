@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	tiamatotel "github.com/hollis-labs/otel"
+	feotel "github.com/hollis-labs/otel"
 	_ "modernc.org/sqlite"
 )
 
@@ -383,7 +383,7 @@ func (s *Store) hydrate(ctx context.Context, t *Item) error {
 
 // CreateTodo creates a todo with normalized links.
 func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
-	ctx, span := tiamatotel.StartSpan(ctx, "nanite.item.create")
+	ctx, span := feotel.StartSpan(ctx, "nanite.item.create")
 	defer span.End()
 
 	if t.Section == "" {
@@ -422,7 +422,7 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 }
 
 func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
-	ctx, span := tiamatotel.StartSpan(ctx, "nanite.item.update")
+	ctx, span := feotel.StartSpan(ctx, "nanite.item.update")
 	defer span.End()
 
 	if t.Section == "" {
@@ -481,7 +481,7 @@ func ExtractRefIDs(html string) []int64 {
 
 // GetTodo returns a single todo/note by ID.
 func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
-	ctx, span := tiamatotel.StartSpan(ctx, "nanite.item.get")
+	ctx, span := feotel.StartSpan(ctx, "nanite.item.get")
 	defer span.End()
 
 	var t Item
@@ -584,7 +584,7 @@ func (s *Store) Archive(ctx context.Context, id int64, archived bool) error {
 }
 
 func (s *Store) DeleteItem(ctx context.Context, id int64) error {
-	ctx, span := tiamatotel.StartSpan(ctx, "nanite.item.delete")
+	ctx, span := feotel.StartSpan(ctx, "nanite.item.delete")
 	defer span.End()
 
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id)
@@ -600,7 +600,7 @@ type qparts struct {
 }
 
 func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
-	ctx, span := tiamatotel.StartSpan(ctx, "nanite.item.search")
+	ctx, span := feotel.StartSpan(ctx, "nanite.item.search")
 	defer span.End()
 
 	q := qparts{}

@@ -12,7 +12,7 @@ import (
 	"nanite/config"
 	"nanite/vault"
 
-	tiamatotel "github.com/hollis-labs/otel"
+	feotel "github.com/hollis-labs/otel"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -25,7 +25,7 @@ var assets embed.FS
 func main() {
 	// Initialise OpenTelemetry (best-effort; non-fatal on failure).
 	otelCtx := context.Background()
-	otelShutdown, otelErr := tiamatotel.Init(otelCtx, tiamatotel.WithServiceName("nanite"))
+	otelShutdown, otelErr := feotel.Init(otelCtx, feotel.WithServiceName("nanite"))
 	if otelErr != nil {
 		log.Printf("warning: OTel init failed: %v", otelErr)
 	} else {
