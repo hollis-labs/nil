@@ -123,6 +123,12 @@ func init() {
 			usage: "nanite version",
 			run:   cmdVersion,
 		},
+		{
+			name:  "plugin",
+			short: "Manage Nanite plugins",
+			usage: "nanite plugin <list|install|uninstall|disable|enable> [name]",
+			run:   cmdPlugin,
+		},
 	}
 }
 

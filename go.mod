@@ -1,10 +1,12 @@
 module nanite
 
-go 1.25.0
+go 1.26.1
 
 require (
+	github.com/hollis-labs/fragments-engine/plugin v0.0.0
 	github.com/hollis-labs/otel v0.0.0
 	github.com/wailsapp/wails/v2 v2.10.2
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.39.1
 )
 
@@ -62,6 +64,8 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/hollis-labs/otel => ../otel
+replace github.com/hollis-labs/otel => ../fragments-engine/libs/otel
+
+replace github.com/hollis-labs/fragments-engine/plugin => ../fragments-engine/libs/plugin
 
 // replace github.com/wailsapp/wails/v2 v2.10.2 => /Users/chrispian/go/pkg/mod
