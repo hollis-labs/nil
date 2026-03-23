@@ -1,0 +1,22 @@
+# Project agentrc config — nanite
+agentrc_version: 2.2.0
+
+agents:
+  nanite-backend:
+    name: Nanite Backend Engineer
+    description: Go service development for the Nanite RAG and document ingestion service
+    roles: [backend, go]
+    skills: [go-build, go-lint, go-test]
+    context: agents/backend.md
+
+  nanite-frontend:
+    name: Nanite Frontend Developer
+    description: Frontend development for the Nanite UI
+    roles: [frontend, react]
+    context: agents/frontend.md
+
+  nanite-reviewer:
+    name: Nanite Code Reviewer
+    description: Code review for Nanite PRs
+    roles: [code-review, go]
+    skills: [go-lint, go-test]
