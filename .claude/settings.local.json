@@ -11,7 +11,9 @@
       "Bash(npx tsc:*)",
       "Bash(sqlite3:*)",
       "Bash(head:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(kill 56263 56266 56269 56277 57482 57486 57491 57500)",
+      "Bash(rm /Users/chrispian/Projects-apps/nil/.git/index.lock)"
     ],
     "deny": [],
     "ask": []

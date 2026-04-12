@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
-import { themePresets, TermTheme } from "@/theme/theme";
+import { themePresets } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import * as Backend from "../../wailsjs/go/main/App";
@@ -62,25 +62,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettingsState] = React.useState<Settings>(() => {
     // Migrate old key on first load
     const oldData = localStorage.getItem('todo.settings');
-    if (oldData && !localStorage.getItem('nanite.settings')) {
-      localStorage.setItem('nanite.settings', oldData);
+    if (oldData && !localStorage.getItem('nil.settings')) {
+      localStorage.setItem('nil.settings', oldData);
       localStorage.removeItem('todo.settings');
     }
 
-    const saved = localStorage.getItem('nanite.settings');
+    const saved = localStorage.getItem('nil.settings');
     let parsed: Settings = saved ? JSON.parse(saved) : defaultSettings;
 
     // Inject notes-mode All tab if missing (one-time migration)
-    if (!localStorage.getItem('nanite.settings.migrated.notesTab')) {
+    if (!localStorage.getItem('nil.settings.migrated.notesTab')) {
       const hasNoteTab = parsed.tabs.some(t => (t.appMode || 'todos') === 'notes');
       if (!hasNoteTab) {
         parsed = {
           ...parsed,
           tabs: [...parsed.tabs, { id: 'notes-all', label: 'All', query: '', appMode: 'notes' }],
         };
-        localStorage.setItem('nanite.settings', JSON.stringify(parsed));
+        localStorage.setItem('nil.settings', JSON.stringify(parsed));
       }
-      localStorage.setItem('nanite.settings.migrated.notesTab', '1');
+      localStorage.setItem('nil.settings.migrated.notesTab', '1');
     }
 
     return parsed;
@@ -88,7 +88,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   const setSettings = React.useCallback((s: Settings) => {
     setSettingsState(s);
-    localStorage.setItem('nanite.settings', JSON.stringify(s));
+    localStorage.setItem('nil.settings', JSON.stringify(s));
   }, []);
 
   return (
@@ -111,8 +111,8 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
   const [local, setLocal] = React.useState(settings);
   const [activeTab, setActiveTab] = React.useState<SettingsTab>('general');
   const { theme, setTheme } = useTermTheme();
-  const [localTheme, setLocalTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
-  const [customTheme, setCustomTheme] = React.useState(() => ({ ...themePresets.default, ...theme }));
+  const [localTheme, setLocalTheme] = React.useState(() => ({ ...themePresets['default']!, ...theme }));
+  const [customTheme, setCustomTheme] = React.useState(() => ({ ...themePresets['default']!, ...theme }));
   const [selectedPreset, setSelectedPreset] = React.useState<string>('custom');
   const [draggedTabId, setDraggedTabId] = React.useState<string | null>(null);
   const [databasePath, setDatabasePath] = React.useState<string>('');
@@ -136,7 +136,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
       setLocal(settings);
       setActiveTab(initialTab || 'general');
       // Ensure theme has all properties by merging with default
-      const fullTheme = { ...themePresets.default, ...theme };
+      const fullTheme = { ...themePresets['default']!, ...theme };
       console.log('[Settings] Full theme properties:', Object.keys(fullTheme));
       console.log('[Settings] Scrollbar properties:', {
         scrollbarBg: fullTheme.scrollbarBg,
@@ -273,6 +273,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
 
     const newTabs = [...local.tabs];
     const [removed] = newTabs.splice(draggedIndex, 1);
+    if (!removed) return;
     newTabs.splice(targetIndex, 0, removed);
 
     setLocal({ ...local, tabs: newTabs });
@@ -282,16 +283,6 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
   const handleDragEnd = () => {
     setDraggedTabId(null);
   };
-
-  const TabButton = ({ name, label }: { name: SettingsTab, label: string }) => (
-    <button
-      className={`badge ${activeTab === name ? 'success' : ''}`}
-      onClick={() => setActiveTab(name)}
-      style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
-    >
-      {label}
-    </button>
-  );
 
   return (
     <>
@@ -716,7 +707,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {local.tabs.map((tab, idx) => (
+                {local.tabs.map((tab) => (
                   <div
                     key={tab.id}
                     draggable
@@ -1201,7 +1192,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
                       e.preventDefault();
                       e.stopPropagation();
                       console.log('[Settings] Setting to DEFAULT theme');
-                      const defaultTheme = themePresets.default;
+                      const defaultTheme = themePresets['default']!;
                       console.log('[Settings] Default theme:', defaultTheme);
                       setTheme(defaultTheme);
                       alert('Theme set to DEFAULT (dark blue). Check the colors!');
@@ -1613,7 +1604,7 @@ export default function SettingsModal({ open, onOpenChange, initialTab }: Props)
       <ConfirmDialog
         open={showRestartPrompt}
         title="Restart Required"
-        message="Database location has been updated. NANITE needs to restart to apply the changes."
+        message="Database location has been updated. NIL needs to restart to apply the changes."
         confirmText="Restart Now"
         cancelText="Later"
         onConfirm={async () => {

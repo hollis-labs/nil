@@ -3,11 +3,11 @@ package plugin
 import (
 	"time"
 
-	"github.com/hollis-labs/fragments-engine/plugin"
+	"github.com/hollis-labs/plugin"
 )
 
-// Nanite Event Catalog
-// These are the standard events that Nanite emits for plugins to listen to.
+// Nil Event Catalog
+// These are the standard events that Nil emits for plugins to listen to.
 const (
 	// Ingestion events
 	EventIngestCompleted = "ingest.completed"
@@ -31,7 +31,7 @@ func NewEvent(eventType, source string, data map[string]interface{}) plugin.Even
 
 // EmitIngestCompleted emits an ingest.completed event.
 func (h *Host) EmitIngestCompleted(source string, itemCount int) {
-	h.EmitEvent(NewEvent(EventIngestCompleted, "nanite", map[string]interface{}{
+	h.EmitEvent(NewEvent(EventIngestCompleted, "nil", map[string]interface{}{
 		"source":     source,
 		"item_count": itemCount,
 	}))
@@ -39,7 +39,7 @@ func (h *Host) EmitIngestCompleted(source string, itemCount int) {
 
 // EmitQueryCompleted emits a query.completed event.
 func (h *Host) EmitQueryCompleted(query string, resultCount int) {
-	h.EmitEvent(NewEvent(EventQueryCompleted, "nanite", map[string]interface{}{
+	h.EmitEvent(NewEvent(EventQueryCompleted, "nil", map[string]interface{}{
 		"query":        query,
 		"result_count": resultCount,
 	}))
@@ -47,7 +47,7 @@ func (h *Host) EmitQueryCompleted(query string, resultCount int) {
 
 // EmitChunkCreated emits a chunk.created event.
 func (h *Host) EmitChunkCreated(source string, chunkIndex int) {
-	h.EmitEvent(NewEvent(EventChunkCreated, "nanite", map[string]interface{}{
+	h.EmitEvent(NewEvent(EventChunkCreated, "nil", map[string]interface{}{
 		"source":      source,
 		"chunk_index": chunkIndex,
 	}))

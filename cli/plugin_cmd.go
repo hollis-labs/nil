@@ -8,58 +8,58 @@ import (
 	"path/filepath"
 	"strings"
 
-	"nanite/internal/plugin"
+	"github.com/hollis-labs/nil/internal/plugin"
 
-	fplugin "github.com/hollis-labs/fragments-engine/plugin"
+	fplugin "github.com/hollis-labs/plugin"
 )
 
 const pluginGitOrg = "hollis-labs"
 
 func cmdPlugin(ctx context.Context, args []string, env *commandEnv) {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: nanite plugin <command>")
+		fmt.Fprintln(os.Stderr, "usage: nil plugin <command>")
 		fmt.Fprintln(os.Stderr, "commands: list, install, uninstall, disable, enable")
 		os.Exit(1)
 	}
 
-	pluginsDir := resolveNanitePluginsDir()
+	pluginsDir := resolveNilPluginsDir()
 
 	switch args[0] {
 	case "list":
-		nanitePluginList(pluginsDir)
+		nilPluginList(pluginsDir)
 	case "install":
 		if len(args) < 2 {
 			die("plugin install: requires <name>")
 		}
-		nanitePluginInstall(pluginsDir, args[1])
+		nilPluginInstall(pluginsDir, args[1])
 	case "uninstall":
 		if len(args) < 2 {
 			die("plugin uninstall: requires <name>")
 		}
-		nanitePluginUninstall(pluginsDir, args[1])
+		nilPluginUninstall(pluginsDir, args[1])
 	case "disable":
 		if len(args) < 2 {
 			die("plugin disable: requires <name>")
 		}
-		nanitePluginDisable(pluginsDir, args[1])
+		nilPluginDisable(pluginsDir, args[1])
 	case "enable":
 		if len(args) < 2 {
 			die("plugin enable: requires <name>")
 		}
-		nanitePluginEnable(pluginsDir, args[1])
+		nilPluginEnable(pluginsDir, args[1])
 	default:
 		die("plugin: unknown command %q", args[0])
 	}
 }
 
-func resolveNanitePluginsDir() string {
-	if d := os.Getenv("NANITE_PLUGINS_DIR"); d != "" {
+func resolveNilPluginsDir() string {
+	if d := os.Getenv("NIL_PLUGINS_DIR"); d != "" {
 		return d
 	}
 	return "./plugins"
 }
 
-func nanitePluginList(pluginsDir string) {
+func nilPluginList(pluginsDir string) {
 	entries, err := os.ReadDir(pluginsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -100,7 +100,7 @@ func nanitePluginList(pluginsDir string) {
 	}
 }
 
-func nanitePluginInstall(pluginsDir, name string) {
+func nilPluginInstall(pluginsDir, name string) {
 	target := filepath.Join(pluginsDir, name)
 
 	if _, err := os.Stat(filepath.Join(target, "plugin.yaml")); err == nil {
@@ -139,7 +139,7 @@ func nanitePluginInstall(pluginsDir, name string) {
 	fmt.Printf("\nPlugin %q installed to %s\n", name, target)
 }
 
-func nanitePluginUninstall(pluginsDir, name string) {
+func nilPluginUninstall(pluginsDir, name string) {
 	target := filepath.Join(pluginsDir, name)
 
 	manifestPath := filepath.Join(target, "plugin.yaml")
@@ -176,14 +176,14 @@ func nanitePluginUninstall(pluginsDir, name string) {
 	fmt.Printf("\nPlugin %q uninstalled.\n", name)
 }
 
-func nanitePluginDisable(pluginsDir, name string) {
+func nilPluginDisable(pluginsDir, name string) {
 	if err := plugin.DisablePlugin(pluginsDir, name); err != nil {
 		die("plugin disable: %v", err)
 	}
 	fmt.Printf("Plugin %q disabled.\n", name)
 }
 
-func nanitePluginEnable(pluginsDir, name string) {
+func nilPluginEnable(pluginsDir, name string) {
 	if err := plugin.EnablePlugin(pluginsDir, name); err != nil {
 		die("plugin enable: %v", err)
 	}

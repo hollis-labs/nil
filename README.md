@@ -1,10 +1,10 @@
-# NANITE
+# NIL
 
 Keyboard-driven personal task and note management.
 
-## What is NANITE?
+## What is NIL?
 
-NANITE is a minimal desktop app for capturing and managing tasks and notes without leaving the keyboard. It uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging — all stored locally in a SQLite database.
+NIL is a minimal desktop app for capturing and managing tasks and notes without leaving the keyboard. It uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging — all stored locally in a SQLite database.
 
 ## Key Features
 
@@ -71,12 +71,12 @@ cd frontend && npx tsc --noEmit
 
 **Debug mode** (opens WebKit inspector on startup):
 ```bash
-DEBUG=1 open build/bin/NANITE.app
+DEBUG=1 open build/bin/NIL.app
 ```
 
 ## Contributing
 
-NANITE is in public beta. Bug reports and feature requests are welcome — please open an issue on GitHub.
+NIL is in public beta. Bug reports and feature requests are welcome — please open an issue on GitHub.
 
 ## License
 

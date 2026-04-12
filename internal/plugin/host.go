@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hollis-labs/fragments-engine/plugin"
+	"github.com/hollis-labs/plugin"
 )
 
-// Host implements the plugin.Host interface for Nanite.
-// Nanite is a Wails desktop app — it has no HTTP server, so CRUD and UI
+// Host implements the plugin.Host interface for Nil.
+// Nil is a Wails desktop app — it has no HTTP server, so CRUD and UI
 // registration are no-ops that log warnings.
 type Host struct {
 	mu           sync.RWMutex
@@ -25,7 +25,7 @@ type Host struct {
 	ctxCancel    context.CancelFunc
 }
 
-// NewHost creates a new plugin host for Nanite.
+// NewHost creates a new plugin host for Nil.
 func NewHost(logger plugin.Logger) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Host{
@@ -53,13 +53,13 @@ func (h *Host) GetPlugin(id string) (plugin.Plugin, bool) {
 	return p, exists
 }
 
-// RegisterCRUDHandler logs a warning — Nanite has no HTTP server for CRUD routes.
+// RegisterCRUDHandler logs a warning — Nil has no HTTP server for CRUD routes.
 func (h *Host) RegisterCRUDHandler(resourceType string, handler plugin.CRUDHandler) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	h.crudHandlers[resourceType] = handler
-	h.logger.Warn("CRUD handler registered but Nanite has no HTTP server — not wired to routes", "resourceType", resourceType)
+	h.logger.Warn("CRUD handler registered but Nil has no HTTP server — not wired to routes", "resourceType", resourceType)
 	return nil
 }
 
@@ -76,9 +76,9 @@ func (h *Host) RegisterEventHook(eventTypes []string, hook plugin.EventHook) err
 	return nil
 }
 
-// RegisterUIComponent is a no-op for Nanite (Wails handles its own UI).
+// RegisterUIComponent is a no-op for Nil (Wails handles its own UI).
 func (h *Host) RegisterUIComponent(component plugin.UIComponent) error {
-	h.logger.Warn("RegisterUIComponent called but Nanite uses Wails UI — ignoring", "id", component.ID)
+	h.logger.Warn("RegisterUIComponent called but Nil uses Wails UI — ignoring", "id", component.ID)
 	return nil
 }
 
@@ -100,6 +100,72 @@ func (h *Host) RegisterService(name string, service interface{}) {
 	defer h.mu.Unlock()
 	h.services[name] = service
 	h.logger.Info("registered service", "name", name)
+}
+
+// SetConfig persists a configuration value for the calling plugin.
+func (h *Host) SetConfig(key string, value string) error {
+	h.logger.Warn("SetConfig not yet implemented in Nil", "key", key)
+	return nil
+}
+
+// RegisterConfigSchema registers config field definitions for the calling plugin.
+func (h *Host) RegisterConfigSchema(fields []plugin.ConfigFieldDef) error {
+	h.logger.Warn("RegisterConfigSchema not yet implemented in Nil")
+	return nil
+}
+
+// RegisterConnector registers a named connector.
+func (h *Host) RegisterConnector(name string, connector plugin.Connector) error {
+	h.logger.Warn("RegisterConnector not yet implemented in Nil", "name", name)
+	return nil
+}
+
+// RegisterProvider registers a runtime LLM provider.
+func (h *Host) RegisterProvider(name string, provider interface{}) error {
+	h.logger.Warn("RegisterProvider not yet implemented in Nil", "name", name)
+	return nil
+}
+
+// RegisterCLIAdapter registers a runtime CLI adapter.
+func (h *Host) RegisterCLIAdapter(name string, adapter interface{}) error {
+	h.logger.Warn("RegisterCLIAdapter not yet implemented in Nil", "name", name)
+	return nil
+}
+
+// SlashCommandDef defines a slash command (app-specific, not in shared plugin package).
+type SlashCommandDef struct {
+	Name        string
+	Description string
+}
+
+// UISlotEntry defines a UI slot entry (app-specific).
+type UISlotEntry struct {
+	Slot string
+	Name string
+}
+
+// KeybindingDef defines a keyboard shortcut (app-specific).
+type KeybindingDef struct {
+	Key         string
+	Description string
+}
+
+// RegisterCommand registers a slash command.
+func (h *Host) RegisterCommand(cmd SlashCommandDef) error {
+	h.logger.Warn("RegisterCommand not yet implemented in Nil", "name", cmd.Name)
+	return nil
+}
+
+// RegisterSlot registers a UI slot entry.
+func (h *Host) RegisterSlot(entry UISlotEntry) error {
+	h.logger.Warn("RegisterSlot not yet implemented in Nil", "slot", entry.Slot)
+	return nil
+}
+
+// RegisterKeybinding registers a keyboard shortcut.
+func (h *Host) RegisterKeybinding(kb KeybindingDef) error {
+	h.logger.Warn("RegisterKeybinding not yet implemented in Nil", "key", kb.Key)
+	return nil
 }
 
 // Logger provides a logger instance for the plugin.

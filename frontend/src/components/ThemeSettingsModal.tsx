@@ -116,7 +116,8 @@ export default function ThemeSettingsModal({ open, onOpenChange }: { open: boole
   const handlePresetChange = (presetName: string) => {
     setSelectedPreset(presetName);
     if (presetName !== 'custom') {
-      setLocal(themePresets[presetName]);
+      const preset = themePresets[presetName];
+      if (preset) setLocal(preset);
     }
   };
 

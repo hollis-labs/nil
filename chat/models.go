@@ -3,7 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"nanite/store"
+	"github.com/hollis-labs/nil/store"
 	"sync"
 )
 
@@ -147,7 +147,7 @@ type Template struct {
 	Slug         string `json:"slug"`
 	Name         string `json:"name"`
 	Description  string `json:"description"`
-	Type         string `json:"type"`          // generation | query | analysis
+	Type         string `json:"type"` // generation | query | analysis
 	Prompt       string `json:"prompt"`
 	Parameters   string `json:"parameters"`    // JSON array of param names
 	OutputFormat string `json:"output_format"` // markdown

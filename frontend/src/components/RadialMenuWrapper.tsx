@@ -156,9 +156,7 @@ export default function RadialMenuWrapper({
     { id: 'convertType', label: '→NOTE', icon: FileText, disabled: false, angle: 270 },
   ];
 
-  const menuItems = activeLayer === 'main' ? mainMenuItems : moreMenuItems;
   const radius = 60;
-  const centerRadius = 35;
 
   return (
     <>
@@ -281,7 +279,7 @@ export default function RadialMenuWrapper({
         >
           {activeLayer === 'main' && (
             <div className="layer-wrapper">
-              {mainMenuItems.map((item, index) => {
+              {mainMenuItems.map((item) => {
                 const angle = (item.angle * Math.PI) / 180;
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;
@@ -311,7 +309,7 @@ export default function RadialMenuWrapper({
 
           {activeLayer === 'more' && (
             <div className="layer-wrapper">
-              {moreMenuItems.map((item, index) => {
+              {moreMenuItems.map((item) => {
                 const angle = (item.angle * Math.PI) / 180;
                 const x = Math.cos(angle) * radius;
                 const y = Math.sin(angle) * radius;

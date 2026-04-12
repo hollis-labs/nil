@@ -3,6 +3,7 @@ node_modules
 frontend/dist
 test-build
 # Go build output
+/nil
 /nanite
 /todo-app
 # dist artifacts

@@ -1,8 +1,8 @@
 version: 1
 
 project:
-  id: nanite
-  name: NANITE
+  id: nil
+  name: NIL
 
 storage:
   backend: files

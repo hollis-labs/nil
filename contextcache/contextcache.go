@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"nanite/config"
-	"nanite/store"
-	"nanite/vault"
+	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/store"
+	"github.com/hollis-labs/nil/vault"
 )
 
 // Snapshot captures agent-friendly context data that can be cached on disk.
@@ -86,7 +86,7 @@ func BuildSnapshot(ctx context.Context, cfg *config.Config, mgr *vault.Manager) 
 	snap := &Snapshot{
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 		App: AppInfo{
-			Name:    "NANITE",
+			Name:    "NIL",
 			Purpose: "Keyboard-first personal tasks + notes with multi-vault storage",
 			Version: "cli-dev",
 			Focus:   []string{"Human-friendly CLI", "Agent-ready APIs", "Local-first data ownership", "Inbox + Vault views"},

@@ -1,8 +1,8 @@
-# Cloud Sync Guide for NANITE Todo App
+# Cloud Sync Guide for NIL Todo App
 
 ## Overview
 
-NANITE now uses SQLite WAL (Write-Ahead Logging) mode, which is optimized for cloud sync scenarios. This allows you to store your todo database in Dropbox, iCloud Drive, or Google Drive and access it from multiple computers.
+NIL now uses SQLite WAL (Write-Ahead Logging) mode, which is optimized for cloud sync scenarios. This allows you to store your todo database in Dropbox, iCloud Drive, or Google Drive and access it from multiple computers.
 
 ## ⚠️ Important Rules
 
@@ -19,10 +19,10 @@ NANITE now uses SQLite WAL (Write-Ahead Logging) mode, which is optimized for cl
 
 # 2. Move database to Dropbox
 cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Dropbox/nanite-todo-data
+mv data ~/Dropbox/nil-todo-data
 
 # 3. Create symbolic link
-ln -s ~/Dropbox/nanite-todo-data data
+ln -s ~/Dropbox/nil-todo-data data
 
 # 4. Verify the link
 ls -la data/
@@ -37,10 +37,10 @@ ls -la data/
 
 # 2. Move database to iCloud
 cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Library/Mobile\ Documents/com~apple~CloudDocs/nanite-todo-data
+mv data ~/Library/Mobile\ Documents/com~apple~CloudDocs/nil-todo-data
 
 # 3. Create symbolic link
-ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/nanite-todo-data data
+ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/nil-todo-data data
 
 # 4. Verify the link
 ls -la data/
@@ -55,10 +55,10 @@ ls -la data/
 
 # 2. Move database to Google Drive
 cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Google\ Drive/My\ Drive/nanite-todo-data
+mv data ~/Google\ Drive/My\ Drive/nil-todo-data
 
 # 3. Create symbolic link
-ln -s ~/Google\ Drive/My\ Drive/nanite-todo-data data
+ln -s ~/Google\ Drive/My\ Drive/nil-todo-data data
 
 # 4. Verify the link
 ls -la data/

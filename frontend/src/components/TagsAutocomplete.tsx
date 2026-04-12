@@ -30,7 +30,7 @@ export default function TagsAutocomplete({ values, onValuesChange, placeholder =
       suggestions={suggestions}
       placeholder={placeholder}
       prefix="#"
-      label={label}
+      {...(label !== undefined && { label })}
     />
   );
 }

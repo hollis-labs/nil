@@ -60,9 +60,11 @@ func ParseLine(line string) Parsed {
 	for _, m := range reKVDate.FindAllStringSubmatch(src, -1) {
 		k, v := m[1], m[2]
 		if k == "due" {
-			d := v; due = &d
+			d := v
+			due = &d
 		} else {
-			t := v; thr = &t
+			t := v
+			thr = &t
 		}
 		src = strings.Replace(src, m[0], "", 1)
 	}

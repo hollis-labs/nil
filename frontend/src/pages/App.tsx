@@ -18,7 +18,6 @@ import PowerMenu from "@/components/PowerMenu";
 import RadialMenuWrapper from "@/components/RadialMenuWrapper";
 import MetaModal from "@/components/MetaModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
-import CustomScrollbar from "@/components/CustomScrollbar";
 import { ThemeProvider } from "@/theme/ThemeProvider";
 import { Settings, Plus, Search, Target, Power, HelpCircle, FileText, CheckSquare } from "lucide-react";
 import { parseQuery } from "@/lib/query";
@@ -64,12 +63,12 @@ function Inner() {
   const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
   const appModeLPFired = React.useRef(false);
   const { settings } = useSettings();
-  const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
-    const saved = localStorage.getItem('nanite.viewMode');
+  const [viewMode] = React.useState<ViewMode>(() => {
+    const saved = localStorage.getItem('nil.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
   });
   const [appMode, setAppMode] = React.useState<AppMode>(() => {
-    const saved = localStorage.getItem('nanite.appMode');
+    const saved = localStorage.getItem('nil.appMode');
     const mode = (saved as AppMode) || 'todos';
     // Never restore inbox mode from localStorage
     return mode === 'inbox' ? 'todos' : mode;
@@ -79,13 +78,13 @@ function Inner() {
   });
 
   React.useEffect(() => {
-    localStorage.setItem('nanite.viewMode', viewMode);
+    localStorage.setItem('nil.viewMode', viewMode);
   }, [viewMode]);
 
   React.useEffect(() => {
     // Don't persist inbox mode
     if (appMode !== 'inbox') {
-      localStorage.setItem('nanite.appMode', appMode);
+      localStorage.setItem('nil.appMode', appMode);
     }
     // When switching modes, ensure activeTabId points to a tab in the new mode
     if (appMode !== 'inbox') {
@@ -722,7 +721,7 @@ function Inner() {
         display: 'flex',
         flexDirection: 'column'
       }} >
-        {/* NANITE Branding - Draggable */}
+        {/* NIL Branding - Draggable */}
         <div style={{ position: 'relative' }}>
           <div
             style={{
@@ -760,7 +759,7 @@ function Inner() {
                 letterSpacing: '0.12em',
                 color: 'var(--term-info)',
               }}>
-                NANITE
+                NIL
               </div>
             </div>
             <div style={{
@@ -859,7 +858,7 @@ function Inner() {
             onClick={() => {
               const newMode = inputMode === 'search' ? 'add' : 'search';
               setInputMode(newMode);
-              localStorage.setItem('nanite.inputMode', newMode);
+              localStorage.setItem('nil.inputMode', newMode);
             }}
             title={inputMode === 'add' ? 'Quick Add Mode (Click to Search)' : 'Search Mode (Click to Quick Add)'}
             onMouseEnter={(e) => {
@@ -1137,7 +1136,7 @@ function Inner() {
                   height: '28px',
                   width: '28px',
                 }}
-                title={btn === 'help' ? 'Help & Guide' : btn === 'settings' ? 'Settings (⌘,)' : 'Quit NANITE'}
+                title={btn === 'help' ? 'Help & Guide' : btn === 'settings' ? 'Settings (⌘,)' : 'Quit NIL'}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--term-accent)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--term-border)'; }}
                 onMouseDown={btn === 'power' ? (e) => { e.stopPropagation(); e.preventDefault(); } : undefined}
@@ -1221,7 +1220,7 @@ function Inner() {
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
           }}>
             <h2 style={{ margin: '0 0 16px 0', color: 'var(--term-info)', fontSize: '20px' }}>
-              Welcome to Nanite!
+              Welcome to Nil!
             </h2>
             <p style={{ margin: '0 0 24px 0', color: 'var(--term-fg)', lineHeight: '1.6', opacity: 0.9 }}>
               Would you like to add <strong>tutorial</strong> todos? They'll <strong>teach you</strong> todo.txt syntax and show off all the features.
@@ -1259,7 +1258,7 @@ function Inner() {
         </div>
       )}
       <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
-      <SettingsModal open={settingsOpen} onOpenChange={(v) => { setSettingsOpen(v); if (!v) { setSettingsInitialTab(undefined); runSearch(); loadVaults(); } }} initialTab={settingsInitialTab} />
+      <SettingsModal open={settingsOpen} onOpenChange={(v) => { setSettingsOpen(v); if (!v) { setSettingsInitialTab(undefined); runSearch(); loadVaults(); } }} {...(settingsInitialTab ? { initialTab: settingsInitialTab } : {})} />
 
       <ConfirmDialog
         open={confirmRemoveDemo}

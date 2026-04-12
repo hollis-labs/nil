@@ -122,7 +122,7 @@ export default function SearchAutocomplete({ value, onChange, onSearch, inputRef
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (suggestions[selectedIndex]) {
-        handleSelect(suggestions[selectedIndex]);
+        handleSelect(suggestions[selectedIndex]!);
       } else {
         onSearch();
       }

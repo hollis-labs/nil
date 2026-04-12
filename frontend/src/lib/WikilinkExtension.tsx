@@ -14,17 +14,17 @@ export const WikilinkExtension = Mention.extend({
       id: {
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute("data-id"),
-        renderHTML: (attrs: Record<string, any>) => ({ "data-id": attrs.id }),
+        renderHTML: (attrs: Record<string, any>) => ({ "data-id": attrs['id'] }),
       },
       label: {
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute("data-label"),
-        renderHTML: (attrs: Record<string, any>) => ({ "data-label": attrs.label }),
+        renderHTML: (attrs: Record<string, any>) => ({ "data-label": attrs['label'] }),
       },
       refType: {
         default: "todo",
         parseHTML: (element: HTMLElement) => element.getAttribute("data-ref-type") || "todo",
-        renderHTML: (attrs: Record<string, any>) => ({ "data-ref-type": attrs.refType }),
+        renderHTML: (attrs: Record<string, any>) => ({ "data-ref-type": attrs['refType'] }),
       },
     };
   },

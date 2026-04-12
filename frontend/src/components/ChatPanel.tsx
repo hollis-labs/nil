@@ -5,7 +5,7 @@ import ChatMessage from "./ChatMessage";
 
 type MessageEntry = {
   message: chat.ChatMessage;
-  proposal?: chat.ActionProposal;
+  proposal?: chat.ActionProposal | undefined;
 };
 
 type Props = {

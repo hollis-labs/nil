@@ -95,10 +95,13 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
         setFocusedIndex((i) => Math.max(i - 1, 0));
         return;
       }
-      if (e.key === "Enter" && results[focusedIndex]) {
-        e.preventDefault();
-        onOpenItem(results[focusedIndex]);
-        return;
+      if (e.key === "Enter") {
+        const hit = results[focusedIndex];
+        if (hit) {
+          e.preventDefault();
+          onOpenItem(hit);
+          return;
+        }
       }
     };
     window.addEventListener("keydown", handle);

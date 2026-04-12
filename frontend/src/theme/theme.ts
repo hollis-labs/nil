@@ -109,7 +109,7 @@ export const themePresets: Record<string, TermTheme> = {
   },
 };
 
-export const defaultTheme: TermTheme = themePresets.default;
+export const defaultTheme: TermTheme = themePresets['default']!;
 
 export function applyTheme(t: TermTheme) {
   const root = document.documentElement;
@@ -134,10 +134,10 @@ export function applyTheme(t: TermTheme) {
   root.style.setProperty('--scrollbar-thumb-hover', scrollbarThumbHover);
 
   console.log('[Theme] Applied theme:', {
-    name: t === themePresets.default ? 'default' :
-          t === themePresets.terminal ? 'terminal' :
-          t === themePresets.light ? 'light' :
-          t === themePresets.synthwave ? 'synthwave' : 'custom',
+    name: t === themePresets['default'] ? 'default' :
+          t === themePresets['terminal'] ? 'terminal' :
+          t === themePresets['light'] ? 'light' :
+          t === themePresets['synthwave'] ? 'synthwave' : 'custom',
     bg: t.bg,
     bgAlt: t.bgAlt,
     panel: t.panel,

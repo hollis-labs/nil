@@ -1,12 +1,12 @@
 /**
  * Vault-scoped localStorage helpers.
  *
- * Keys are namespaced as `nanite.vault.{vaultId}.{key}` so each vault
+ * Keys are namespaced as `nil.vault.{vaultId}.{key}` so each vault
  * can carry its own tabs, sessions, and templates.
  */
 
 function vaultKey(vaultId: string, key: string): string {
-  return `nanite.vault.${vaultId}.${key}`;
+  return `nil.vault.${vaultId}.${key}`;
 }
 
 export function getVaultSetting<T>(vaultId: string, key: string, fallback: T): T {

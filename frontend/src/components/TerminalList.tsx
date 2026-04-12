@@ -2,7 +2,7 @@ import * as React from "react";
 import { useTermTheme } from "@/theme/ThemeProvider";
 import { TermTheme } from "@/theme/theme";
 import CustomScrollbar from "@/components/CustomScrollbar";
-import { ChevronUp, ChevronDown, Check, Archive, Trash2, Edit3, Pin } from "lucide-react";
+import { Check, Pin } from "lucide-react";
 
 export type ItemRow = {
   id: number; title: string; priority?: string;
@@ -35,20 +35,20 @@ function getTagColor(index: number, theme: TermTheme): string {
     theme.tagColor2 || '#999da5',
     theme.tagColor3 || '#7e8289'
   ];
-  return colors[Math.min(index, 2)];
+  return colors[Math.min(index, 2)]!;
 }
 
 function getProjectColor(index: number, theme: TermTheme): string {
   // Use theme colors if available, fallback to calculated gradient
   if (theme.projectColor1 && theme.projectColor2 && theme.projectColor3) {
     const colors = [theme.projectColor1, theme.projectColor2, theme.projectColor3];
-    return colors[Math.min(index, 2)];
+    return colors[Math.min(index, 2)]!;
   }
   // Fallback: calculate from accent
   const brightAccent = adjustBrightness(theme.accent, 15);
   const darkAccent = adjustBrightness(theme.accent, -25);
   const colors = [brightAccent, theme.accent, darkAccent];
-  return colors[Math.min(index, 2)];
+  return colors[Math.min(index, 2)]!;
 }
 
 function adjustBrightness(hex: string, percent: number): string {
@@ -77,13 +77,13 @@ type Props = {
   animatingRow?: { id: number; action: string; phase?: 'collapsing' | 'expanding' } | null;
 };
 
-export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSection, onArchive, onDelete, showCompleted, onEditItem, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, hasActiveFilters = false, animatingRow = null }: Props) {
+export default function TerminalList({ rows, onToggle, onMoveSection, onDelete, showCompleted, onEditItem, viewMode = 'scope', appMode = 'todos', onOpenRadialMenu, closeRadialMenus = false, hasActiveFilters = false, animatingRow = null }: Props) {
   const { theme } = useTermTheme();
   const [draggedId, setDraggedId] = React.useState<number | null>(null);
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({
     done: false
   });
-  const [hoveredRow, setHoveredRow] = React.useState<number | null>(null);
+  const [, setHoveredRow] = React.useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = React.useState<{ id: number; position: { x: number; y: number } } | null>(null);
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
   const deleteTriggered = React.useRef<boolean>(false);
@@ -115,7 +115,6 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
   const sections = React.useMemo(() => {
     if (!rows || !Array.isArray(rows)) return { now: [], soon: [], anytime: [], done: [] };
 
-    const today = ymd();
     const now: ItemRow[] = [];
     const soon: ItemRow[] = [];
     const anytime: ItemRow[] = [];
@@ -262,6 +261,7 @@ export default function TerminalList({ rows, onToggle, onOpenNotes, onMoveSectio
                             onTouchStart={(e) => {
                               deleteTriggered.current = false;
                               const touch = e.touches[0];
+                              if (!touch) return;
                               longPressTimer.current = setTimeout(() => {
                                 deleteTriggered.current = true;
                                 if (onOpenRadialMenu) {

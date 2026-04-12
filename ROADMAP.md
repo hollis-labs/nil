@@ -1,6 +1,6 @@
-# NANITE Roadmap
+# NIL Roadmap
 
-This document tracks the public-facing development direction for NANITE.
+This document tracks the public-facing development direction for NIL.
 
 ---
 

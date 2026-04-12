@@ -1,4 +1,4 @@
-# NANITE Todo App - Distribution Guide
+# NIL Todo App - Distribution Guide
 
 ## Overview
 
@@ -41,14 +41,14 @@ brew install create-dmg
 
 # Create DMG
 create-dmg \
-  --volname "NANITE" \
+  --volname "NIL" \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
   --icon "todo-app.app" 200 190 \
   --hide-extension "todo-app.app" \
   --app-drop-link 600 185 \
-  "NANITE-Installer.dmg" \
+  "NIL-Installer.dmg" \
   "build/bin/todo-app.app"
 ```
 
@@ -61,7 +61,7 @@ You can share the app in three ways:
 - They unzip and drag to Applications folder
 
 **Option B: Share the DMG**
-- Send the `NANITE-Installer.dmg`
+- Send the `NIL-Installer.dmg`
 - They open it and drag to Applications
 
 **Option C: Notarize for macOS (recommended for wider distribution)**
@@ -125,16 +125,16 @@ codesign --deep --force --verify --verbose --sign "Developer ID Application: You
 3. **Create a signed DMG**
 ```bash
 create-dmg \
-  --volname "NANITE" \
+  --volname "NIL" \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
   --icon "todo-app.app" 200 190 \
   --app-drop-link 600 185 \
-  "NANITE-Installer.dmg" \
+  "NIL-Installer.dmg" \
   "build/bin/todo-app.app"
 
-codesign --sign "Developer ID Application: Your Name (TEAM_ID)" NANITE-Installer.dmg
+codesign --sign "Developer ID Application: Your Name (TEAM_ID)" NIL-Installer.dmg
 ```
 
 4. **Notarize with Apple**
@@ -146,12 +146,12 @@ xcrun notarytool store-credentials "notarytool-profile" \
   --team-id "TEAM_ID"
 
 # Submit for notarization
-xcrun notarytool submit NANITE-Installer.dmg \
+xcrun notarytool submit NIL-Installer.dmg \
   --keychain-profile "notarytool-profile" \
   --wait
 
 # Staple the notarization ticket
-xcrun stapler staple NANITE-Installer.dmg
+xcrun stapler staple NIL-Installer.dmg
 ```
 
 5. **Verify**
@@ -173,11 +173,11 @@ spctl -a -t open --context context:primary-signature -v build/bin/todo-app.app
 2. **Zip:**
    ```bash
    cd build/bin
-   zip -r NANITE-macOS.zip todo-app.app
+   zip -r NIL-macOS.zip todo-app.app
    ```
 
 3. **Share:**
-   - Send `NANITE-macOS.zip`
+   - Send `NIL-macOS.zip`
    - Friends need to: Right-click → Open (first time only to bypass Gatekeeper)
 
 ### Windows
@@ -190,11 +190,11 @@ spctl -a -t open --context context:primary-signature -v build/bin/todo-app.app
 2. **Zip:**
    ```bash
    cd build/bin
-   zip NANITE-Windows.zip todo-app.exe
+   zip NIL-Windows.zip todo-app.exe
    ```
 
 3. **Share:**
-   - Send `NANITE-Windows.zip`
+   - Send `NIL-Windows.zip`
    - Friends unzip and run
 
 ---
@@ -229,14 +229,14 @@ Edit `wails.json` to customize:
 ```json
 {
   "name": "todo-app",
-  "outputfilename": "NANITE",
+  "outputfilename": "NIL",
   "author": {
     "name": "Your Name",
     "email": "your@email.com"
   },
   "info": {
     "companyName": "Your Company",
-    "productName": "NANITE",
+    "productName": "NIL",
     "productVersion": "1.0.0",
     "copyright": "Copyright © 2025 Your Name",
     "comments": "A minimalist todo app"

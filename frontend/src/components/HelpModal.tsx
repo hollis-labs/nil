@@ -98,8 +98,8 @@ function AppHelp() {
 
   return (
     <div style={{ paddingBottom: '20px' }}>
-      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Getting Started with NANITE</h3>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>NANITE is a keyboard-driven task and note manager. Here's how to get started:</p>
+      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Getting Started with NIL</h3>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>NIL is a keyboard-driven task and note manager. Here's how to get started:</p>
 
       <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Keyboard Shortcuts</h4>
       <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse', marginBottom: '16px' }}>
@@ -125,7 +125,7 @@ function AppHelp() {
       <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>Press <strong>Cmd+N</strong> or click the <strong>+</strong> button. Type what you need to do and press Enter.</p>
 
       <h4 style={{ fontSize: '13px', fontWeight: 600, marginTop: '20px', marginBottom: '8px' }}>Organizing with Sections</h4>
-      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>NANITE has three sections to help you focus:</p>
+      <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '8px' }}>NIL has three sections to help you focus:</p>
       <ul style={{ marginLeft: '20px', fontSize: '13px', lineHeight: '1.6' }}>
         <li style={{ marginBottom: '6px' }}><strong>Now</strong> — What you're working on right now (keep this to 3–5 items)</li>
         <li style={{ marginBottom: '6px' }}><strong>Soon</strong> — What's coming up next</li>
@@ -169,9 +169,9 @@ function SyntaxHelp() {
     <div style={{ paddingBottom: '20px' }}>
       <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: 0, marginBottom: '12px' }}>Quick Add Syntax Guide</h3>
       <p style={{ fontSize: '13px', lineHeight: '1.6', marginBottom: '12px' }}>
-        NANITE uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging.
+        NIL uses a todo.txt-inspired input syntax with extensions for due dates, recurrence, and tagging.
         It is <em>not</em> a strict todo.txt implementation — notably, {' '}
-        <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>#tag</code> is a NANITE extension
+        <code style={{ fontSize: '11px', background: 'var(--term-panel)', padding: '2px 4px', borderRadius: '3px' }}>#tag</code> is a NIL extension
         (standard todo.txt uses key:value pairs).
       </p>
 
@@ -194,7 +194,7 @@ function SyntaxHelp() {
             ['(A)', 'Priority — A, B, or C', '(A), (B), (C)'],
             ['+project', 'Project tag', '+shopping, +work'],
             ['@context', 'Context tag', '@errands, @computer'],
-            ['#tag', 'Flexible label (NANITE extension)', '#urgent, #ideas'],
+            ['#tag', 'Flexible label (NIL extension)', '#urgent, #ideas'],
             ['due:YYYY-MM-DD', 'Due date', 'due:2026-02-25'],
             ['t:YYYY-MM-DD', 'Threshold — hide until this date', 't:2026-02-01'],
             ['rec:N d/w/m', 'Recurrence', 'rec:1w, rec:30d, rec:3m'],

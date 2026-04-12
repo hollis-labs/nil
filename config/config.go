@@ -31,7 +31,7 @@ type VaultCap struct {
 type ChatConfig struct {
 	Enabled   bool                `json:"enabled"`
 	APIKey    string              `json:"apiKey"`
-	Model     string              `json:"model"`   // e.g. "claude-haiku-4-5-20251001"
+	Model     string              `json:"model"` // e.g. "claude-haiku-4-5-20251001"
 	DryRun    bool                `json:"dryRun"`
 	VaultCaps map[string]VaultCap `json:"vaultCaps"` // key: vault ID
 }
@@ -83,20 +83,20 @@ func getConfigDir() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home := os.Getenv("HOME")
-		return filepath.Join(home, ".config", "nanite")
+		return filepath.Join(home, ".config", "nil")
 	case "windows":
 		appdata := os.Getenv("APPDATA")
 		if appdata == "" {
 			appdata = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
 		}
-		return filepath.Join(appdata, "Nanite")
+		return filepath.Join(appdata, "Nil")
 	default: // linux
 		home := os.Getenv("HOME")
 		configHome := os.Getenv("XDG_CONFIG_HOME")
 		if configHome == "" {
 			configHome = filepath.Join(home, ".config")
 		}
-		return filepath.Join(configHome, "nanite")
+		return filepath.Join(configHome, "nil")
 	}
 }
 
@@ -105,20 +105,20 @@ func getDefaultDatabasePath() string {
 	switch runtime.GOOS {
 	case "darwin":
 		home := os.Getenv("HOME")
-		return filepath.Join(home, "Library", "Application Support", "Nanite")
+		return filepath.Join(home, "Library", "Application Support", "Nil")
 	case "windows":
 		appdata := os.Getenv("APPDATA")
 		if appdata == "" {
 			appdata = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Roaming")
 		}
-		return filepath.Join(appdata, "Nanite", "data")
+		return filepath.Join(appdata, "Nil", "data")
 	default: // linux
 		home := os.Getenv("HOME")
 		dataHome := os.Getenv("XDG_DATA_HOME")
 		if dataHome == "" {
 			dataHome = filepath.Join(home, ".local", "share")
 		}
-		return filepath.Join(dataHome, "nanite")
+		return filepath.Join(dataHome, "nil")
 	}
 }
 

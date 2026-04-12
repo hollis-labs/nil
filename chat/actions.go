@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"nanite/store"
+	"github.com/hollis-labs/nil/store"
 )
 
 // ActionRunner wires together ChatStore (persistence) and store.Store (vault mutations).

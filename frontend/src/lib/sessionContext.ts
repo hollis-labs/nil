@@ -4,21 +4,21 @@ export type SessionProfile = {
   contexts: string[];
   projects: string[];
   tags: string[];
-  priority?: 'A' | 'B' | 'C';
+  priority?: 'A' | 'B' | 'C' | undefined;
   createdAt: string;
 };
 
 export type ActiveSession = {
-  profileId?: string;
+  profileId?: string | undefined;
   contexts: string[];
   projects: string[];
   tags: string[];
-  priority?: 'A' | 'B' | 'C';
-  useAsFilterTab?: boolean;
+  priority?: 'A' | 'B' | 'C' | undefined;
+  useAsFilterTab?: boolean | undefined;
 };
 
-const PROFILES_KEY = 'nanite.sessionProfiles';
-const ACTIVE_KEY = 'nanite.activeSession';
+const PROFILES_KEY = 'nil.sessionProfiles';
+const ACTIVE_KEY = 'nil.activeSession';
 
 export function getSessionProfiles(): SessionProfile[] {
   try {
@@ -47,8 +47,9 @@ export function saveSessionProfile(profile: Omit<SessionProfile, 'id' | 'created
 export function updateSessionProfile(id: string, updates: Partial<SessionProfile>): void {
   const profiles = getSessionProfiles();
   const index = profiles.findIndex(p => p.id === id);
-  if (index >= 0) {
-    profiles[index] = { ...profiles[index], ...updates };
+  const existing = profiles[index];
+  if (index >= 0 && existing) {
+    profiles[index] = { ...existing, ...updates };
     localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
   }
 }

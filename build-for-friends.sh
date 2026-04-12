@@ -3,7 +3,7 @@
 set -e
 
 VERSION="$(python3 -c "import json,sys; print(json.load(open('wails.json'))['info']['productVersion'])")"
-APP_NAME="NANITE"
+APP_NAME="NIL"
 DIST_DIR="dist"
 OS="$(uname -s)"
 
@@ -152,34 +152,34 @@ elif [ "$OS" = "Linux" ]; then
 
     echo "${GREEN}Linux build succeeded.${NC}"
 
-    LINUX_BIN="build/bin/nanite"
+    LINUX_BIN="build/bin/nil"
 
     if command -v appimagetool &> /dev/null; then
         echo "${BLUE}appimagetool found — creating AppImage...${NC}"
 
-        APPDIR="$(pwd)/build/bin/NANITE.AppDir"
+        APPDIR="$(pwd)/build/bin/NIL.AppDir"
         rm -rf "${APPDIR}"
         mkdir -p "${APPDIR}/usr/bin"
 
-        cp "${LINUX_BIN}" "${APPDIR}/usr/bin/nanite"
-        chmod +x "${APPDIR}/usr/bin/nanite"
+        cp "${LINUX_BIN}" "${APPDIR}/usr/bin/nil"
+        chmod +x "${APPDIR}/usr/bin/nil"
 
         cat > "${APPDIR}/AppRun" << 'APPRUN'
 #!/bin/bash
-exec "${APPDIR}/usr/bin/nanite" "$@"
+exec "${APPDIR}/usr/bin/nil" "$@"
 APPRUN
         chmod +x "${APPDIR}/AppRun"
 
-        cat > "${APPDIR}/nanite.desktop" << 'DESKTOP'
+        cat > "${APPDIR}/nil.desktop" << 'DESKTOP'
 [Desktop Entry]
-Name=NANITE
-Exec=nanite
-Icon=nanite
+Name=NIL
+Exec=nil
+Icon=nil
 Type=Application
 Categories=Productivity;
 DESKTOP
 
-        cp build/appicon.png "${APPDIR}/nanite.png"
+        cp build/appicon.png "${APPDIR}/nil.png"
 
         APPIMAGE_OUT="${DIST_DIR}/${APP_NAME}-${VERSION}-Linux.AppImage"
 
@@ -197,7 +197,7 @@ DESKTOP
         else
             echo "${YELLOW}appimagetool failed (exit ${APPIMAGE_EXIT}); falling back to tar.gz.${NC}"
             TAR_OUT="${DIST_DIR}/${APP_NAME}-${VERSION}-Linux.tar.gz"
-            tar czf "${TAR_OUT}" -C build/bin nanite
+            tar czf "${TAR_OUT}" -C build/bin nil
             echo "${GREEN}Created ${TAR_OUT} (fallback)${NC}"
             echo "  Size: $(du -h "${TAR_OUT}" | cut -f1)"
         fi
@@ -205,7 +205,7 @@ DESKTOP
         echo "${YELLOW}appimagetool not found — falling back to tar.gz.${NC}"
         echo "${YELLOW}To get appimagetool: https://github.com/AppImage/AppImageKit/releases${NC}"
         TAR_OUT="${DIST_DIR}/${APP_NAME}-${VERSION}-Linux.tar.gz"
-        tar czf "${TAR_OUT}" -C build/bin nanite
+        tar czf "${TAR_OUT}" -C build/bin nil
         echo "${GREEN}Created ${TAR_OUT}${NC}"
         echo "  Size: $(du -h "${TAR_OUT}" | cut -f1)"
     fi

@@ -13,7 +13,7 @@ import ContextsAutocomplete from "./ContextsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import TagsAutocomplete from "./TagsAutocomplete";
 import CustomScrollbar from "./CustomScrollbar";
-import { Trash2, Edit3, Plus, Copy, ToggleLeft, ToggleRight } from "lucide-react";
+import { Copy, ToggleLeft, ToggleRight } from "lucide-react";
 
 type Props = {
   open: boolean;
@@ -99,11 +99,11 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
 
   const handleApply = () => {
     setActiveSession({
-      profileId: selectedProfileId || undefined,
+      ...(selectedProfileId ? { profileId: selectedProfileId } : {}),
       contexts,
       projects,
       tags,
-      priority: priority || undefined,
+      ...(priority ? { priority } : {}),
       useAsFilterTab,
     });
     onSessionChanged?.();
@@ -134,7 +134,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         contexts,
         projects,
         tags,
-        priority: priority || undefined,
+        ...(priority ? { priority } : {}),
       });
     } else {
       const newProfile = saveSessionProfile({
@@ -142,7 +142,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         contexts,
         projects,
         tags,
-        priority: priority || undefined,
+        ...(priority ? { priority } : {}),
       });
       setSelectedProfileId(newProfile.id);
       setIsNewProfile(false);
@@ -165,7 +165,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         contexts,
         projects,
         tags,
-        priority: priority || undefined,
+        ...(priority ? { priority } : {}),
       });
     } else {
       const newProfile = saveSessionProfile({
@@ -173,7 +173,7 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
         contexts,
         projects,
         tags,
-        priority: priority || undefined,
+        ...(priority ? { priority } : {}),
       });
       profileId = newProfile.id;
       setSelectedProfileId(newProfile.id);
@@ -182,11 +182,11 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
 
     loadProfiles();
     setActiveSession({
-      profileId: profileId || undefined,
+      ...(profileId ? { profileId } : {}),
       contexts,
       projects,
       tags,
-      priority: priority || undefined,
+      ...(priority ? { priority } : {}),
       useAsFilterTab,
     });
     
@@ -229,16 +229,6 @@ export default function SessionContextModal({ open, onOpenChange, onSessionChang
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 50,
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: '100%',
-    padding: '8px 12px',
-    background: 'var(--term-bg)',
-    border: '1px solid var(--term-border)',
-    borderRadius: '6px',
-    color: 'var(--term-fg)',
-    fontSize: '13px',
   };
 
   return (

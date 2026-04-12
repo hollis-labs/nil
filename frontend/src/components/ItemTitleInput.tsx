@@ -30,7 +30,7 @@ export default function ItemTitleInput({
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const [triggerChar, setTriggerChar] = React.useState<'@' | '+' | '#' | null>(null);
   const [triggerPos, setTriggerPos] = React.useState(0);
-  const [searchQuery, setSearchQuery] = React.useState("");
+  const [, setSearchQuery] = React.useState("");
 
   React.useEffect(() => {
     if (autoFocus && inputRef.current) {
@@ -116,10 +116,10 @@ export default function ItemTitleInput({
       setSelectedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      insertSuggestion(suggestions[selectedIndex]);
+      insertSuggestion(suggestions[selectedIndex]!);
     } else if (e.key === 'Enter' && showSuggestions) {
       e.preventDefault();
-      insertSuggestion(suggestions[selectedIndex]);
+      insertSuggestion(suggestions[selectedIndex]!);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setShowSuggestions(false);

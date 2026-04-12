@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-04
+
+### Changed
+- App renamed to **NIL** (Go module is now `github.com/hollis-labs/nil`, binary is `nil`, app bundle is `NIL.app`)
+- localStorage keys now use the `nil.*` prefix — clean break, no migration; existing users will need to reconfigure tabs, sessions, templates, and saved settings on first launch
+- Repository moved to `github.com/hollis-labs/nil`
+
+### Fixed
+- Resolved frontend strict-TypeScript build errors that were blocking production builds (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, unused vars across ~30 files)
+- `internal/plugin/host.go` now defines its own app-specific types (`SlashCommandDef`, `UISlotEntry`, `KeybindingDef`) per the shared plugin package's design contract
+- `go.mod` replace directive for `github.com/hollis-labs/otel` corrected to `../framework/libs/go-otel`
+
 ## [1.1.0] — 2026-01
 
 ### Added
@@ -18,10 +30,10 @@ All notable changes to this project will be documented in this file.
 - `UpdateItem` SQL was missing the `inbox` column — setting inbox via update was silently dropped
 
 ### Changed
-- App renamed from PLANCK to NANITE
+- App renamed from PLANCK to NIL
 - Core item type renamed from `Todo` to `Item` throughout the codebase (DB `type` column values `'todo'`/`'note'` unchanged)
 - Default tabs now include an "All" tab for both Items and Notes modes
-- localStorage keys migrated from `todo.*` / `planck.*` to `nanite.*`
+- localStorage keys migrated from `todo.*` / `planck.*` to `nil.*`
 - Theme switcher hidden from Settings until Tailwind/shadcn migration is complete
 
 ---

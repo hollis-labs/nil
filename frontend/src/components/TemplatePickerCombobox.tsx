@@ -12,7 +12,7 @@ type Props = {
   };
 };
 
-export default function TemplatePickerCombobox({ onSelect, currentValues }: Props) {
+export default function TemplatePickerCombobox({ onSelect }: Props) {
   const [templates, setTemplates] = React.useState<TaskTemplate[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");

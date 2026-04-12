@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hollis-labs/nil/store"
 	"io"
-	"nanite/store"
 	"net/http"
 	"regexp"
 	"strings"
@@ -20,12 +20,12 @@ const defaultMaxTokens = 2048
 const maxToolIterations = 5
 
 // systemPromptTemplate is injected per-request with vault/session context substituted.
-const systemPromptTemplate = `You are a NANITE vault assistant. NANITE is a personal task and note management app.
+const systemPromptTemplate = `You are a NIL vault assistant. NIL is a personal task and note management app.
 Today's date: {date}
 Vault: {vault_name} | Mode: {mode}
 Capabilities — Read: true | Write: {write_cap} | Delete: {delete_cap} | DirectCreate: {direct_create_cap}
 {vault_profile}
-## NANITE Concepts
+## NIL Concepts
 - **Item** — a todo (` + "`type=todo`" + `) or note (` + "`type=note`" + `).
 - **Section** — urgency bucket for todos: ` + "`now`" + ` (urgent/active), ` + "`soon`" + ` (this week), ` + "`anytime`" + ` (someday/maybe). Map "urgent" → now, "someday" → anytime.
 - **Priority** — single letter A–D (optional). A = highest. Independent of section.
@@ -110,12 +110,12 @@ type Bridge struct{}
 type apiContent struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text,omitempty"`
-	ID        string          `json:"id,omitempty"`           // tool_use
-	Name      string          `json:"name,omitempty"`          // tool_use
-	Input     json.RawMessage `json:"input,omitempty"`         // tool_use
-	ToolUseID string          `json:"tool_use_id,omitempty"`   // tool_result
-	Content   string          `json:"content,omitempty"`       // tool_result
-	IsError   bool            `json:"is_error,omitempty"`      // tool_result
+	ID        string          `json:"id,omitempty"`          // tool_use
+	Name      string          `json:"name,omitempty"`        // tool_use
+	Input     json.RawMessage `json:"input,omitempty"`       // tool_use
+	ToolUseID string          `json:"tool_use_id,omitempty"` // tool_result
+	Content   string          `json:"content,omitempty"`     // tool_result
+	IsError   bool            `json:"is_error,omitempty"`    // tool_result
 }
 
 // apiMsg is one message in the Anthropic messages array.
@@ -157,7 +157,7 @@ func buildTools() []toolDef {
 	return []toolDef{
 		{
 			Name:        "search_vault",
-			Description: "Search the NANITE vault for items (tasks and notes). Use this for any question about vault contents. You may call it multiple times with different parameters.",
+			Description: "Search the NIL vault for items (tasks and notes). Use this for any question about vault contents. You may call it multiple times with different parameters.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

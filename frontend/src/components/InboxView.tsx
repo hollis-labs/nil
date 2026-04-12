@@ -122,7 +122,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
           if (!onSearchInput) { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
           break;
         case "Enter":
-          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) onEdit(items[focusedIndex]); }
+          if (!onSearchInput) { e.preventDefault(); const it = items[focusedIndex]; if (it) onEdit(it); }
           break;
         case "x":
           if (!onSearchInput) {
@@ -132,13 +132,13 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
           }
           break;
         case "p":
-          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleProcess(items[focusedIndex].id); }
+          if (!onSearchInput) { e.preventDefault(); const it = items[focusedIndex]; if (it) handleProcess(it.id); }
           break;
         case "a":
-          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleArchive(items[focusedIndex].id); }
+          if (!onSearchInput) { e.preventDefault(); const it = items[focusedIndex]; if (it) handleArchive(it.id); }
           break;
         case "d":
-          if (!onSearchInput) { e.preventDefault(); if (items[focusedIndex]) handleDelete(items[focusedIndex].id); }
+          if (!onSearchInput) { e.preventDefault(); const it = items[focusedIndex]; if (it) handleDelete(it.id); }
           break;
       }
     };

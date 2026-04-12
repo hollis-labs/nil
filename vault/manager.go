@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"nanite/config"
-	"nanite/store"
+	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/store"
 )
 
 // Manager owns all open vault connections and the shared inbox store.

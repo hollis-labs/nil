@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"nanite/chat"
-	"nanite/config"
-	nplugin "nanite/internal/plugin"
-	"nanite/parse"
-	"nanite/store"
-	"nanite/vault"
+	"github.com/hollis-labs/nil/chat"
+	"github.com/hollis-labs/nil/config"
+	nplugin "github.com/hollis-labs/nil/internal/plugin"
+	"github.com/hollis-labs/nil/parse"
+	"github.com/hollis-labs/nil/store"
+	"github.com/hollis-labs/nil/vault"
 )
 
 type App struct {
@@ -65,14 +65,14 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	// Initialise plugin host.
-	pluginLogger := nplugin.NewLogger("nanite-plugin")
+	pluginLogger := nplugin.NewLogger("nil-plugin")
 	a.pluginHost = nplugin.NewHost(pluginLogger)
 	if a.vaultMgr != nil {
 		a.pluginHost.RegisterService("vault_manager", a.vaultMgr)
 	}
 
 	pluginsDir := "./plugins"
-	if d := os.Getenv("NANITE_PLUGINS_DIR"); d != "" {
+	if d := os.Getenv("NIL_PLUGINS_DIR"); d != "" {
 		pluginsDir = d
 	}
 	discovered, discoverErr := nplugin.DiscoverPlugins(pluginsDir)
@@ -169,7 +169,7 @@ func (a *App) SetDatabasePath(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return fmt.Errorf("directory does not exist: %s", path)
 	}
-	testFile := path + "/.nanite-write-test"
+	testFile := path + "/.nil-write-test"
 	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
 		return fmt.Errorf("directory not writable: %s", path)
 	}
@@ -471,7 +471,7 @@ func (a *App) ProcessInboxItem(id int64, targetVaultID string) error {
 
 // --- Demo data ---
 
-const demoDataTag = "nanite-demo"
+const demoDataTag = "nil-demo"
 
 func (a *App) HasDemoData() (bool, error) {
 	if a.vaultMgr == nil || a.vaultMgr.ActiveStore() == nil {
@@ -502,9 +502,9 @@ func (a *App) SeedDemoData() error {
 
 	demos := []todoWithMeta{
 		{
-			line:    "(A) Welcome to NANITE! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
+			line:    "(A) Welcome to NIL! Click me to see notes due:2025-11-01 +tutorial @getting-started #now",
 			section: "now",
-			notes:   "# Welcome!\n\nNANITE is a todo.txt task manager.\n\n**Quick Start:**\n- Click any todo to view/edit notes\n- Press ⌘N to add todos\n- Right-click for actions\n- Search with +project @context #tag",
+			notes:   "# Welcome!\n\nNIL is a todo.txt task manager.\n\n**Quick Start:**\n- Click any todo to view/edit notes\n- Press ⌘N to add todos\n- Right-click for actions\n- Search with +project @context #tag",
 		},
 		{
 			line:    "(A) Learn todo.txt syntax - (A)=high +project @context #tag due:2025-10-25 +tutorial @getting-started #now",
@@ -539,7 +539,7 @@ func (a *App) SeedDemoData() error {
 		{
 			line:    "(C) Sync with iCloud Drive across devices due:2025-12-01 +tutorial @sync #icloud #anytime",
 			section: "anytime",
-			notes:   "# iCloud Sync\n\n1. Create folder: `~/Library/Mobile Documents/com~apple~CloudDocs/NANITE`\n2. Settings → Database Location → Change\n3. Paste path, restart\n4. On other devices: Use Existing Database\n\nWorks with Dropbox/Google Drive too!",
+			notes:   "# iCloud Sync\n\n1. Create folder: `~/Library/Mobile Documents/com~apple~CloudDocs/NIL`\n2. Settings → Database Location → Change\n3. Paste path, restart\n4. On other devices: Use Existing Database\n\nWorks with Dropbox/Google Drive too!",
 		},
 		{
 			line:    "Keyboard shortcuts: ⌘N=new, Esc=clear +tutorial @shortcuts #anytime",

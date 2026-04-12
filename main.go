@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"nanite/cli"
-	"nanite/config"
-	"nanite/vault"
+	"github.com/hollis-labs/nil/cli"
+	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/vault"
 
 	feotel "github.com/hollis-labs/otel"
 	"github.com/wailsapp/wails/v2"
@@ -25,7 +25,7 @@ var assets embed.FS
 func main() {
 	// Initialise OpenTelemetry (best-effort; non-fatal on failure).
 	otelCtx := context.Background()
-	otelShutdown, otelErr := feotel.Init(otelCtx, feotel.WithServiceName("nanite"))
+	otelShutdown, otelErr := feotel.Init(otelCtx, feotel.WithServiceName("nil"))
 	if otelErr != nil {
 		log.Printf("warning: OTel init failed: %v", otelErr)
 	} else {
@@ -39,7 +39,7 @@ func main() {
 		ctx := context.Background()
 		mgr, err := vault.NewManager(ctx, cfg)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "nanite: vault error:", err)
+			fmt.Fprintln(os.Stderr, "nil: vault error:", err)
 			os.Exit(1)
 		}
 		defer mgr.CloseAll()
@@ -52,7 +52,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:     "NANITE",
+		Title:     "NIL",
 		Width:     800,
 		Height:    830,
 		MinWidth:  800,

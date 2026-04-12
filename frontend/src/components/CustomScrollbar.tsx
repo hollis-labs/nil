@@ -52,7 +52,7 @@ export default function CustomScrollbar({
 
   return (
     <Scrollbars
-      style={style}
+      style={style || {}}
       autoHide={autoHide}
       autoHideTimeout={autoHideTimeout}
       autoHideDuration={autoHideDuration}

@@ -38,16 +38,18 @@ export function parseQuery(input: string): ParsedQuery {
     else if (t.startsWith("#")) out.tags.push(t.slice(1));
     else if (t.startsWith("@")) out.contexts.push(t.slice(1));
     else if (t.startsWith("+")) out.projects.push(t.slice(1));
-    else if (/^pri(or(ity)?)?:[A-Z]$/i.test(t)) (out.priority ||= []).push(t.split(":")[1].toUpperCase());
+    else if (/^pri(or(ity)?)?:[A-Z]$/i.test(t)) (out.priority ||= []).push(t.split(":")[1]!.toUpperCase());
     else if (/^(due|t)(:|<=|>=)\d{4}-\d{2}-\d{2}$/.test(t)) {
-      const [, key, op] = t.match(/^(due|t)(:|<=|>=)/)!;
+      const m = t.match(/^(due|t)(:|<=|>=)/)!;
+      const key = m[1]!;
+      const op = m[2]!;
       const date = t.slice(key.length + op.length);
       (out as any)[key] ??= [];
       (out as any)[key].push({ op: op as any, date });
     }
     else if (t === "-completed") out.flags.completed = false;
     else if (t === "completed") out.flags.completed = true;
-    else if (t.startsWith("status:")) (out.flags.status ??= []).push(t.split(":")[1]);
+    else if (t.startsWith("status:")) (out.flags.status ??= []).push(t.split(":")[1]!);
     else if (t === "is:archived") out.flags.archived = true;
     else out.keywords.push(t);
   }

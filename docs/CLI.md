@@ -1,8 +1,8 @@
-# NANITE CLI — Current Reality & Roadmap
+# NIL CLI — Current Reality & Roadmap
 
 > Updated 2026-02-22
 
-This document captures how the current `nanite` command-line experience works today and outlines a plan to make it first-class for both humans and autonomous agents. Source of truth for the implementation is `cli/cli.go`, which intercepts `nanite <subcommand>` invocations before the Wails GUI boots (`main.go`).
+This document captures how the current `nil` command-line experience works today and outlines a plan to make it first-class for both humans and autonomous agents. Source of truth for the implementation is `cli/cli.go`, which intercepts `nil <subcommand>` invocations before the Wails GUI boots (`main.go`).
 
 ## Current Architecture
 
@@ -16,7 +16,7 @@ This document captures how the current `nanite` command-line experience works to
 
 ### Entry flow
 - `main.go:16-38` checks `os.Args[1]` for a bare word; if present, it loads config (`config.LoadOrDefault()`), opens vaults via `vault.NewManager`, and calls `cli.Run`.
-- `cli.Run` dispatches on the first argument and enforces `nanite <push|search|inbox|get|vaults>` usage. Errors call `die()` which prints to `stderr` and exits non-zero.
+- `cli.Run` dispatches on the first argument and enforces `nil <push|search|inbox|get|vaults>` usage. Errors call `die()` which prints to `stderr` and exits non-zero.
 - Every subcommand writes a JSON envelope (`{"ok": true|false, "data": ..., "error": ...}`) via `printJSON`. There is no text/table formatter.
 
 ### Data dependencies
@@ -25,32 +25,32 @@ This document captures how the current `nanite` command-line experience works to
 - Config (`config/config.go`) lists vault metadata plus API/chat toggles. CLI trusts whatever is on disk; there is no CLI-side auth or session concept.
 
 ### CLI-only utilities
-- `parseInterspersed` lets users mix flags and positional tokens freely (e.g., `nanite push "Title" --tags focus`).
+- `parseInterspersed` lets users mix flags and positional tokens freely (e.g., `nil push "Title" --tags focus`).
 - `splitCSV` splits comma-separated taxonomies; blank strings return `nil`, so JSON omits empty arrays.
 
 ## Current Commands & Usage
 
 | Command | Purpose | Key Flags / Notes | Output |
 |---------|---------|-------------------|--------|
-| `nanite add [title]` | Create todos/notes from inline text or `--file` input. | `--file`, `--body`, `--type`, `--vault`, `--inbox`, `--tags`, `--contexts`, `--projects`, `--due`, `--priority`, `--meta`. Files must be UTF-8 text/Markdown. | JSON envelope with created item. |
-| `nanite import --dir PATH` | Bulk-ingest text/Markdown files from a directory (recursive). | `--dry-run`, `--type`, `--vault`, `--inbox`, `--tags`, `--contexts`, `--projects`, `--meta`. | JSON summary of processed paths and errors. |
-| `nanite list [view]` | Built-in views (`latest`, `inbox`, `today`, `overdue`, `high`, `notes`, `todos`). | `--view`, `--vault`, `--limit`, `--query`, `--include-inbox`. | JSON envelope containing items array. |
-| `nanite show <id>` | Pretty-print a single item. | `--vault id|inbox`, `--format detail|json`. | Detail envelope or raw JSON. |
-| `nanite update --ids ...` | Batch mutate items (complete/archive/delete/retag). | `--ids`, `--complete`, `--uncomplete`, `--archive`, `--unarchive`, `--delete`, `--priority`, `--tags-add`, `--tags-remove`, `--vault`, `--inbox`. | JSON summary of updated vs failed IDs. |
-| `nanite context [topic]` | Emit agent-friendly context (app, schema, stats, cache). | `--topic app|schema|stats|cache|refresh`, `--refresh`. | JSON snapshot data; `cache --refresh` rebuilds `${config}/context-cache/snapshot.json`. |
-| `nanite search <keywords>` | Full-text/filtered search over the active (or specified) vault. | `--vault`, `--type`, `--tags`, `--contexts`, `--projects`, `--page`, `--page-size`. | JSON array of matching items. |
-| `nanite inbox [keywords]` | Keyword-filtered listing of inbox items housed in the shared inbox store. | `--page`, `--page-size`. | JSON array of inbox items. |
-| `nanite vaults` | Dump config metadata so agents can learn vault IDs and the active vault. | _None_. | JSON object: `{"active":"<id>","vaults":[...]}`. |
-| `nanite push <title>` | **Legacy alias** for add that expects TipTap HTML via `--notes`. Prefer `nanite add`. | Same flags as before; no new behavior planned. | JSON document of the created item. |
+| `nil add [title]` | Create todos/notes from inline text or `--file` input. | `--file`, `--body`, `--type`, `--vault`, `--inbox`, `--tags`, `--contexts`, `--projects`, `--due`, `--priority`, `--meta`. Files must be UTF-8 text/Markdown. | JSON envelope with created item. |
+| `nil import --dir PATH` | Bulk-ingest text/Markdown files from a directory (recursive). | `--dry-run`, `--type`, `--vault`, `--inbox`, `--tags`, `--contexts`, `--projects`, `--meta`. | JSON summary of processed paths and errors. |
+| `nil list [view]` | Built-in views (`latest`, `inbox`, `today`, `overdue`, `high`, `notes`, `todos`). | `--view`, `--vault`, `--limit`, `--query`, `--include-inbox`. | JSON envelope containing items array. |
+| `nil show <id>` | Pretty-print a single item. | `--vault id|inbox`, `--format detail|json`. | Detail envelope or raw JSON. |
+| `nil update --ids ...` | Batch mutate items (complete/archive/delete/retag). | `--ids`, `--complete`, `--uncomplete`, `--archive`, `--unarchive`, `--delete`, `--priority`, `--tags-add`, `--tags-remove`, `--vault`, `--inbox`. | JSON summary of updated vs failed IDs. |
+| `nil context [topic]` | Emit agent-friendly context (app, schema, stats, cache). | `--topic app|schema|stats|cache|refresh`, `--refresh`. | JSON snapshot data; `cache --refresh` rebuilds `${config}/context-cache/snapshot.json`. |
+| `nil search <keywords>` | Full-text/filtered search over the active (or specified) vault. | `--vault`, `--type`, `--tags`, `--contexts`, `--projects`, `--page`, `--page-size`. | JSON array of matching items. |
+| `nil inbox [keywords]` | Keyword-filtered listing of inbox items housed in the shared inbox store. | `--page`, `--page-size`. | JSON array of inbox items. |
+| `nil vaults` | Dump config metadata so agents can learn vault IDs and the active vault. | _None_. | JSON object: `{"active":"<id>","vaults":[...]}`. |
+| `nil push <title>` | **Legacy alias** for add that expects TipTap HTML via `--notes`. Prefer `nil add`. | Same flags as before; no new behavior planned. | JSON document of the created item. |
 
 ### Dispatcher & helper commands
 
-- `nanite help [command]` shows usage derived from the registry; `nanite version` prints Go/platform info.
+- `nil help [command]` shows usage derived from the registry; `nil version` prints Go/platform info.
 - Commands emit `{"ok": bool, "data": ..., "error": ...}` envelopes so agents can parse results consistently.
-- For automation, add a step like `nanite context cache --refresh >/dev/null` to bootstrap scripts so every workspace starts with a fresh snapshot.
+- For automation, add a step like `nil context cache --refresh >/dev/null` to bootstrap scripts so every workspace starts with a fresh snapshot.
 
 ### Notable behaviors
-- `nanite add` stores body text verbatim (inline or file). Rich TipTap conversion remains a backlog item, so no markdown-to-HTML conversion occurs yet.
+- `nil add` stores body text verbatim (inline or file). Rich TipTap conversion remains a backlog item, so no markdown-to-HTML conversion occurs yet.
 - Imports/add only accept UTF-8 text or Markdown; binary files or other encodings throw explicit errors.
 - Legacy verbs (`push`, `get`) still exist, but new flows (`add`, `list`, `show`, `update`, `context`, `import`) should be used by default.
 
@@ -65,37 +65,37 @@ This document captures how the current `nanite` command-line experience works to
 The following plan turns the CLI into a first-class interface for both humans and agents while meeting the specific goals listed in the task description.
 
 ### 1. Foundations & Experience (Goal #1)
-1. **Command framework cleanup:** Introduce a proper subcommand/flag UX (either keep the lightweight `flag.FlagSet` with a shared `--help` renderer or migrate to `spf13/cobra`). Ensure `nanite help`, `nanite <command> --help`, and `nanite version` exist.
+1. **Command framework cleanup:** Introduce a proper subcommand/flag UX (either keep the lightweight `flag.FlagSet` with a shared `--help` renderer or migrate to `spf13/cobra`). Ensure `nil help`, `nil <command> --help`, and `nil version` exist.
 2. **Output modes:** Keep the JSON envelope as the default for agents but add `--format table|json|ids` (per command or global) so humans can read tabular output. Provide colorized stderr for errors when running interactively.
-3. **Consistent naming:** Rename `push` → `add`, `get` → `view`, and group list commands under `nanite list <view>` for clarity. Keep legacy aliases temporarily with deprecation warnings.
-4. **Authentication for future remote use:** Accept an optional `--api-key`/`--api-url` pair (defaulting to local store) so agents can talk to remote Nanite instances with the same CLI syntax.
+3. **Consistent naming:** Rename `push` → `add`, `get` → `view`, and group list commands under `nil list <view>` for clarity. Keep legacy aliases temporarily with deprecation warnings.
+4. **Authentication for future remote use:** Accept an optional `--api-key`/`--api-url` pair (defaulting to local store) so agents can talk to remote Nil instances with the same CLI syntax.
 
 ### 2. File/Dir Imports (Goals #2 & #5)
-1. **`nanite add --file` / `--dir`:** Allow specifying `--file path/to.md` or `--dir path/to/folder`. Single files become individual notes or todos; directories expand recursively and import every supported file as separate notes. MVP accepts plain text + markdown only; if the file is not UTF-8 text, the command should fail with a clear error (current implementation).
+1. **`nil add --file` / `--dir`:** Allow specifying `--file path/to.md` or `--dir path/to/folder`. Single files become individual notes or todos; directories expand recursively and import every supported file as separate notes. MVP accepts plain text + markdown only; if the file is not UTF-8 text, the command should fail with a clear error (current implementation).
 2. **Metadata flags:** Reuse existing taxonomy flags plus new `--meta key=value` (repeatable), `--vault <id>`, `--inbox`, `--type todo|note`, and `--title <string>` to override filename-derived titles.
-3. **Processing rules:** Treat file contents as raw text/markdown and store exactly what was supplied. Once the shared HTML conversion/intelligence pipeline ships elsewhere in Nanite, revisit and auto-convert in the CLI (tracked as a backlog item).
-4. **Bulk import UX:** Add `nanite import --dir ... [--dry-run] [--batch-size N]` that emits a summary (counts, errors, preview of generated metadata) before committing. MVP could simply be a wrapper around repeated `add --file` calls but records a single envelope containing successes/failures.
-5. **Context caches:** Agent-centric snapshots now live under `${XDG_CONFIG_HOME}/nanite/context-cache/snapshot.json`. Run `nanite context cache --refresh` to regenerate after data changes; the CLI will refresh automatically if the cache is missing. A future backlog item still tracks the shared text→TipTap converter so imports can gain richer processing.
+3. **Processing rules:** Treat file contents as raw text/markdown and store exactly what was supplied. Once the shared HTML conversion/intelligence pipeline ships elsewhere in Nil, revisit and auto-convert in the CLI (tracked as a backlog item).
+4. **Bulk import UX:** Add `nil import --dir ... [--dry-run] [--batch-size N]` that emits a summary (counts, errors, preview of generated metadata) before committing. MVP could simply be a wrapper around repeated `add --file` calls but records a single envelope containing successes/failures.
+5. **Context caches:** Agent-centric snapshots now live under `${XDG_CONFIG_HOME}/nil/context-cache/snapshot.json`. Run `nil context cache --refresh` to regenerate after data changes; the CLI will refresh automatically if the cache is missing. A future backlog item still tracks the shared text→TipTap converter so imports can gain richer processing.
 
 ### 3. View & Action Commands (Goal #3)
-1. **`nanite list <view>`:** Built-in views like `latest`, `inbox`, `today`, `overdue`, `high`, `note`, `todo`, `focus` (session), each mapping to a `store.SearchRequest`. Provide optional `--vault`, `--limit`, `--json`.
-2. **`nanite show <id>`:** Pretty-print a single item, including metadata, wikilinks, and raw JSON via `--raw`.
-3. **`nanite add` ergonomics:** Support inline quick-add syntax (e.g., `(A) Call mom +family due:2026-02-23`) in addition to structured flags, matching the GUI parser.
-4. **Batch operations:** `nanite update --ids 1,2,3 --complete`, `nanite move --ids ... --vault <id>`, `nanite delete --ids ...`, `nanite tag --ids ... --add #focus --remove #someday`. Ensure every batch command has a `--json` summary that agents can parse.
-5. **Saved queries:** `nanite views` (list) plus `nanite view save <name> --query ...` so agents can orchestrate workflows by referencing canonical filters.
+1. **`nil list <view>`:** Built-in views like `latest`, `inbox`, `today`, `overdue`, `high`, `note`, `todo`, `focus` (session), each mapping to a `store.SearchRequest`. Provide optional `--vault`, `--limit`, `--json`.
+2. **`nil show <id>`:** Pretty-print a single item, including metadata, wikilinks, and raw JSON via `--raw`.
+3. **`nil add` ergonomics:** Support inline quick-add syntax (e.g., `(A) Call mom +family due:2026-02-23`) in addition to structured flags, matching the GUI parser.
+4. **Batch operations:** `nil update --ids 1,2,3 --complete`, `nil move --ids ... --vault <id>`, `nil delete --ids ...`, `nil tag --ids ... --add #focus --remove #someday`. Ensure every batch command has a `--json` summary that agents can parse.
+5. **Saved queries:** `nil views` (list) plus `nil view save <name> --query ...` so agents can orchestrate workflows by referencing canonical filters.
 
 ### 4. Agent Context Commands (Goal #4)
-1. **`nanite context app`:** Emits a structured JSON summary describing what Nanite is, active features, CLI/API entry points, and references to documentation (drawn from existing README + PCC data).
-2. **`nanite context schema`:** Returns the current schema version, table definitions, migrations applied, and enumerations like allowed item types or sections.
-3. **`nanite context stats`:** Summaries such as item counts per type, inbox size, most-used tags, and last sync time so agents can understand the data landscape.
-4. **`nanite context cache`:** Streams the cached snapshot (generating one automatically when absent). Use `nanite context cache --refresh` to rebuild the snapshot before returning data so agents always work from a consistent view.
-5. **Documentation sync:** Generate markdown (possibly `docs/CLI.md` excerpts) via `nanite docs cli` command so that both humans and agents can request up-to-date instructions through the CLI itself.
+1. **`nil context app`:** Emits a structured JSON summary describing what Nil is, active features, CLI/API entry points, and references to documentation (drawn from existing README + PCC data).
+2. **`nil context schema`:** Returns the current schema version, table definitions, migrations applied, and enumerations like allowed item types or sections.
+3. **`nil context stats`:** Summaries such as item counts per type, inbox size, most-used tags, and last sync time so agents can understand the data landscape.
+4. **`nil context cache`:** Streams the cached snapshot (generating one automatically when absent). Use `nil context cache --refresh` to rebuild the snapshot before returning data so agents always work from a consistent view.
+5. **Documentation sync:** Generate markdown (possibly `docs/CLI.md` excerpts) via `nil docs cli` command so that both humans and agents can request up-to-date instructions through the CLI itself.
 
 ### 5. Implementation & Rollout Plan
-1. **Phase 1 (Docs + Refactor):** Publish CLI docs (this file), wire up `nanite help`, rename commands with aliases, and add JSON schema tests to lock down current behavior.
+1. **Phase 1 (Docs + Refactor):** Publish CLI docs (this file), wire up `nil help`, rename commands with aliases, and add JSON schema tests to lock down current behavior.
 2. **Phase 2 (Add/List Enhancements):** Build the quick-add parser integration, add view shortcuts, and support `--format`.
-3. **Phase 3 (Imports & Batch Ops):** Implement file/dir ingestion plus batch update/move/delete commands. Begin exposing `nanite import` (dir flag MVP) with incremental improvements.
-4. **Phase 4 (Agent Context):** Implement `nanite context <topic>` commands, design the context-cache storage, and provide refresh/generate verbs. Document how GUI and chat agent will call into these commands internally.
+3. **Phase 3 (Imports & Batch Ops):** Implement file/dir ingestion plus batch update/move/delete commands. Begin exposing `nil import` (dir flag MVP) with incremental improvements.
+4. **Phase 4 (Agent Context):** Implement `nil context <topic>` commands, design the context-cache storage, and provide refresh/generate verbs. Document how GUI and chat agent will call into these commands internally.
 5. **Phase 5 (Polish & Internal Adoption):** Ensure GUI/Chat pipelines call into the CLI, add integration tests around agent flows, and deprecate old command names once GUI migration is complete.
 
 ## Backlog / Follow-Ups

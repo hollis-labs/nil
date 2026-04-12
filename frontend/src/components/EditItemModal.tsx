@@ -12,7 +12,7 @@ import { useSettings } from "./SettingsModal";
 import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import { TaskTemplate } from "@/lib/templates";
-import { getActiveSession, getSessionProfiles, setActiveSession, SessionProfile } from "@/lib/sessionContext";
+import { getActiveSession, getSessionProfiles, SessionProfile } from "@/lib/sessionContext";
 import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3, FileText, CheckSquare } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
 import { WikilinkExtension } from "@/lib/WikilinkExtension";
@@ -133,7 +133,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         class: "tiptap-editor prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
         style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
       },
-      handlePaste: (view, event) => {
+      handlePaste: (_view, event) => {
         const text = event.clipboardData?.getData('text/plain');
         if (text && editor) {
           if (text.match(/^#{1,6}\s|^\*\*|^##|^\-\s|^\*\s|^\d+\.\s/m)) {
@@ -276,9 +276,11 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
       cleanTags = [...settings.defaultTags];
     }
     if (isEditMode && editItem && onUpdate) {
-      onUpdate({ ...editItem, title: line, priority: priority || undefined,
-        due_at: due || undefined, tags: cleanTags, contexts: cleanContexts,
-        projects: cleanProjects, notes_md });
+      const updated: ItemRow = { ...editItem, title: line, tags: cleanTags, contexts: cleanContexts,
+        projects: cleanProjects, notes_md };
+      if (priority) updated.priority = priority; else delete updated.priority;
+      if (due) updated.due_at = due; else delete updated.due_at;
+      onUpdate(updated);
     } else {
       const extras: any = { tags: cleanTags, contexts: cleanContexts, projects: cleanProjects };
       if (priority) extras.priority = priority;
@@ -373,15 +375,6 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     zIndex: 50
   };
 
-  const inputStyle = {
-    width: '100%',
-    padding: '8px 12px',
-    background: 'var(--term-bg)',
-    border: '1px solid var(--term-border)',
-    borderRadius: '6px',
-    color: 'var(--term-fg)',
-    fontSize: '13px'
-  };
 
   const ToolbarButton = ({ onClick, isActive, icon: Icon, title }: { onClick: () => void; isActive?: boolean; icon: any; title: string }) => (
     <button
@@ -754,7 +747,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
 
                 <TemplatePickerCombobox
                   onSelect={handleTemplateSelect}
-                  currentValues={{ contexts, projects, tags, priority: priority || undefined }}
+                  currentValues={{ contexts, projects, tags, ...(priority ? { priority } : {}) }}
                 />
                 <button
                   type="button"

@@ -81,7 +81,7 @@ export default function WelcomeDialog({ open, onComplete }: Props) {
             color: 'var(--term-accent)',
             marginBottom: '8px'
           }}>
-            WELCOME TO NANITE
+            WELCOME TO NIL
           </div>
           <div style={{
             fontSize: '14px',
@@ -153,7 +153,7 @@ export default function WelcomeDialog({ open, onComplete }: Props) {
                   <>
                     <input
                       type="text"
-                      placeholder="~/Library/Mobile Documents/com~apple~CloudDocs/Nanite"
+                      placeholder="~/Library/Mobile Documents/com~apple~CloudDocs/Nil"
                       value={customPath}
                       onChange={(e) => setCustomPath(e.target.value)}
                       style={{

@@ -36,8 +36,8 @@ export default function MetaModal({ open, todo, onOpenChange, onSave }: Props) {
       contexts,
       projects,
       tags,
-      priority: priority || undefined,
-      due_at: dueDate || undefined,
+      ...(priority && { priority }),
+      ...(dueDate && { due_at: dueDate }),
     });
 
     onOpenChange(false);

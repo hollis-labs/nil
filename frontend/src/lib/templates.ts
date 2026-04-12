@@ -4,11 +4,11 @@ export type TaskTemplate = {
   contexts: string[];
   projects: string[];
   tags: string[];
-  priority?: 'A' | 'B' | 'C';
+  priority?: 'A' | 'B' | 'C' | undefined;
   createdAt: string;
 };
 
-const STORAGE_KEY = 'nanite.taskTemplates';
+const STORAGE_KEY = 'nil.taskTemplates';
 
 export function getTemplates(): TaskTemplate[] {
   try {
@@ -37,8 +37,9 @@ export function saveTemplate(template: Omit<TaskTemplate, 'id' | 'createdAt'>): 
 export function updateTemplate(id: string, updates: Partial<TaskTemplate>): void {
   const templates = getTemplates();
   const index = templates.findIndex(t => t.id === id);
-  if (index >= 0) {
-    templates[index] = { ...templates[index], ...updates };
+  const existing = templates[index];
+  if (index >= 0 && existing) {
+    templates[index] = { ...existing, ...updates };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
   }
 }

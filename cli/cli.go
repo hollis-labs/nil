@@ -14,10 +14,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"nanite/config"
-	"nanite/contextcache"
-	"nanite/store"
-	"nanite/vault"
+	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/contextcache"
+	"github.com/hollis-labs/nil/store"
+	"github.com/hollis-labs/nil/vault"
 )
 
 const cliVersion = "dev-snapshot"
@@ -42,45 +42,45 @@ func init() {
 		{
 			name:  "add",
 			short: "Create todos/notes from inline text or files",
-			usage: "nanite add [title] [--file path] [--body text] [--type todo|note] [--vault id]",
+			usage: "nil add [title] [--file path] [--body text] [--type todo|note] [--vault id]",
 			run:   cmdAdd,
 		},
 		{
 			name:  "list",
 			short: "List common views like latest, inbox, today",
-			usage: "nanite list [view] [--vault id] [--limit N] [--query q]",
+			usage: "nil list [view] [--vault id] [--limit N] [--query q]",
 			run:   cmdList,
 		},
 		{
 			name:    "show",
 			aliases: []string{"view"},
 			short:   "Show a single item by ID",
-			usage:   "nanite show <id> [--vault id] [--format json|detail]",
+			usage:   "nil show <id> [--vault id] [--format json|detail]",
 			run:     cmdShow,
 		},
 		{
 			name:  "context",
 			short: "Emit agent-friendly context snapshots",
-			usage: "nanite context [topic]",
+			usage: "nil context [topic]",
 			run:   cmdContext,
 		},
 		{
 			name:  "import",
 			short: "Bulk import text/markdown files from a directory",
-			usage: "nanite import --dir PATH [--dry-run] [--batch-size N]",
+			usage: "nil import --dir PATH [--dry-run] [--batch-size N]",
 			run:   cmdImport,
 		},
 		{
 			name:  "update",
 			short: "Batch update, archive, or delete items",
-			usage: "nanite update --ids 1,2 --complete --archive",
+			usage: "nil update --ids 1,2 --complete --archive",
 			run:   cmdUpdate,
 		},
 		{
 			name:    "push",
 			aliases: []string{"legacy-add"},
 			short:   "Create an item via the legacy push flow",
-			usage:   "nanite push <title> [flags]",
+			usage:   "nil push <title> [flags]",
 			run: func(ctx context.Context, args []string, env *commandEnv) {
 				cmdPush(ctx, args, env.mgr)
 			},
@@ -88,7 +88,7 @@ func init() {
 		{
 			name:  "search",
 			short: "Search items in the active or specified vault",
-			usage: "nanite search <keywords> [flags]",
+			usage: "nil search <keywords> [flags]",
 			run: func(ctx context.Context, args []string, env *commandEnv) {
 				cmdSearch(ctx, args, env.mgr)
 			},
@@ -96,7 +96,7 @@ func init() {
 		{
 			name:  "inbox",
 			short: "List inbox items",
-			usage: "nanite inbox [keywords]",
+			usage: "nil inbox [keywords]",
 			run: func(ctx context.Context, args []string, env *commandEnv) {
 				cmdInbox(ctx, args, env.mgr)
 			},
@@ -104,7 +104,7 @@ func init() {
 		{
 			name:  "get",
 			short: "Fetch a single item by ID",
-			usage: "nanite get <id> [--vault id|inbox]",
+			usage: "nil get <id> [--vault id|inbox]",
 			run: func(ctx context.Context, args []string, env *commandEnv) {
 				cmdGet(ctx, args, env.mgr)
 			},
@@ -112,7 +112,7 @@ func init() {
 		{
 			name:  "vaults",
 			short: "List configured vaults",
-			usage: "nanite vaults",
+			usage: "nil vaults",
 			run: func(ctx context.Context, args []string, env *commandEnv) {
 				cmdVaults(env.cfg, env.mgr)
 			},
@@ -120,13 +120,13 @@ func init() {
 		{
 			name:  "version",
 			short: "Print CLI version info",
-			usage: "nanite version",
+			usage: "nil version",
 			run:   cmdVersion,
 		},
 		{
 			name:  "plugin",
-			short: "Manage Nanite plugins",
-			usage: "nanite plugin <list|install|uninstall|disable|enable> [name]",
+			short: "Manage Nil plugins",
+			usage: "nil plugin <list|install|uninstall|disable|enable> [name]",
 			run:   cmdPlugin,
 		},
 	}
@@ -142,7 +142,7 @@ type envelope struct {
 // cmdHelp prints available commands or detailed usage for a specific command.
 func cmdHelp(ctx context.Context, args []string, env *commandEnv) {
 	if len(args) == 0 {
-		fmt.Println("Usage: nanite <command> [arguments]")
+		fmt.Println("Usage: nil <command> [arguments]")
 		fmt.Println()
 		fmt.Println("Commands:")
 		for _, cmd := range commandRegistry {
@@ -151,7 +151,7 @@ func cmdHelp(ctx context.Context, args []string, env *commandEnv) {
 			}
 			fmt.Printf("  %-10s %s\n", cmd.name, cmd.short)
 		}
-		fmt.Println("\nRun 'nanite help <command>' for details.")
+		fmt.Println("\nRun 'nil help <command>' for details.")
 		return
 	}
 	name := args[0]
@@ -802,7 +802,7 @@ func Run(args []string, cfg *config.Config, mgr *vault.Manager) {
 	}
 	cmd := findCommand(name)
 	if cmd == nil {
-		die("unknown command %q — run 'nanite help' for a list", name)
+		die("unknown command %q — run 'nil help' for a list", name)
 	}
 	cmd.run(ctx, args[1:], env)
 }
@@ -1047,7 +1047,7 @@ func cmdVaults(cfg *config.Config, mgr *vault.Manager) {
 func printJSON(v any) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "nanite: json error:", err)
+		fmt.Fprintln(os.Stderr, "nil: json error:", err)
 		os.Exit(1)
 	}
 	fmt.Println(string(b))
@@ -1055,12 +1055,12 @@ func printJSON(v any) {
 
 // die writes a formatted message to stderr and exits with code 1.
 func die(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "nanite: "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "nil: "+format+"\n", args...)
 	os.Exit(1)
 }
 
 // parseInterspersed calls fs.Parse in a loop so that flags and positional
-// arguments may be freely intermixed (e.g. nanite push "title" --source cli).
+// arguments may be freely intermixed (e.g. nil push "title" --source cli).
 // Returns the collected positional arguments.
 func parseInterspersed(args []string, fs *flag.FlagSet) ([]string, error) {
 	var positional []string

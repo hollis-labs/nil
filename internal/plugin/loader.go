@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	fplugin "github.com/hollis-labs/fragments-engine/plugin"
+	fplugin "github.com/hollis-labs/plugin"
 )
 
 // DiscoveredPlugin holds metadata parsed from a plugin.yaml plus the

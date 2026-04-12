@@ -67,7 +67,7 @@ export default function PowerMenu({ open, onQuit, onRestart, onCancel }: Props) 
             }}
           >
             <RotateCw size={14} />
-            Restart NANITE
+            Restart NIL
           </button>
           <button
             className="badge warn"
@@ -84,7 +84,7 @@ export default function PowerMenu({ open, onQuit, onRestart, onCancel }: Props) 
             }}
           >
             <Power size={14} />
-            Quit NANITE
+            Quit NIL
           </button>
           <button
             className="badge"

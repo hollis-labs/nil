@@ -30,7 +30,7 @@ export default function ContextsAutocomplete({ values, onValuesChange, placehold
       suggestions={suggestions}
       placeholder={placeholder}
       prefix="@"
-      label={label}
+      {...(label !== undefined && { label })}
     />
   );
 }

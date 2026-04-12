@@ -1,4 +1,4 @@
-# NANITE
+# NIL
 
 ## agentrc
 - If `.agentrc/boot-prompt.md` exists, read it first for session context.
@@ -11,9 +11,9 @@
 
 ---
 
-# NANITE — Agent Development Guide
+# NIL — Agent Development Guide
 
-NANITE is a keyboard-driven personal task and note management desktop app. It is currently in public beta.
+NIL is a keyboard-driven personal task and note management desktop app. It is currently in public beta.
 
 ---
 
@@ -33,11 +33,11 @@ NANITE is a keyboard-driven personal task and note management desktop app. It is
 ## Project Layout
 
 ```
-nanite/
+nil/
 ├── main.go              # Wails entry point, window config
 ├── app.go               # App struct, all Wails-bound Go methods
-├── go.mod / go.sum      # module: nanite
-├── wails.json           # App name (NANITE), build config
+├── go.mod / go.sum      # module: github.com/hollis-labs/nil
+├── wails.json           # App name (NIL), build config
 ├── build-local.sh       # Quick local macOS build
 ├── build-for-friends.sh # Cross-platform distribution build
 ├── config/
@@ -104,14 +104,14 @@ The core entity is `todos` (DB table name unchanged) — it holds both **items**
 
 ### localStorage Keys
 
-All localStorage keys use the `nanite.` prefix:
-- `nanite.settings` — app settings (tabs, showCompleted, etc.)
-- `nanite.viewMode` — scope | date
-- `nanite.appMode` — todos | notes
-- `nanite.inputMode` — search | add
-- `nanite.sessionProfiles` — saved session profiles
-- `nanite.activeSession` — current active session
-- `nanite.taskTemplates` — saved task templates
+All localStorage keys use the `nil.` prefix:
+- `nil.settings` — app settings (tabs, showCompleted, etc.)
+- `nil.viewMode` — scope | date
+- `nil.appMode` — todos | notes
+- `nil.inputMode` — search | add
+- `nil.sessionProfiles` — saved session profiles
+- `nil.activeSession` — current active session
+- `nil.taskTemplates` — saved task templates
 
 ### Theme System
 
@@ -142,7 +142,7 @@ cd frontend && npx tsc --noEmit
 
 **Debug mode** (opens WebKit inspector on startup):
 ```bash
-DEBUG=1 open build/bin/NANITE.app
+DEBUG=1 open build/bin/NIL.app
 ```
 
 ---
@@ -164,9 +164,8 @@ DEBUG=1 open build/bin/NANITE.app
 
 ## Immediate Priorities
 
-- [ ] **Move repo & GitHub setup**: Move project out of Downloads into `~/Projects-apps/nanite`. Set up GitHub repo under the `hollis-labs` org with slug `nanite`.
 - [x] **Dead file cleanup**: `app/app.go`, `store/store.go.bak`, debug scripts, stale `.md` files removed.
-- [x] **App rename**: PLANCK → NANITE throughout (wails.json, main.go, index.html, config paths, build scripts, docs).
+- [x] **App rename**: PLANCK → NANITE → NIL throughout (wails.json, main.go, index.html, config paths, build scripts, docs, localStorage keys).
 - [x] **Item rename**: `Todo` struct → `Item`; Wails methods `CreateTodoFromLine` → `CreateItemFromLine`, `UpdateTodo` → `UpdateItem`, etc. DB `type` column values `'todo'`/`'note'` unchanged.
 - [x] **Hide theme switcher**: Theme tab hidden from Settings UI (`SettingsTab` type, tab button commented out, content gated with `false &&`).
 - [x] **Default tab migration**: `defaultSettings` now includes All tab for both todos and notes modes. `SettingsProvider` injects a notes-mode All tab on first load if missing.

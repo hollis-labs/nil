@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"nanite/config"
-	"nanite/store"
-	"nanite/vault"
+	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/store"
+	"github.com/hollis-labs/nil/vault"
 )
 
 type apiHandler struct {

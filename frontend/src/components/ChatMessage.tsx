@@ -1,12 +1,11 @@
-import * as React from "react";
 import { chat } from "../../wailsjs/go/models";
 import ActionCard from "./ActionCard";
 
 type Props = {
   message: chat.ChatMessage;
-  proposal?: chat.ActionProposal;
-  vaultName?: string;
-  onProposalResolved?: (outcome: "executed" | "denied" | "dry_run" | "failed") => void;
+  proposal?: chat.ActionProposal | undefined;
+  vaultName?: string | undefined;
+  onProposalResolved?: ((outcome: "executed" | "denied" | "dry_run" | "failed") => void) | undefined;
 };
 
 export default function ChatMessage({ message, proposal, vaultName, onProposalResolved }: Props) {
@@ -50,8 +49,8 @@ export default function ChatMessage({ message, proposal, vaultName, onProposalRe
         {!isUser && proposal && (
           <ActionCard
             proposal={proposal}
-            vaultName={vaultName}
-            onResolved={onProposalResolved}
+            {...(vaultName !== undefined && { vaultName })}
+            {...(onProposalResolved !== undefined && { onResolved: onProposalResolved })}
           />
         )}
       </div>

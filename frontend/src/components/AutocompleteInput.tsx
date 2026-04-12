@@ -15,7 +15,6 @@ export default function AutocompleteInput({
   suggestions,
   placeholder,
   prefix = "",
-  label,
 }: Props) {
   const [inputValue, setInputValue] = React.useState("");
   const [showDropdown, setShowDropdown] = React.useState(false);
@@ -74,7 +73,7 @@ export default function AutocompleteInput({
     if (e.key === 'Enter') {
       e.preventDefault();
       if (showDropdown && filteredSuggestions.length > 0) {
-        addValue(filteredSuggestions[selectedIndex]);
+        addValue(filteredSuggestions[selectedIndex]!);
       } else if (inputValue.trim()) {
         addValue(inputValue.trim());
       }
@@ -83,7 +82,7 @@ export default function AutocompleteInput({
       if (inputValue.trim()) {
         e.preventDefault();
         if (showDropdown && filteredSuggestions.length > 0) {
-          addValue(filteredSuggestions[selectedIndex]);
+          addValue(filteredSuggestions[selectedIndex]!);
         } else {
           addValue(inputValue.trim());
         }
@@ -101,7 +100,7 @@ export default function AutocompleteInput({
       }
     } else if (e.key === 'Backspace' && inputValue === '' && values.length > 0) {
       e.preventDefault();
-      removeValue(values[values.length - 1]);
+      removeValue(values[values.length - 1]!);
     } else if (e.key === 'Escape') {
       setShowDropdown(false);
     }
