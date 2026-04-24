@@ -12,7 +12,6 @@ import (
 
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
-	nplugin "github.com/hollis-labs/nil/internal/plugin"
 	"github.com/hollis-labs/nil/parse"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
@@ -24,9 +23,6 @@ type App struct {
 	needsSetup bool
 	apiServer  *http.Server
 	apiMu      sync.Mutex
-
-	// Plugin host
-	pluginHost *nplugin.Host
 
 	// Chat addon (F5)
 	chatStore       *chat.ChatStore
@@ -64,28 +60,6 @@ func (a *App) startup(ctx context.Context) {
 		a.startAPIServer(cfg)
 	}
 
-	// Initialise plugin host.
-	pluginLogger := nplugin.NewLogger("nil-plugin")
-	a.pluginHost = nplugin.NewHost(pluginLogger)
-	if a.vaultMgr != nil {
-		a.pluginHost.RegisterService("vault_manager", a.vaultMgr)
-	}
-
-	pluginsDir := "./plugins"
-	if d := os.Getenv("NIL_PLUGINS_DIR"); d != "" {
-		pluginsDir = d
-	}
-	discovered, discoverErr := nplugin.DiscoverPlugins(pluginsDir)
-	if discoverErr != nil {
-		println("warning: plugin discovery failed:", discoverErr.Error())
-	} else if len(discovered) > 0 {
-		loaded, loadErrs := nplugin.LoadDiscovered(a.pluginHost, discovered)
-		for _, e := range loadErrs {
-			println("warning: plugin load error:", e.Error())
-		}
-		println(fmt.Sprintf("loaded %d plugin(s)", len(loaded)))
-	}
-
 	// Initialise chat addon
 	cs, err := chat.Open(ctx, config.GetConfigDir())
 	if err != nil {
@@ -98,9 +72,6 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
-	if a.pluginHost != nil {
-		_ = a.pluginHost.Shutdown()
-	}
 	a.stopAPIServer()
 	if a.vaultMgr != nil {
 		a.vaultMgr.CloseAll()

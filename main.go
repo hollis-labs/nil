@@ -12,7 +12,7 @@ import (
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/vault"
 
-	feotel "github.com/hollis-labs/otel"
+	feotel "github.com/hollis-labs/go-otel"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"

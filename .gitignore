@@ -4,6 +4,7 @@ frontend/dist
 test-build
 # Go build output
 /nil
+/nil-mcp
 /nanite
 /todo-app
 # dist artifacts
