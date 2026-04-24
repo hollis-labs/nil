@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -233,6 +234,9 @@ func (s *Server) Run(in io.Reader, out io.Writer) {
 			}
 			_ = enc.Encode(resp)
 		}()
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "nil-mcp: stdin read error: %v\n", err)
 	}
 }
 

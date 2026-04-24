@@ -148,19 +148,44 @@ type itemCreateRequest struct {
 	Projects []string `json:"projects"`
 }
 
+// nullableString distinguishes "field omitted" (IsSet=false) from "field set to null"
+// (IsSet=true, Value=nil) and "field set to a value" (IsSet=true, Value=non-nil).
+// This is needed because encoding/json decodes both omitted and explicit null to nil
+// for *string fields, making it impossible to tell whether the caller intends to clear
+// a nullable column or simply leave it unchanged.
+type nullableString struct {
+	Value *string
+	IsSet bool
+}
+
+func (n *nullableString) UnmarshalJSON(data []byte) error {
+	n.IsSet = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	n.Value = &s
+	return nil
+}
+
 // itemUpdateRequest uses pointers for all optional fields so we can distinguish
 // "not provided" from "set to zero value". For slice fields, *[]string lets callers
-// send null (leave unchanged) vs [] (clear).
+// send null (leave unchanged) vs [] (clear). Priority and DueAt use nullableString
+// so that an explicit JSON null can clear the column.
 type itemUpdateRequest struct {
-	Title    *string   `json:"title"`
-	NotesMD  *string   `json:"notes_md"`
-	Priority *string   `json:"priority"`
-	DueAt    *string   `json:"due_at"`
-	Section  *string   `json:"section"`
-	Pinned   *bool     `json:"pinned"`
-	Tags     *[]string `json:"tags"`
-	Contexts *[]string `json:"contexts"`
-	Projects *[]string `json:"projects"`
+	Title    *string        `json:"title"`
+	NotesMD  *string        `json:"notes_md"`
+	Priority nullableString `json:"priority"`
+	DueAt    nullableString `json:"due_at"`
+	Section  *string        `json:"section"`
+	Pinned   *bool          `json:"pinned"`
+	Tags     *[]string      `json:"tags"`
+	Contexts *[]string      `json:"contexts"`
+	Projects *[]string      `json:"projects"`
 }
 
 type toggleCompleteRequest struct {
@@ -239,11 +264,16 @@ func (h *apiHandler) handleProcessInboxItem(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.vaultMgr.InboxStore().ProcessInboxItem(r.Context(), id); err != nil {
+	inbox := h.vaultMgr.InboxStore()
+	if _, err := inbox.GetItem(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "item not found")
 			return
 		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch item")
+		return
+	}
+	if err := inbox.ProcessInboxItem(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to process inbox item")
 		return
 	}
@@ -255,6 +285,10 @@ func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
 	var req itemCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
 		return
 	}
 
@@ -363,11 +397,11 @@ func (h *apiHandler) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	if req.NotesMD != nil {
 		item.NotesMD = *req.NotesMD
 	}
-	if req.Priority != nil {
-		item.Priority = req.Priority
+	if req.Priority.IsSet {
+		item.Priority = req.Priority.Value
 	}
-	if req.DueAt != nil {
-		item.DueAt = req.DueAt
+	if req.DueAt.IsSet {
+		item.DueAt = req.DueAt.Value
 	}
 	if req.Section != nil {
 		item.Section = *req.Section
@@ -414,11 +448,15 @@ func (h *apiHandler) handleDeleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.DeleteItem(r.Context(), id); err != nil {
+	if _, err := s.GetItem(r.Context(), id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "item not found")
 			return
 		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch item")
+		return
+	}
+	if err := s.DeleteItem(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete item")
 		return
 	}
@@ -447,11 +485,15 @@ func (h *apiHandler) handleToggleComplete(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if toggleErr := s.ToggleComplete(r.Context(), id, req.Completed); toggleErr != nil {
-		if errors.Is(toggleErr, sql.ErrNoRows) {
+	if _, fetchErr := s.GetItem(r.Context(), id); fetchErr != nil {
+		if errors.Is(fetchErr, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "item not found")
 			return
 		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch item")
+		return
+	}
+	if toggleErr := s.ToggleComplete(r.Context(), id, req.Completed); toggleErr != nil {
 		writeError(w, http.StatusInternalServerError, "failed to toggle completion")
 		return
 	}
@@ -486,11 +528,15 @@ func (h *apiHandler) handleArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if archErr := s.Archive(r.Context(), id, req.Archived); archErr != nil {
-		if errors.Is(archErr, sql.ErrNoRows) {
+	if _, fetchErr := s.GetItem(r.Context(), id); fetchErr != nil {
+		if errors.Is(fetchErr, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "item not found")
 			return
 		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch item")
+		return
+	}
+	if archErr := s.Archive(r.Context(), id, req.Archived); archErr != nil {
 		writeError(w, http.StatusInternalServerError, "failed to archive item")
 		return
 	}
