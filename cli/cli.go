@@ -123,12 +123,6 @@ func init() {
 			usage: "nil version",
 			run:   cmdVersion,
 		},
-		{
-			name:  "plugin",
-			short: "Manage Nil plugins",
-			usage: "nil plugin <list|install|uninstall|disable|enable> [name]",
-			run:   cmdPlugin,
-		},
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	feotel "github.com/hollis-labs/otel"
+	feotel "github.com/hollis-labs/go-otel"
 	_ "modernc.org/sqlite"
 )
 

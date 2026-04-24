@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"strconv"
@@ -24,10 +25,28 @@ func NewAPIServer(cfg *config.Config, vm *vault.Manager) *http.Server {
 	h := &apiHandler{cfg: cfg, vaultMgr: vm}
 
 	mux := http.NewServeMux()
+
+	// Inbox routes
 	mux.Handle("POST /api/v1/inbox", h.auth(h.handleCreateInbox))
 	mux.Handle("GET /api/v1/inbox", h.auth(h.handleListInbox))
-	mux.Handle("GET /api/v1/search", h.auth(h.handleSearch))
+	mux.Handle("POST /api/v1/inbox/{id}/process", h.auth(h.handleProcessInboxItem))
+
+	// Item CRUD routes
+	mux.Handle("POST /api/v1/items", h.auth(h.handleCreateItem))
 	mux.Handle("GET /api/v1/items/{id}", h.auth(h.handleGetItem))
+	mux.Handle("PUT /api/v1/items/{id}", h.auth(h.handleUpdateItem))
+	mux.Handle("DELETE /api/v1/items/{id}", h.auth(h.handleDeleteItem))
+
+	// Item action routes
+	mux.Handle("POST /api/v1/items/{id}/complete", h.auth(h.handleToggleComplete))
+	mux.Handle("POST /api/v1/items/{id}/archive", h.auth(h.handleArchive))
+
+	// Search and taxonomy
+	mux.Handle("GET /api/v1/search", h.auth(h.handleSearch))
+	mux.Handle("GET /api/v1/taxonomy", h.auth(h.handleTaxonomy))
+
+	// Vault listing
+	mux.Handle("GET /api/v1/vaults", h.auth(h.handleListVaults))
 
 	return &http.Server{
 		Addr:         net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.APIPort)),
@@ -63,7 +82,7 @@ func (h *apiHandler) storeForRequest(r *http.Request) *store.Store {
 func (h *apiHandler) cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Agent-Source, X-Vault-ID")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -103,7 +122,7 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	_ = json.NewEncoder(w).Encode(apiResponse{OK: false, Error: msg})
 }
 
-// --- Route handlers ---
+// --- Request structs ---
 
 type inboxCreateRequest struct {
 	Title    string   `json:"title"`
@@ -115,6 +134,44 @@ type inboxCreateRequest struct {
 	Contexts []string `json:"contexts"`
 	Projects []string `json:"projects"`
 }
+
+type itemCreateRequest struct {
+	Title    string   `json:"title"`
+	NotesMD  string   `json:"notes_md"`
+	Priority *string  `json:"priority"`
+	DueAt    *string  `json:"due_at"`
+	Type     string   `json:"type"`
+	Section  string   `json:"section"`
+	Pinned   bool     `json:"pinned"`
+	Tags     []string `json:"tags"`
+	Contexts []string `json:"contexts"`
+	Projects []string `json:"projects"`
+}
+
+// itemUpdateRequest uses pointers for all optional fields so we can distinguish
+// "not provided" from "set to zero value". For slice fields, *[]string lets callers
+// send null (leave unchanged) vs [] (clear).
+type itemUpdateRequest struct {
+	Title    *string   `json:"title"`
+	NotesMD  *string   `json:"notes_md"`
+	Priority *string   `json:"priority"`
+	DueAt    *string   `json:"due_at"`
+	Section  *string   `json:"section"`
+	Pinned   *bool     `json:"pinned"`
+	Tags     *[]string `json:"tags"`
+	Contexts *[]string `json:"contexts"`
+	Projects *[]string `json:"projects"`
+}
+
+type toggleCompleteRequest struct {
+	Completed bool `json:"completed"`
+}
+
+type archiveRequest struct {
+	Archived bool `json:"archived"`
+}
+
+// --- Route handlers ---
 
 // POST /api/v1/inbox — create an inbox item.
 // Always routes to the inbox store regardless of X-Vault-ID.
@@ -172,6 +229,280 @@ func (h *apiHandler) handleListInbox(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+// POST /api/v1/inbox/{id}/process — mark an inbox item as processed.
+// Calls ProcessInboxItem on the inbox store; responds 204 on success.
+func (h *apiHandler) handleProcessInboxItem(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	if err := h.vaultMgr.InboxStore().ProcessInboxItem(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to process inbox item")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/items — create a regular (non-inbox) item in the vault resolved by X-Vault-ID.
+func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
+	var req itemCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	itemType := req.Type
+	if itemType == "" {
+		itemType = "todo"
+	}
+	section := req.Section
+	if section == "" {
+		section = "anytime"
+	}
+
+	item := &store.Item{
+		Title:     req.Title,
+		NotesMD:   req.NotesMD,
+		Priority:  req.Priority,
+		DueAt:     req.DueAt,
+		Type:      itemType,
+		Section:   section,
+		Pinned:    req.Pinned,
+		Tags:      req.Tags,
+		Contexts:  req.Contexts,
+		Projects:  req.Projects,
+		Inbox:     false,
+		APISource: r.Header.Get("X-Agent-Source"),
+	}
+
+	created, err := s.CreateItem(r.Context(), item)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create item")
+		return
+	}
+	writeJSON(w, http.StatusCreated, created)
+}
+
+// GET /api/v1/items/{id} — fetch a single item from the vault resolved by X-Vault-ID.
+func (h *apiHandler) handleGetItem(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	item, err := s.GetItem(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get item")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// PUT /api/v1/items/{id} — partial update of an existing item.
+// Only non-nil fields in the request body are applied to the stored item.
+// For slice fields, null means "leave unchanged" and [] means "clear".
+func (h *apiHandler) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	var req itemUpdateRequest
+	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	item, err := s.GetItem(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "item not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get item")
+		return
+	}
+
+	// Apply only non-nil fields from the request
+	if req.Title != nil {
+		item.Title = *req.Title
+	}
+	if req.NotesMD != nil {
+		item.NotesMD = *req.NotesMD
+	}
+	if req.Priority != nil {
+		item.Priority = req.Priority
+	}
+	if req.DueAt != nil {
+		item.DueAt = req.DueAt
+	}
+	if req.Section != nil {
+		item.Section = *req.Section
+	}
+	if req.Pinned != nil {
+		item.Pinned = *req.Pinned
+	}
+	// Slice fields: nil pointer = leave unchanged; non-nil pointer (even to empty slice) = overwrite
+	if req.Tags != nil {
+		item.Tags = *req.Tags
+	}
+	if req.Contexts != nil {
+		item.Contexts = *req.Contexts
+	}
+	if req.Projects != nil {
+		item.Projects = *req.Projects
+	}
+
+	if updateErr := s.UpdateItem(r.Context(), item); updateErr != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update item")
+		return
+	}
+
+	updated, err := s.GetItem(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch updated item")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// DELETE /api/v1/items/{id} — permanently delete an item; responds 204.
+func (h *apiHandler) handleDeleteItem(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	if err := s.DeleteItem(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete item")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /api/v1/items/{id}/complete — toggle the completion state of an item.
+// Body: {"completed": bool}
+func (h *apiHandler) handleToggleComplete(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	var req toggleCompleteRequest
+	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	if toggleErr := s.ToggleComplete(r.Context(), id, req.Completed); toggleErr != nil {
+		if errors.Is(toggleErr, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to toggle completion")
+		return
+	}
+
+	item, err := s.GetItem(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch updated item")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// POST /api/v1/items/{id}/archive — archive or unarchive an item.
+// Body: {"archived": bool}
+func (h *apiHandler) handleArchive(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	var req archiveRequest
+	if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	if archErr := s.Archive(r.Context(), id, req.Archived); archErr != nil {
+		if errors.Is(archErr, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to archive item")
+		return
+	}
+
+	item, err := s.GetItem(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch updated item")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
 // GET /api/v1/search — search items in the vault resolved by X-Vault-ID header.
 func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	s := h.storeForRequest(r)
@@ -207,31 +538,64 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
-// GET /api/v1/items/{id} — fetch a single item from the vault resolved by X-Vault-ID header.
-func (h *apiHandler) handleGetItem(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid item ID")
-		return
-	}
-
+// GET /api/v1/taxonomy — return projects, contexts, and tags with item counts.
+// Vault resolved by X-Vault-ID header.
+func (h *apiHandler) handleTaxonomy(w http.ResponseWriter, r *http.Request) {
 	s := h.storeForRequest(r)
 	if s == nil {
 		writeError(w, http.StatusServiceUnavailable, "vault not available")
 		return
 	}
 
-	item, err := s.GetItem(r.Context(), id)
-	if err == sql.ErrNoRows {
-		writeError(w, http.StatusNotFound, "item not found")
-		return
-	}
+	projects, contexts, tags, err := s.GetTaxonomyWithCounts(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to get item")
+		writeError(w, http.StatusInternalServerError, "failed to get taxonomy")
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+
+	type taxonomyResponse struct {
+		Projects []store.TaxonomyItem `json:"projects"`
+		Contexts []store.TaxonomyItem `json:"contexts"`
+		Tags     []store.TaxonomyItem `json:"tags"`
+	}
+
+	// Ensure nil slices serialize as [] rather than null
+	if projects == nil {
+		projects = []store.TaxonomyItem{}
+	}
+	if contexts == nil {
+		contexts = []store.TaxonomyItem{}
+	}
+	if tags == nil {
+		tags = []store.TaxonomyItem{}
+	}
+
+	writeJSON(w, http.StatusOK, taxonomyResponse{
+		Projects: projects,
+		Contexts: contexts,
+		Tags:     tags,
+	})
+}
+
+// vaultInfo extends config.Vault with an Active flag indicating the current vault.
+type vaultInfo struct {
+	config.Vault
+	Active bool `json:"active"`
+}
+
+// GET /api/v1/vaults — list all registered vaults with an active flag.
+func (h *apiHandler) handleListVaults(w http.ResponseWriter, r *http.Request) {
+	vaults := h.vaultMgr.GetVaults()
+	activeID := h.vaultMgr.GetActiveVaultID()
+
+	result := make([]vaultInfo, len(vaults))
+	for i, v := range vaults {
+		result[i] = vaultInfo{
+			Vault:  v,
+			Active: v.ID == activeID,
+		}
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 // splitMultiParam handles both comma-separated values and repeated query params.
