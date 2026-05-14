@@ -1,4 +1,4 @@
-# NIL Todo App - Distribution Guide
+# NIL Distribution Guide
 
 ## Overview
 
@@ -25,13 +25,13 @@ The development version (Info.dev.plist) includes `NSAllowsLocalNetworking` for 
 
 #### 1. Build the App
 ```bash
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
+cd /Users/chrispian/Projects-apps/nil
 wails build -clean
 ```
 
 The app will be created at:
 ```
-build/bin/todo-app.app
+build/bin/NIL.app
 ```
 
 #### 2. Create a DMG for Distribution (Optional)
@@ -45,18 +45,18 @@ create-dmg \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
-  --icon "todo-app.app" 200 190 \
-  --hide-extension "todo-app.app" \
+  --icon "NIL.app" 200 190 \
+  --hide-extension "NIL.app" \
   --app-drop-link 600 185 \
   "NIL-Installer.dmg" \
-  "build/bin/todo-app.app"
+  "build/bin/NIL.app"
 ```
 
 #### 3. Share with Friends
 You can share the app in three ways:
 
 **Option A: Share the .app directly**
-- Zip the `build/bin/todo-app.app` folder
+- Zip the `build/bin/NIL.app` folder
 - Send to friends
 - They unzip and drag to Applications folder
 
@@ -82,7 +82,7 @@ wails build -platform windows/amd64
 
 The app will be created at:
 ```
-build/bin/todo-app.exe
+build/bin/NIL.exe
 ```
 
 #### 2. Create Windows Installer (Optional)
@@ -119,7 +119,7 @@ security find-identity -v -p codesigning
 2. **Sign the app**
 ```bash
 codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name (TEAM_ID)" \
-  build/bin/todo-app.app
+  build/bin/NIL.app
 ```
 
 3. **Create a signed DMG**
@@ -129,10 +129,10 @@ create-dmg \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
-  --icon "todo-app.app" 200 190 \
+  --icon "NIL.app" 200 190 \
   --app-drop-link 600 185 \
   "NIL-Installer.dmg" \
-  "build/bin/todo-app.app"
+  "build/bin/NIL.app"
 
 codesign --sign "Developer ID Application: Your Name (TEAM_ID)" NIL-Installer.dmg
 ```
@@ -156,7 +156,7 @@ xcrun stapler staple NIL-Installer.dmg
 
 5. **Verify**
 ```bash
-spctl -a -t open --context context:primary-signature -v build/bin/todo-app.app
+spctl -a -t open --context context:primary-signature -v build/bin/NIL.app
 ```
 
 ---
@@ -173,7 +173,7 @@ spctl -a -t open --context context:primary-signature -v build/bin/todo-app.app
 2. **Zip:**
    ```bash
    cd build/bin
-   zip -r NIL-macOS.zip todo-app.app
+   zip -r NIL-macOS.zip NIL.app
    ```
 
 3. **Share:**
@@ -190,7 +190,7 @@ spctl -a -t open --context context:primary-signature -v build/bin/todo-app.app
 2. **Zip:**
    ```bash
    cd build/bin
-   zip NIL-Windows.zip todo-app.exe
+   zip NIL-Windows.zip NIL.exe
    ```
 
 3. **Share:**
@@ -228,7 +228,7 @@ wails build -platform darwin/universal,windows/amd64
 Edit `wails.json` to customize:
 ```json
 {
-  "name": "todo-app",
+  "name": "nil",
   "outputfilename": "NIL",
   "author": {
     "name": "Your Name",
@@ -239,7 +239,7 @@ Edit `wails.json` to customize:
     "productName": "NIL",
     "productVersion": "1.0.0",
     "copyright": "Copyright © 2025 Your Name",
-    "comments": "A minimalist todo app"
+    "comments": "A keyboard-driven personal task and note manager"
   }
 }
 ```
@@ -270,7 +270,7 @@ This happens with unsigned apps downloaded from the internet.
 
 **Solution for users:**
 ```bash
-xattr -cr /Applications/todo-app.app
+xattr -cr /Applications/NIL.app
 ```
 
 Or right-click → Open (instead of double-click) the first time.
