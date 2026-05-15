@@ -1,0 +1,54 @@
+project:
+  id: nil
+  display_name: NIL
+  status: active
+  purpose: |
+    Keyboard-driven personal task and note management desktop app. A Wails v2
+    application (Go backend + React/TypeScript frontend) that treats tasks and
+    notes as a single data model with a todo.txt-inspired capture syntax, FTS5
+    search, wikilinks, multi-vault SQLite storage, and a deliberate terminal
+    aesthetic. Currently in public beta (v1.3.0). Formerly named PLANCK then
+    NANITE; renamed to free the "Nanite" name for the CLI agent framework.
+catalog:
+  torque_project_id: null          # no Torque project id found in ~/.tether/catalog/projects/nil.yaml
+  cerberus_project_id: null         # no ~/.cerberus/apps/nil; not Cerberus-managed
+  tether_catalog_project: nil       # ~/.tether/catalog/projects/nil.yaml (id: nil)
+locations:
+  repo: ~/dev/hollis-labs/apps/nil
+  agent_os_tracking: ~/dev/agent-os/workspaces/execution/nil   # conventional path; dir not verified present
+  state_dir: null                  # vault data lives in user-chosen folders (e.g. iCloud Drive), not a fixed ~/.nil
+  catalog: null
+  artifacts: null
+build:
+  authority: local                 # built locally via Wails; no .github/workflows, no Cerberus resource
+  resource: null
+  command: make build               # wraps `wails build`; cross-platform via ./build-for-friends.sh
+deployment:
+  type: none                        # desktop app distributed as DMG/installer/AppImage; not a service
+  service_name: null
+  binary: null
+docs:
+  readme: README.md
+  architecture: null                # no docs/architecture.md; see CLAUDE.md "Project Layout"/"Key Conventions"
+  adrs: null                        # no docs/adrs/; ADR-004 (semantic search) referenced in knowledge file only
+  roadmap: ROADMAP.md
+roadmap:
+  current_phase: 'v1.3.0 beta — rename cleanup, default tabs, Tailwind/shadcn migration; F1 Inbox MVP shipped'
+  pointer: null
+usage_examples:
+  - intent: Run the full local verification path before a commit
+    command: make verify
+    note: Runs Go format/lint, frontend lint, Go tests, frontend build, Wails binding drift check, and wails build.
+  - intent: Add or change a Wails-bound Go method
+    command: edit app.go, then `make codegen`
+    note: Bound methods live on *App in app.go; regenerate TS bindings so frontend/wailsjs stays in sync (never hand-edit wailsjs).
+  - intent: Change the database schema
+    command: edit store/schema.sql and add a migration in store/store.go
+    note: Update both — schema.sql for fresh installs, a migration entry (increment currentSchemaVersion) for existing users.
+  - intent: Expose NIL vault content to another agent
+    command: build and run cmd/nil-mcp (the nil-mcp binary)
+    note: Standalone MCP stdio server exposing 12 JSON-RPC tools (nil_search, nil_create_item, nil_list_inbox, etc.).
+scopes:
+  - nil.backend.main
+  - nil.frontend.main
+related_projects: [nanite, tesseract, ion, stack-explorer]
