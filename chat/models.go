@@ -3,8 +3,9 @@ package chat
 import (
 	"context"
 	"encoding/json"
-	"github.com/hollis-labs/nil/store"
 	"sync"
+
+	"github.com/hollis-labs/nil/store"
 )
 
 // BridgeStore is the subset of store.Store the Bridge needs for tool execution.

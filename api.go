@@ -11,9 +11,43 @@ import (
 	"time"
 
 	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/ingest"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
+
+// resolveNotesInput converts whichever notes input format the caller supplied
+// into the (doc JSON, html cache, renderer version) tuple needed for storage.
+// Precedence: notes_doc > notes_md > notes_html. Returns empty zero values
+// when none are provided.
+func resolveNotesInput(notesDoc, notesMD, notesHTML string) (string, string, int, error) {
+	if strings.TrimSpace(notesDoc) != "" {
+		htmlStr, err := ingest.DocToHTML(notesDoc)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return notesDoc, htmlStr, notesHTMLVersion, nil
+	}
+	if strings.TrimSpace(notesMD) != "" {
+		doc, err := ingest.MarkdownToDoc(notesMD)
+		if err != nil {
+			return "", "", 0, err
+		}
+		htmlStr, err := ingest.DocToHTML(doc)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, htmlStr, notesHTMLVersion, nil
+	}
+	if strings.TrimSpace(notesHTML) != "" {
+		doc, err := ingest.HTMLToDoc(notesHTML)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, notesHTML, notesHTMLVersion, nil
+	}
+	return "", "", 0, nil
+}
 
 type apiHandler struct {
 	cfg      *config.Config
@@ -124,28 +158,38 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 
 // --- Request structs ---
 
+// Notes input fields on create/update requests accept exactly one of:
+//   - notes_doc:  TipTap PM JSON (source of truth, no conversion)
+//   - notes_md:   markdown source (server converts via ingest)
+//   - notes_html: HTML source (server converts via ingest)
+// Precedence when multiple are provided: notes_doc > notes_md > notes_html.
+
 type inboxCreateRequest struct {
-	Title    string   `json:"title"`
-	NotesMD  string   `json:"notes_md"`
-	Priority *string  `json:"priority"`
-	DueAt    *string  `json:"due_at"`
-	Type     string   `json:"type"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
+	Title     string   `json:"title"`
+	NotesDoc  string   `json:"notes_doc"`
+	NotesMD   string   `json:"notes_md"`
+	NotesHTML string   `json:"notes_html"`
+	Priority  *string  `json:"priority"`
+	DueAt     *string  `json:"due_at"`
+	Kind      string   `json:"kind"`
+	Tags      []string `json:"tags"`
+	Contexts  []string `json:"contexts"`
+	Projects  []string `json:"projects"`
 }
 
 type itemCreateRequest struct {
-	Title    string   `json:"title"`
-	NotesMD  string   `json:"notes_md"`
-	Priority *string  `json:"priority"`
-	DueAt    *string  `json:"due_at"`
-	Type     string   `json:"type"`
-	Section  string   `json:"section"`
-	Pinned   bool     `json:"pinned"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
+	Title     string   `json:"title"`
+	NotesDoc  string   `json:"notes_doc"`
+	NotesMD   string   `json:"notes_md"`
+	NotesHTML string   `json:"notes_html"`
+	Priority  *string  `json:"priority"`
+	DueAt     *string  `json:"due_at"`
+	Kind      string   `json:"kind"`
+	Section   string   `json:"section"`
+	Pinned    bool     `json:"pinned"`
+	Tags      []string `json:"tags"`
+	Contexts  []string `json:"contexts"`
+	Projects  []string `json:"projects"`
 }
 
 // nullableString distinguishes "field omitted" (IsSet=false) from "field set to null"
@@ -177,15 +221,18 @@ func (n *nullableString) UnmarshalJSON(data []byte) error {
 // send null (leave unchanged) vs [] (clear). Priority and DueAt use nullableString
 // so that an explicit JSON null can clear the column.
 type itemUpdateRequest struct {
-	Title    *string        `json:"title"`
-	NotesMD  *string        `json:"notes_md"`
-	Priority nullableString `json:"priority"`
-	DueAt    nullableString `json:"due_at"`
-	Section  *string        `json:"section"`
-	Pinned   *bool          `json:"pinned"`
-	Tags     *[]string      `json:"tags"`
-	Contexts *[]string      `json:"contexts"`
-	Projects *[]string      `json:"projects"`
+	Title     *string        `json:"title"`
+	NotesDoc  *string        `json:"notes_doc"`
+	NotesMD   *string        `json:"notes_md"`
+	NotesHTML *string        `json:"notes_html"`
+	Priority  nullableString `json:"priority"`
+	DueAt     nullableString `json:"due_at"`
+	Kind      *string        `json:"kind"`
+	Section   *string        `json:"section"`
+	Pinned    *bool          `json:"pinned"`
+	Tags      *[]string      `json:"tags"`
+	Contexts  *[]string      `json:"contexts"`
+	Projects  *[]string      `json:"projects"`
 }
 
 type toggleCompleteRequest struct {
@@ -207,22 +254,30 @@ func (h *apiHandler) handleCreateInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	itemType := req.Type
-	if itemType == "" {
-		itemType = "todo"
+	kind := req.Kind
+	if kind == "" {
+		kind = "todo"
+	}
+
+	doc, htmlStr, version, err := resolveNotesInput(req.NotesDoc, req.NotesMD, req.NotesHTML)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
+		return
 	}
 
 	item := &store.Item{
-		Title:     req.Title,
-		NotesMD:   req.NotesMD,
-		Priority:  req.Priority,
-		DueAt:     req.DueAt,
-		Type:      itemType,
-		Tags:      req.Tags,
-		Contexts:  req.Contexts,
-		Projects:  req.Projects,
-		Inbox:     true,
-		APISource: r.Header.Get("X-Agent-Source"),
+		Title:            req.Title,
+		NotesDoc:         doc,
+		NotesHTML:        htmlStr,
+		NotesHTMLVersion: version,
+		Priority:         req.Priority,
+		DueAt:            req.DueAt,
+		Kind:             kind,
+		Tags:             req.Tags,
+		Contexts:         req.Contexts,
+		Projects:         req.Projects,
+		Inbox:            true,
+		APISource:        r.Header.Get("X-Agent-Source"),
 	}
 
 	created, err := h.vaultMgr.InboxStore().CreateItem(r.Context(), item)
@@ -298,28 +353,36 @@ func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	itemType := req.Type
-	if itemType == "" {
-		itemType = "todo"
+	kind := req.Kind
+	if kind == "" {
+		kind = "todo"
 	}
 	section := req.Section
 	if section == "" {
 		section = "anytime"
 	}
 
+	doc, htmlStr, version, err := resolveNotesInput(req.NotesDoc, req.NotesMD, req.NotesHTML)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
+		return
+	}
+
 	item := &store.Item{
-		Title:     req.Title,
-		NotesMD:   req.NotesMD,
-		Priority:  req.Priority,
-		DueAt:     req.DueAt,
-		Type:      itemType,
-		Section:   section,
-		Pinned:    req.Pinned,
-		Tags:      req.Tags,
-		Contexts:  req.Contexts,
-		Projects:  req.Projects,
-		Inbox:     false,
-		APISource: r.Header.Get("X-Agent-Source"),
+		Title:            req.Title,
+		NotesDoc:         doc,
+		NotesHTML:        htmlStr,
+		NotesHTMLVersion: version,
+		Priority:         req.Priority,
+		DueAt:            req.DueAt,
+		Kind:             kind,
+		Section:          section,
+		Pinned:           req.Pinned,
+		Tags:             req.Tags,
+		Contexts:         req.Contexts,
+		Projects:         req.Projects,
+		Inbox:            false,
+		APISource:        r.Header.Get("X-Agent-Source"),
 	}
 
 	created, err := s.CreateItem(r.Context(), item)
@@ -394,14 +457,37 @@ func (h *apiHandler) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	if req.Title != nil {
 		item.Title = *req.Title
 	}
-	if req.NotesMD != nil {
-		item.NotesMD = *req.NotesMD
+	// Notes: if any input format is set, resolve via ingest and overwrite both
+	// notes_doc and notes_html (cache stays in sync). If none are set, leave
+	// the existing notes alone.
+	if req.NotesDoc != nil || req.NotesMD != nil || req.NotesHTML != nil {
+		var inDoc, inMD, inHTML string
+		if req.NotesDoc != nil {
+			inDoc = *req.NotesDoc
+		}
+		if req.NotesMD != nil {
+			inMD = *req.NotesMD
+		}
+		if req.NotesHTML != nil {
+			inHTML = *req.NotesHTML
+		}
+		doc, htmlStr, version, err := resolveNotesInput(inDoc, inMD, inHTML)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
+			return
+		}
+		item.NotesDoc = doc
+		item.NotesHTML = htmlStr
+		item.NotesHTMLVersion = version
 	}
 	if req.Priority.IsSet {
 		item.Priority = req.Priority.Value
 	}
 	if req.DueAt.IsSet {
 		item.DueAt = req.DueAt.Value
+	}
+	if req.Kind != nil {
+		item.Kind = *req.Kind
 	}
 	if req.Section != nil {
 		item.Section = *req.Section
@@ -561,14 +647,18 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(q.Get("page"))
 	pageSize, _ := strconv.Atoi(q.Get("page_size"))
 
-	typeFilter := q.Get("type")
-	if typeFilter == "" {
-		typeFilter = "all"
+	// Accept both `kind` (preferred) and legacy `type` for backward compat.
+	kindFilter := q.Get("kind")
+	if kindFilter == "" {
+		kindFilter = q.Get("type")
+	}
+	if kindFilter == "" {
+		kindFilter = "all"
 	}
 
 	req := store.SearchRequest{
 		Query:    q.Get("q"),
-		Type:     typeFilter,
+		Kind:     kindFilter,
 		Tags:     splitMultiParam(q["tags"]),
 		Contexts: splitMultiParam(q["contexts"]),
 		Projects: splitMultiParam(q["projects"]),

@@ -1,20 +1,20 @@
-# Todo App - Quick Start Guide
+# NIL Quick Start Guide
 
-## ✅ Your app is now working!
+## Running The App
 
 ### Running the App
 
 **Development Mode (recommended for testing):**
 ```bash
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
+cd /Users/chrispian/Projects-apps/nil
 wails dev
 ```
 
 **Production Build:**
 ```bash
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
+cd /Users/chrispian/Projects-apps/nil
 wails build
-open build/bin/todo-app.app
+open build/bin/NIL.app
 ```
 
 ## About the "Private APIs" Warning
@@ -47,14 +47,17 @@ For most developers, this warning can be safely ignored.
 ✅ Priority levels  
 ✅ Due dates  
 ✅ Rich text notes (TipTap editor)  
-✅ Theme customization  
+✅ Theme system  
 ✅ Keyboard shortcuts (⌘N for new)  
 
 ## Database
 
-Data is stored in: `./data/todo.db`
+The default vault database is created automatically on first run.
 
-The SQLite database is created automatically on first run.
+Default locations:
+- macOS: `~/Library/Application Support/Nil`
+- Linux: `~/.local/share/nil`
+- Windows: `%APPDATA%/Nil/data`
 
 ## Technology Stack
 
@@ -62,7 +65,7 @@ The SQLite database is created automatically on first run.
 - **Backend:** Go 1.24
 - **Database:** SQLite (modernc.org/sqlite with FTS5)
 - **Framework:** Wails v2
-- **UI:** Custom terminal-style theme with shadcn patterns
+- **UI:** Custom terminal-style theme with CSS variables
 
 ## Troubleshooting
 
@@ -79,13 +82,11 @@ npm install
 ```
 
 ### Database errors
-Delete `./data/todo.db` to reset the database.
+Move or delete the active vault database directory to reset local data.
 
 ## Next Steps
 
 1. **Run the app:** `wails dev`
-2. **Create a todo:** Press ⌘N or click "New"
+2. **Create an item:** Press `Cmd/Ctrl+N`
 3. **Search:** Use the search box with filters like `pri:A` or `+project`
-4. **Customize:** Click "Theme" to change colors
-
-Enjoy your todo app! 🎉
+4. **Open settings:** Click the gear icon to review tabs and app behavior

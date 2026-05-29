@@ -16,9 +16,48 @@ import (
 
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/contextcache"
+	"github.com/hollis-labs/nil/ingest"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
+
+// cliNotesHTMLVersion stamps the renderer version on items created/updated
+// through the CLI. Mirrors notesHTMLVersion in the root package.
+const cliNotesHTMLVersion = 1
+
+// cliResolveNotesInput converts CLI body input (markdown by default; HTML or
+// pre-built JSON via --format) into the (doc, html, version) tuple for storage.
+func cliResolveNotesInput(body, format string) (string, string, int, error) {
+	if strings.TrimSpace(body) == "" {
+		return "", "", 0, nil
+	}
+	switch strings.ToLower(format) {
+	case "", "md", "markdown":
+		doc, err := ingest.MarkdownToDoc(body)
+		if err != nil {
+			return "", "", 0, err
+		}
+		htmlStr, err := ingest.DocToHTML(doc)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, htmlStr, cliNotesHTMLVersion, nil
+	case "html":
+		doc, err := ingest.HTMLToDoc(body)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, body, cliNotesHTMLVersion, nil
+	case "json", "doc":
+		htmlStr, err := ingest.DocToHTML(body)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return body, htmlStr, cliNotesHTMLVersion, nil
+	default:
+		return "", "", 0, fmt.Errorf("unknown --format %q (want md|html|json)", format)
+	}
+}
 
 const cliVersion = "dev-snapshot"
 
@@ -184,7 +223,8 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	file := fs.String("file", "", "path to UTF-8 text/markdown file for the body")
 	bodyFlag := fs.String("body", "", "inline body text")
-	typeFlag := fs.String("type", "todo", "item type: todo|note")
+	formatFlag := fs.String("format", "md", "body format: md|html|json (default md)")
+	kindFlag := fs.String("kind", "todo", "item kind: todo|note|scratch (or registered kind)")
 	vaultID := fs.String("vault", "", "vault ID to store the item")
 	inbox := fs.Bool("inbox", false, "route to inbox even if --vault is set")
 	titleFlag := fs.String("title", "", "explicit title override")
@@ -220,14 +260,20 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	if title == "" {
 		die("add: title is required (pass as positional args or --title)")
 	}
+	doc, htmlStr, version, err := cliResolveNotesInput(body, *formatFlag)
+	if err != nil {
+		die("add: parse body: %v", err)
+	}
 	item := &store.Item{
-		Title:     title,
-		NotesMD:   body,
-		Type:      *typeFlag,
-		APISource: *source,
-		Tags:      splitCSV(*tags),
-		Contexts:  splitCSV(*contexts),
-		Projects:  splitCSV(*projects),
+		Title:            title,
+		NotesDoc:         doc,
+		NotesHTML:        htmlStr,
+		NotesHTMLVersion: version,
+		Kind:             *kindFlag,
+		APISource:        *source,
+		Tags:             splitCSV(*tags),
+		Contexts:         splitCSV(*contexts),
+		Projects:         splitCSV(*projects),
 	}
 	if *priority != "" {
 		p := strings.ToUpper(*priority)
@@ -291,7 +337,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 			Query:        *query,
 			PageSize:     *limit,
 			IncludeInbox: *includeInbox,
-			Type:         "all",
+			Kind:         "all",
 		}
 		switch view {
 		case "today":
@@ -301,9 +347,11 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 		case "high":
 			req.Priorities = []string{"A"}
 		case "notes":
-			req.Type = "note"
+			req.Kind = "note"
 		case "todos":
-			req.Type = "todo"
+			req.Kind = "todo"
+		case "scratch":
+			req.Kind = "scratch"
 		}
 		storeDest, err := selectVaultStore(env.mgr, *vaultID)
 		if err != nil {
@@ -437,7 +485,8 @@ func cmdImport(ctx context.Context, args []string, env *commandEnv) {
 	dir := fs.String("dir", "", "directory to import (required)")
 	dryRun := fs.Bool("dry-run", false, "scan without writing")
 	batchSize := fs.Int("batch-size", 100, "files per logical batch (informational)")
-	typeFlag := fs.String("type", "note", "default item type for imported files")
+	kindFlag := fs.String("kind", "note", "kind for imported files: todo|note|scratch")
+	formatFlag := fs.String("format", "md", "body format for imported files: md|html|json")
 	vaultID := fs.String("vault", "", "target vault id")
 	inbox := fs.Bool("inbox", true, "route items to inbox (default)")
 	tags := fs.String("tags", "", "tags to apply to every imported item")
@@ -486,14 +535,21 @@ func cmdImport(ctx context.Context, args []string, env *commandEnv) {
 		}
 		rel, _ := filepath.Rel(*dir, path)
 		title := strings.TrimSuffix(rel, filepath.Ext(rel))
+		doc, htmlStr, version, ierr := cliResolveNotesInput(body, *formatFlag)
+		if ierr != nil {
+			failed = append(failed, map[string]string{"path": path, "error": ierr.Error()})
+			return nil
+		}
 		item := &store.Item{
-			Title:     title,
-			NotesMD:   body,
-			Type:      *typeFlag,
-			APISource: "cli-import",
-			Tags:      append(append([]string{}, baseTags...), metaTags...),
-			Contexts:  append([]string{}, baseContexts...),
-			Projects:  append([]string{}, baseProjects...),
+			Title:            title,
+			NotesDoc:         doc,
+			NotesHTML:        htmlStr,
+			NotesHTMLVersion: version,
+			Kind:             *kindFlag,
+			APISource:        "cli-import",
+			Tags:             append(append([]string{}, baseTags...), metaTags...),
+			Contexts:         append([]string{}, baseContexts...),
+			Projects:         append([]string{}, baseProjects...),
 		}
 		if toInbox {
 			item.Inbox = true
@@ -820,16 +876,17 @@ func findCommand(name string) *command {
 func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	var (
-		source   = fs.String("source", "cli", "source label stored in api_source")
-		vaultID  = fs.String("vault", "", "vault ID to push to (omit for inbox)")
-		notes    = fs.String("notes", "", "notes_md HTML content")
-		itemType = fs.String("type", "todo", "item type: todo|note")
-		priority = fs.String("priority", "", "priority letter: A|B|C")
-		tags     = fs.String("tags", "", "comma-separated tags")
-		contexts = fs.String("contexts", "", "comma-separated contexts")
-		projects = fs.String("projects", "", "comma-separated projects")
-		due      = fs.String("due", "", "due date YYYY-MM-DD")
-		toInbox  = fs.Bool("inbox", false, "force route to inbox (default when no --vault)")
+		source     = fs.String("source", "cli", "source label stored in api_source")
+		vaultID    = fs.String("vault", "", "vault ID to push to (omit for inbox)")
+		notes      = fs.String("notes", "", "notes body (markdown by default; use --notes-format)")
+		notesFmt   = fs.String("notes-format", "md", "notes body format: md|html|json")
+		kindFlag   = fs.String("kind", "todo", "item kind: todo|note|scratch")
+		priority   = fs.String("priority", "", "priority letter: A|B|C")
+		tags       = fs.String("tags", "", "comma-separated tags")
+		contexts   = fs.String("contexts", "", "comma-separated contexts")
+		projects   = fs.String("projects", "", "comma-separated projects")
+		due        = fs.String("due", "", "due date YYYY-MM-DD")
+		toInbox    = fs.Bool("inbox", false, "force route to inbox (default when no --vault)")
 	)
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
@@ -838,14 +895,21 @@ func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	title := strings.Join(positional, " ")
 
+	doc, htmlStr, version, err := cliResolveNotesInput(*notes, *notesFmt)
+	if err != nil {
+		die("push: parse notes: %v", err)
+	}
+
 	item := &store.Item{
-		Title:     title,
-		NotesMD:   *notes,
-		Type:      *itemType,
-		APISource: *source,
-		Tags:      splitCSV(*tags),
-		Contexts:  splitCSV(*contexts),
-		Projects:  splitCSV(*projects),
+		Title:            title,
+		NotesDoc:         doc,
+		NotesHTML:        htmlStr,
+		NotesHTMLVersion: version,
+		Kind:             *kindFlag,
+		APISource:        *source,
+		Tags:             splitCSV(*tags),
+		Contexts:         splitCSV(*contexts),
+		Projects:         splitCSV(*projects),
 	}
 	if *priority != "" {
 		p := strings.ToUpper(*priority)
@@ -886,7 +950,7 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	var (
 		vaultID  = fs.String("vault", "", "vault ID to search (omit for active vault)")
-		itemType = fs.String("type", "all", "filter by type: todo|note|all")
+		kindFlag = fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
 		tags     = fs.String("tags", "", "comma-separated tags")
 		contexts = fs.String("contexts", "", "comma-separated contexts")
 		projects = fs.String("projects", "", "comma-separated projects")
@@ -900,9 +964,9 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	query := strings.Join(positional, " ")
 
-	t := *itemType
-	if t == "all" {
-		t = ""
+	k := *kindFlag
+	if k == "all" {
+		k = ""
 	}
 	req := store.SearchRequest{
 		Query:    query,
@@ -911,7 +975,7 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 		Projects: splitCSV(*projects),
 		Page:     *page,
 		PageSize: *pageSize,
-		Type:     t,
+		Kind:     k,
 	}
 
 	var s *store.Store

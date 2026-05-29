@@ -93,8 +93,8 @@ func BuildSnapshot(ctx context.Context, cfg *config.Config, mgr *vault.Manager) 
 			Docs:    []string{"README.md", "docs/CLI.md", "docs/QUICKSTART.md"},
 		},
 		Schema: SchemaInfo{
-			Tables: []string{"todos", "todo_projects", "todo_contexts", "todo_tags", "refs"},
-			Fields: []string{"title", "notes_md", "notes_text", "type", "priority", "due_at", "contexts", "projects", "tags", "inbox", "pinned", "api_source"},
+			Tables: []string{"todos", "todo_projects", "todo_contexts", "todo_tags", "refs", "kinds"},
+			Fields: []string{"title", "notes_doc", "notes_html", "notes_html_version", "kind", "priority", "due_at", "contexts", "projects", "tags", "inbox", "pinned", "api_source"},
 		},
 	}
 
@@ -201,8 +201,8 @@ func gatherVaultStats(ctx context.Context, s *store.Store) (VaultStats, error) {
 	if err != nil && err != sql.ErrNoRows {
 		return stats, err
 	}
-	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE type='todo'").Scan(&stats.Todos)
-	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE type='note'").Scan(&stats.Notes)
+	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE kind='todo'").Scan(&stats.Todos)
+	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE kind='note'").Scan(&stats.Notes)
 	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE completed=1").Scan(&stats.Completed)
 	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE archived=1").Scan(&stats.Archived)
 	_ = s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM todos WHERE completed=0 AND archived=0").Scan(&stats.Open)

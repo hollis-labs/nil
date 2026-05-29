@@ -4,14 +4,15 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 
 	feotel "github.com/hollis-labs/go-otel"
+	"github.com/hollis-labs/nil/ingest"
 	_ "modernc.org/sqlite"
 )
 
@@ -49,13 +50,15 @@ func stripHTML(s string) string {
 	return strings.TrimSpace(s)
 }
 
-const currentSchemaVersion = 6
+const currentSchemaVersion = 11
 
 type migration struct {
 	version int
 	sql     string
 }
 
+// Migrations v7-v10 use empty sql and are dispatched as inline blocks in
+// runMigrations (multi-statement, idempotency-aware).
 var migrations = []migration{
 	{
 		version: 1,
@@ -85,6 +88,11 @@ var migrations = []migration{
 		version: 6,
 		sql:     "ALTER TABLE todos ADD COLUMN notes_text TEXT DEFAULT ''",
 	},
+	{version: 7, sql: ""},
+	{version: 8, sql: ""},
+	{version: 9, sql: ""},
+	{version: 10, sql: ""},
+	{version: 11, sql: ""},
 }
 
 type Store struct {
@@ -142,6 +150,26 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 	err = db.QueryRowContext(ctx, "SELECT COALESCE(MAX(version), 0) FROM schema_version").Scan(&currentVersion)
 	if err != nil {
 		return err
+	}
+
+	// Fresh-install fast path: if schema_version is empty AND the latest
+	// columns/tables are all already present (schema.sql produced the final
+	// shape on the first run), skip every historical migration and just
+	// stamp the current version. This avoids the wasteful churn of v6/v8
+	// dropping and recreating todos_fts twice on a brand-new DB. Fresh
+	// installs also can't have any pre-existing notes_md content, so the
+	// v11 backfill is a no-op for them.
+	if currentVersion == 0 {
+		var hasNotesDoc, hasKind, hasKinds int
+		_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='notes_doc'").Scan(&hasNotesDoc)
+		_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='kind'").Scan(&hasKind)
+		_ = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='kinds'").Scan(&hasKinds)
+		if hasNotesDoc > 0 && hasKind > 0 && hasKinds > 0 {
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", currentSchemaVersion); err != nil {
+				return err
+			}
+			return nil
+		}
 	}
 
 	// Run pending migrations
@@ -274,6 +302,51 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			}
 			continue
 		}
+		if m.version == 7 {
+			if err := migrateV7(ctx, db); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
+		if m.version == 8 {
+			if err := migrateV8(ctx, db); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
+		if m.version == 9 {
+			if err := migrateV9(ctx, db); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
+		if m.version == 10 {
+			if err := migrateV10(ctx, db); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
+		if m.version == 11 {
+			if err := migrateV11(ctx, db); err != nil {
+				return err
+			}
+			if _, err := db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
 
 		// Run migration
 		_, err = db.ExecContext(ctx, m.sql)
@@ -288,6 +361,231 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	return nil
+}
+
+// migrateV7 adds notes_doc, notes_html, notes_html_version columns to todos.
+// Idempotent: skips if notes_doc already exists (fresh installs ran schema.sql first).
+func migrateV7(ctx context.Context, db *sql.DB) error {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='notes_doc'").Scan(&count); err == nil && count > 0 {
+		return nil
+	}
+	stmts := []string{
+		"ALTER TABLE todos ADD COLUMN notes_doc TEXT DEFAULT ''",
+		"ALTER TABLE todos ADD COLUMN notes_html TEXT DEFAULT ''",
+		"ALTER TABLE todos ADD COLUMN notes_html_version INTEGER NOT NULL DEFAULT 0",
+	}
+	for _, stmt := range stmts {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migration v7: %w", err)
+		}
+	}
+	return nil
+}
+
+// migrateV8 switches FTS5 from external-content (todos.notes_text) to
+// standalone (FTS5 stores its own copy). Drops the v6 triggers and the
+// todos.notes_text column. The application layer (CreateItem / UpdateItem
+// / DeleteItem) is responsible for keeping todos_fts in sync via
+// updateFTS / deleteFTS.
+// Idempotent: skips if notes_text column already gone.
+func migrateV8(ctx context.Context, db *sql.DB) error {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='notes_text'").Scan(&count); err == nil && count == 0 {
+		return nil
+	}
+	// 1. Drop existing FTS triggers (they reference notes_text).
+	for _, stmt := range []string{
+		"DROP TRIGGER IF EXISTS todos_ai",
+		"DROP TRIGGER IF EXISTS todos_ad",
+		"DROP TRIGGER IF EXISTS todos_au",
+	} {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migration v8 drop trigger: %w", err)
+		}
+	}
+	// 2. Drop the external-content FTS5 table.
+	if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS todos_fts"); err != nil {
+		return fmt.Errorf("migration v8 drop fts: %w", err)
+	}
+	// 3. Create new standalone FTS5 table.
+	if _, err := db.ExecContext(ctx, "CREATE VIRTUAL TABLE todos_fts USING fts5(title, notes_text)"); err != nil {
+		return fmt.Errorf("migration v8 create fts: %w", err)
+	}
+	// 4. Backfill FTS5 from current todos. notes_doc is empty at this stage
+	//    (the frontend backfill hasn't run yet); use stripHTML(notes_md) as
+	//    the plain-text source.
+	rows, err := db.QueryContext(ctx, "SELECT id, title, notes_md FROM todos")
+	if err != nil {
+		return fmt.Errorf("migration v8 backfill query: %w", err)
+	}
+	type ftsRow struct {
+		id      int64
+		title   string
+		notesMD string
+	}
+	var items []ftsRow
+	scanErrs := 0
+	for rows.Next() {
+		var r ftsRow
+		if err := rows.Scan(&r.id, &r.title, &r.notesMD); err != nil {
+			scanErrs++
+			fmt.Fprintf(os.Stderr, "migration v8: scan error on a todos row, skipping: %v\n", err)
+			continue
+		}
+		items = append(items, r)
+	}
+	rows.Close()
+	if scanErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v8: %d row(s) skipped due to scan errors; those rows will not be in the search index until they are next edited\n", scanErrs)
+	}
+	for _, r := range items {
+		text := stripHTML(r.notesMD)
+		if _, err := db.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", r.id, r.title, text); err != nil {
+			return fmt.Errorf("migration v8 backfill insert id=%d: %w", r.id, err)
+		}
+	}
+	// 5. Drop notes_text column from todos. SQLite 3.35+ supports DROP COLUMN.
+	if _, err := db.ExecContext(ctx, "ALTER TABLE todos DROP COLUMN notes_text"); err != nil {
+		return fmt.Errorf("migration v8 drop notes_text: %w", err)
+	}
+	return nil
+}
+
+// migrateV9 renames the todos.type column to todos.kind.
+// Idempotent: skips if kind already exists.
+func migrateV9(ctx context.Context, db *sql.DB) error {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='kind'").Scan(&count); err == nil && count > 0 {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, "ALTER TABLE todos RENAME COLUMN type TO kind"); err != nil {
+		return fmt.Errorf("migration v9 rename: %w", err)
+	}
+	return nil
+}
+
+// migrateV11 backfills notes_doc + notes_html for any row that still has
+// notes_md content but no notes_doc. Replaces the v1.3.0 frontend-driven
+// backfill, which failed silently for at least one user (the localStorage
+// "done" flag got set without rows actually converting). Running this on
+// the Go side, inside the migration sequence, means the work happens
+// deterministically as part of app startup and can't be skipped.
+//
+// Idempotent: only touches rows where notes_doc is empty/null. Safe to
+// re-run after partial completion.
+func migrateV11(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, `
+SELECT id, title, notes_md FROM todos
+WHERE notes_md IS NOT NULL AND notes_md != ''
+  AND (notes_doc IS NULL OR notes_doc = '')`)
+	if err != nil {
+		return fmt.Errorf("migration v11 query: %w", err)
+	}
+	type cand struct {
+		id      int64
+		title   string
+		notesMD string
+	}
+	var candidates []cand
+	scanErrs := 0
+	for rows.Next() {
+		var c cand
+		if err := rows.Scan(&c.id, &c.title, &c.notesMD); err != nil {
+			scanErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: scan error on a todos row, skipping: %v\n", err)
+			continue
+		}
+		candidates = append(candidates, c)
+	}
+	rows.Close()
+	if scanErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v11: %d row(s) skipped due to scan errors; their notes_md content will not be converted\n", scanErrs)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("migration v11 begin: %w", err)
+	}
+	commit := false
+	defer func() {
+		if !commit {
+			_ = tx.Rollback()
+		}
+	}()
+	convertErrs := 0
+	ftsErrs := 0
+	converted := 0
+	for _, c := range candidates {
+		// notes_md is TipTap HTML (v1.3.0 column-naming legacy). Convert to
+		// PM JSON via the ingest package; keep the original HTML as the cache.
+		doc, ierr := ingest.HTMLToDoc(c.notesMD)
+		if ierr != nil {
+			// Skip the row but record the failure. Failing the whole migration
+			// over one bad row would block startup; the row stays in its
+			// pre-backfill state and can be recovered via the nil-recover tool.
+			convertErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d HTML→doc conversion failed (skipping): %v\n", c.id, ierr)
+			continue
+		}
+		if _, uerr := tx.ExecContext(ctx, `
+UPDATE todos SET notes_doc = ?, notes_html = ?, notes_html_version = 1
+WHERE id = ?`, doc, c.notesMD, c.id); uerr != nil {
+			return fmt.Errorf("migration v11 update id=%d: %w", c.id, uerr)
+		}
+		// Refresh FTS5 to reflect the new plain-text projection. Failures
+		// here mean search will be stale for this row until the user next
+		// edits it — log but continue so a broken FTS index can't block the
+		// whole backfill.
+		plain, _ := ingest.DocToPlainText(doc)
+		if _, ferr := tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", c.id); ferr != nil {
+			ftsErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d FTS delete failed: %v\n", c.id, ferr)
+		}
+		if _, ferr := tx.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", c.id, c.title, plain); ferr != nil {
+			ftsErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d FTS insert failed: %v\n", c.id, ferr)
+		}
+		converted++
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("migration v11 commit: %w", err)
+	}
+	commit = true
+	if convertErrs > 0 || ftsErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v11 summary: %d converted, %d conversion errors, %d FTS errors\n",
+			converted, convertErrs, ftsErrs)
+	}
+	return nil
+}
+
+// migrateV10 creates the kinds registry table and seeds the three core kinds.
+// Idempotent: ensures the seed rows exist whether or not the table already did.
+func migrateV10(ctx context.Context, db *sql.DB) error {
+	createSQL := `CREATE TABLE IF NOT EXISTS kinds (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		display_name TEXT NOT NULL,
+		icon TEXT NOT NULL DEFAULT '',
+		default_view TEXT NOT NULL DEFAULT '',
+		plugin_id TEXT DEFAULT NULL,
+		is_core INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')),
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`
+	if _, err := db.ExecContext(ctx, createSQL); err != nil {
+		return fmt.Errorf("migration v10 create kinds: %w", err)
+	}
+	seedSQL := `INSERT OR IGNORE INTO kinds (name, display_name, icon, is_core) VALUES
+		('todo','Todo','check-square',1),
+		('note','Note','file-text',1),
+		('scratch','Scratch','edit',1)`
+	if _, err := db.ExecContext(ctx, seedSQL); err != nil {
+		return fmt.Errorf("migration v10 seed kinds: %w", err)
+	}
 	return nil
 }
 
@@ -381,7 +679,9 @@ func (s *Store) hydrate(ctx context.Context, t *Item) error {
 	return nil
 }
 
-// CreateTodo creates a todo with normalized links.
+// CreateItem inserts an item and writes its FTS5 entry. The caller supplies
+// notes_doc (PM JSON, source of truth) and optionally notes_html (write-time
+// render cache). FTS5 indexable text is derived from notes_doc.
 func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.create")
 	defer span.End()
@@ -389,16 +689,20 @@ func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	if t.Type == "" {
-		t.Type = "todo"
+	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	if err != nil {
+		return nil, err
 	}
+	t.Kind = kind
 	if strings.TrimSpace(t.Title) == "" {
 		t.Inbox = true
 	}
 	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_md, notes_text, section, pinned, type, inbox, api_source)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source, t.NotesMD, stripHTML(t.NotesMD), t.Section, t.Pinned, t.Type, t.Inbox, t.APISource,
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source,
+		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
+		t.Section, t.Pinned, t.Kind, t.Inbox, t.APISource,
 	)
 	if err != nil {
 		return nil, err
@@ -417,6 +721,16 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		return nil, err
 	}
 
+	if err := s.updateFTS(ctx, id, t.Title, derivePlainText(t.NotesDoc)); err != nil {
+		return nil, err
+	}
+	// Sync refs for any wikilinks present in notes_doc.
+	if refIDs := ingest.ExtractRefIDs(t.NotesDoc); len(refIDs) > 0 {
+		if err := s.UpdateRefs(ctx, id, refIDs); err != nil {
+			return nil, err
+		}
+	}
+
 	_ = s.hydrate(ctx, t)
 	return t, nil
 }
@@ -428,12 +742,16 @@ func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	if t.Type == "" {
-		t.Type = "todo"
+	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	if err != nil {
+		return err
 	}
-	_, err := s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_md=?, notes_text=?, section=?, pinned=?, type=?, inbox=? WHERE id=?`,
-		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.NotesMD, stripHTML(t.NotesMD), t.Section, t.Pinned, t.Type, t.Inbox, t.ID,
+	t.Kind = kind
+	_, err = s.DB.ExecContext(ctx, `
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_doc=?, notes_html=?, notes_html_version=?, section=?, pinned=?, kind=?, inbox=? WHERE id=?`,
+		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur,
+		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
+		t.Section, t.Pinned, t.Kind, t.Inbox, t.ID,
 	)
 	if err != nil {
 		return err
@@ -447,39 +765,17 @@ UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, thresho
 	if err := s.setLinks(ctx, "todo_tags", "tag_id", t.ID, t.Tags); err != nil {
 		return err
 	}
-	refIDs := ExtractRefIDs(t.NotesMD)
+	if err := s.updateFTS(ctx, t.ID, t.Title, derivePlainText(t.NotesDoc)); err != nil {
+		return err
+	}
+	refIDs := ingest.ExtractRefIDs(t.NotesDoc)
 	if err := s.UpdateRefs(ctx, t.ID, refIDs); err != nil {
 		return err
 	}
 	return nil
 }
 
-// ExtractRefIDs parses data-id attributes from wikilink spans in stored HTML.
-func ExtractRefIDs(html string) []int64 {
-	var ids []int64
-	seen := map[int64]bool{}
-	remaining := html
-	for {
-		idx := strings.Index(remaining, `data-id="`)
-		if idx < 0 {
-			break
-		}
-		rest := remaining[idx+9:]
-		end := strings.Index(rest, `"`)
-		if end < 0 {
-			break
-		}
-		idStr := rest[:end]
-		if id, err := strconv.ParseInt(idStr, 10, 64); err == nil && id > 0 && !seen[id] {
-			ids = append(ids, id)
-			seen[id] = true
-		}
-		remaining = rest[end:]
-	}
-	return ids
-}
-
-// GetTodo returns a single todo/note by ID.
+// GetItem returns a single item by ID.
 func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.get")
 	defer span.End()
@@ -487,22 +783,25 @@ func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
 	var t Item
 	var pri *string
 	var source sql.NullString
-	var notesMD sql.NullString
-	var notesText sql.NullString
+	var notesDoc, notesHTML sql.NullString
+	var notesHTMLVersion sql.NullInt64
 	var apiSource sql.NullString
 	err := s.DB.QueryRowContext(ctx, `
-SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_md, notes_text, section, pinned, type, inbox, api_source
+SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source
 FROM todos WHERE id=?`, id).Scan(
 		&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-		&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource,
+		&t.DueAt, &t.Threshold, &t.Recur, &source,
+		&notesDoc, &notesHTML, &notesHTMLVersion,
+		&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource,
 	)
 	if err != nil {
 		return nil, err
 	}
 	t.Priority = pri
 	t.Source = source.String
-	t.NotesMD = notesMD.String
-	t.NotesText = notesText.String
+	t.NotesDoc = notesDoc.String
+	t.NotesHTML = notesHTML.String
+	t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 	t.APISource = apiSource.String
 	if t.Section == "" {
 		t.Section = "anytime"
@@ -529,11 +828,11 @@ func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int6
 	return nil
 }
 
-// GetBackrefs returns all todos/notes that reference targetID.
+// GetBackrefs returns all items that reference targetID.
 func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
-       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source
+       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source
 FROM todos t JOIN refs r ON r.source_id = t.id
 WHERE r.target_id = ?
 ORDER BY t.updated_at DESC`, targetID)
@@ -547,18 +846,21 @@ ORDER BY t.updated_at DESC`, targetID)
 		var t Item
 		var pri *string
 		var source sql.NullString
-		var notesMD sql.NullString
-		var notesText sql.NullString
+		var notesDoc, notesHTML sql.NullString
+		var notesHTMLVersion sql.NullInt64
 		var apiSource sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
-			&t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &t.Section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+			&t.DueAt, &t.Threshold, &t.Recur, &source,
+			&notesDoc, &notesHTML, &notesHTMLVersion,
+			&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Source = source.String
-		t.NotesMD = notesMD.String
-		t.NotesText = notesText.String
+		t.NotesDoc = notesDoc.String
+		t.NotesHTML = notesHTML.String
+		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -587,8 +889,22 @@ func (s *Store) DeleteItem(ctx context.Context, id int64) error {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.delete")
 	defer span.End()
 
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id)
-	return err
+	// Wrap the row delete + FTS delete in a transaction so the two stay in
+	// sync — if either fails the whole operation rolls back and search won't
+	// reference a now-missing row (or vice versa).
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 type qparts struct {
@@ -611,14 +927,14 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		q.where = append(q.where, "t.inbox = 0")
 	}
 
-	// type filter (default to 'todo' for backward compatibility; "all" skips filter)
-	typeFilter := req.Type
-	if typeFilter == "" {
-		typeFilter = "todo"
+	// kind filter (default to 'todo' for backward compatibility; "all" skips filter)
+	kindFilter := req.Kind
+	if kindFilter == "" {
+		kindFilter = "todo"
 	}
-	if typeFilter != "all" {
-		q.where = append(q.where, "t.type = ?")
-		q.args = append(q.args, typeFilter)
+	if kindFilter != "all" {
+		q.where = append(q.where, "t.kind = ?")
+		q.args = append(q.args, kindFilter)
 	}
 
 	// statuses
@@ -713,7 +1029,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -731,18 +1047,21 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		var pri *string
 		var section string
 		var source sql.NullString
-		var notesMD sql.NullString
-		var notesText sql.NullString
+		var notesDoc, notesHTML sql.NullString
+		var notesHTMLVersion sql.NullInt64
 		var apiSource sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source,
+			&notesDoc, &notesHTML, &notesHTMLVersion,
+			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Section = section
 		t.Source = source.String
-		t.NotesMD = notesMD.String
-		t.NotesText = notesText.String
+		t.NotesDoc = notesDoc.String
+		t.NotesHTML = notesHTML.String
+		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -796,7 +1115,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_md, t.notes_text, t.section, t.pinned, t.type, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -814,18 +1133,21 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		var pri *string
 		var section string
 		var source sql.NullString
-		var notesMD sql.NullString
-		var notesText sql.NullString
+		var notesDoc, notesHTML sql.NullString
+		var notesHTMLVersion sql.NullInt64
 		var apiSource sql.NullString
-		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source, &notesMD, &notesText, &section, &t.Pinned, &t.Type, &t.Inbox, &apiSource)
+		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source,
+			&notesDoc, &notesHTML, &notesHTMLVersion,
+			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
 		if err != nil {
 			return []Item{}, err
 		}
 		t.Priority = pri
 		t.Section = section
 		t.Source = source.String
-		t.NotesMD = notesMD.String
-		t.NotesText = notesText.String
+		t.NotesDoc = notesDoc.String
+		t.NotesHTML = notesHTML.String
+		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
 		if t.Section == "" {
 			t.Section = "anytime"
@@ -858,14 +1180,15 @@ SELECT
     SUM(CASE WHEN archived=1 THEN 1 ELSE 0 END) AS archived,
     SUM(CASE WHEN completed=0 AND archived=0 AND due_at IS NOT NULL AND due_at < date('now') THEN 1 ELSE 0 END) AS overdue,
     SUM(CASE WHEN inbox=1 AND archived=0 THEN 1 ELSE 0 END) AS inbox,
-    SUM(CASE WHEN type='note' THEN 1 ELSE 0 END) AS notes,
-    SUM(CASE WHEN type='todo' THEN 1 ELSE 0 END) AS todos,
+    SUM(CASE WHEN kind='note' THEN 1 ELSE 0 END) AS notes,
+    SUM(CASE WHEN kind='todo' THEN 1 ELSE 0 END) AS todos,
+    SUM(CASE WHEN kind='scratch' THEN 1 ELSE 0 END) AS scratch,
     SUM(CASE WHEN section='now'     AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_now,
     SUM(CASE WHEN section='soon'    AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_soon,
     SUM(CASE WHEN section='anytime' AND inbox=0 AND archived=0 THEN 1 ELSE 0 END) AS by_anytime
 FROM todos
 `).Scan(&st.Total, &st.Open, &st.Completed, &st.Archived,
-		&st.Overdue, &st.Inbox, &st.Notes, &st.Todos,
+		&st.Overdue, &st.Inbox, &st.Notes, &st.Todos, &st.Scratch,
 		&st.BySection.Now, &st.BySection.Soon, &st.BySection.Anytime)
 	if err != nil {
 		return nil, err
@@ -953,3 +1276,100 @@ func (s *Store) GetFilterValues(ctx context.Context) (projects, contexts, tags [
 	rows.Close()
 	return
 }
+
+// updateFTS writes (or replaces) the FTS5 row for an item. Called after
+// CreateItem and UpdateItem since v8 dropped the trigger-based sync in favor
+// of standalone FTS5 with app-layer writes.
+func (s *Store) updateFTS(ctx context.Context, id int64, title, text string) error {
+	if _, err := s.DB.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id); err != nil {
+		return fmt.Errorf("updateFTS delete: %w", err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", id, title, text); err != nil {
+		return fmt.Errorf("updateFTS insert: %w", err)
+	}
+	return nil
+}
+
+// deleteFTS removes the FTS5 row for a deleted item.
+func (s *Store) deleteFTS(ctx context.Context, id int64) error {
+	_, err := s.DB.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id)
+	return err
+}
+
+// derivePlainText returns the text projection used for FTS5 indexing. Walks
+// the PM JSON doc tree concatenating text nodes; returns empty for an empty
+// or unparseable doc (FTS row will then match by title only).
+func derivePlainText(notesDoc string) string {
+	if notesDoc == "" {
+		return ""
+	}
+	text, err := ingest.DocToPlainText(notesDoc)
+	if err != nil {
+		return ""
+	}
+	return text
+}
+
+// IsValidKind returns true if the named kind exists in the kinds registry.
+// Validation lives at the Go boundary; the SQL layer does not enforce a FK
+// against the registry in this release (deferred to follow-up).
+func (s *Store) IsValidKind(ctx context.Context, name string) (bool, error) {
+	var count int
+	err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM kinds WHERE name = ?", name).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// ErrInvalidKind is returned by CreateItem / UpdateItem when the supplied
+// kind isn't in the kinds registry. Callers should surface this as a 4xx /
+// validation error rather than a 5xx.
+var ErrInvalidKind = errors.New("invalid kind: not in kinds registry")
+
+// validateKindOrDefault enforces that t.Kind matches a registered kind.
+// Empty kind is filled with "todo" as the canonical default. An unknown
+// non-empty kind is rejected outright — we'd rather block the write than
+// silently coerce, which would hide caller typos.
+func (s *Store) validateKindOrDefault(ctx context.Context, kind string) (string, error) {
+	if kind == "" {
+		kind = "todo"
+	}
+	ok, err := s.IsValidKind(ctx, kind)
+	if err != nil {
+		return "", fmt.Errorf("validate kind: %w", err)
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: %q", ErrInvalidKind, kind)
+	}
+	return kind, nil
+}
+
+// ListKinds returns all registered kinds (core first, then plugin-registered).
+func (s *Store) ListKinds(ctx context.Context) ([]Kind, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT id, name, display_name, icon, default_view, plugin_id, is_core, created_at, updated_at
+FROM kinds ORDER BY is_core DESC, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Kind
+	for rows.Next() {
+		var k Kind
+		var pluginID sql.NullString
+		if err := rows.Scan(&k.ID, &k.Name, &k.DisplayName, &k.Icon, &k.DefaultView, &pluginID, &k.IsCore, &k.CreatedAt, &k.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if pluginID.Valid {
+			s := pluginID.String
+			k.PluginID = &s
+		}
+		out = append(out, k)
+	}
+	if out == nil {
+		out = []Kind{}
+	}
+	return out, nil
+}
+

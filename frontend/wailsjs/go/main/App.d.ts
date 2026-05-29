@@ -13,6 +13,8 @@ export function CreateItemFromLine(arg1:string):Promise<store.Item>;
 
 export function CreateNoteFromLine(arg1:string):Promise<store.Item>;
 
+export function CreateScratchFromLine(arg1:string):Promise<store.Item>;
+
 export function CreateVault(arg1:string,arg2:string):Promise<config.Vault>;
 
 export function DeleteChatTemplate(arg1:string):Promise<void>;
@@ -58,6 +60,8 @@ export function HasDemoData():Promise<boolean>;
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
 export function ListChatTemplates():Promise<Array<chat.Template>>;
+
+export function ListKinds():Promise<Array<store.Kind>>;
 
 export function NeedsSetup():Promise<boolean>;
 

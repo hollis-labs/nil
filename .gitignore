@@ -2,6 +2,7 @@ build/bin
 node_modules
 frontend/dist
 test-build
+.DS_Store
 # Go build output
 /nil
 /nil-mcp
@@ -13,5 +14,7 @@ dist/
 build/windows/installer/tmp/
 # Local Claude Code settings (personal, not shared)
 .claude/settings.local.json
+# Generated package integrity checksum
+frontend/package.json.md5
 # Worktrees (managed by Forge)
 .worktrees/

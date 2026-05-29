@@ -337,7 +337,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
         ) : (
           <div ref={listRef} style={{ paddingRight: "20px" }}>
             {items.map((item, idx) => {
-              const summary = notesSummary(item.notes_md);
+              const summary = notesSummary(item.notes_html);
               const isFocused = focusedIndex === idx;
               const isSelected = selectedIds.has(item.id);
               const isConfirmingDelete = showDeleteConfirm === item.id;
@@ -372,10 +372,10 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
                       }
                     </div>
                     <span
-                      className={`badge ${item.type === "note" ? "info" : "warn"}`}
+                      className={`badge ${item.kind === "note" ? "info" : item.kind === "scratch" ? "dim" : "warn"}`}
                       style={{ fontSize: "10px", padding: "2px 5px", borderRadius: "3px", flexShrink: 0 }}
                     >
-                      {item.type === "note" ? "NOTE" : "TODO"}
+                      {(item.kind || "todo").toUpperCase()}
                     </span>
                     <span style={{
                       flex: 1, fontSize: "13px",

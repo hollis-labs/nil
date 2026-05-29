@@ -1,4 +1,4 @@
-# Cloud Sync Guide for NIL Todo App
+# Cloud Sync Guide for NIL
 
 ## Overview
 
@@ -17,15 +17,14 @@ NIL now uses SQLite WAL (Write-Ahead Logging) mode, which is optimized for cloud
 ```bash
 # 1. Quit the app completely
 
-# 2. Move database to Dropbox
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Dropbox/nil-todo-data
+# 2. Move your vault directory to Dropbox
+mv ~/Library/Application\\ Support/Nil ~/Dropbox/nil-data
 
 # 3. Create symbolic link
-ln -s ~/Dropbox/nil-todo-data data
+ln -s ~/Dropbox/nil-data ~/Library/Application\\ Support/Nil
 
 # 4. Verify the link
-ls -la data/
+ls -la ~/Library/Application\\ Support/
 
 # 5. Restart the app
 ```
@@ -36,14 +35,13 @@ ls -la data/
 # 1. Quit the app completely
 
 # 2. Move database to iCloud
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Library/Mobile\ Documents/com~apple~CloudDocs/nil-todo-data
+mv ~/Library/Application\\ Support/Nil ~/Library/Mobile\\ Documents/com~apple~CloudDocs/nil-data
 
 # 3. Create symbolic link
-ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/nil-todo-data data
+ln -s ~/Library/Mobile\\ Documents/com~apple~CloudDocs/nil-data ~/Library/Application\\ Support/Nil
 
 # 4. Verify the link
-ls -la data/
+ls -la ~/Library/Application\\ Support/
 
 # 5. Restart the app
 ```
@@ -54,14 +52,13 @@ ls -la data/
 # 1. Quit the app completely
 
 # 2. Move database to Google Drive
-cd /Users/chrispian/Downloads/todo-app-starter/todo-app
-mv data ~/Google\ Drive/My\ Drive/nil-todo-data
+mv ~/Library/Application\\ Support/Nil ~/Google\\ Drive/My\\ Drive/nil-data
 
 # 3. Create symbolic link
-ln -s ~/Google\ Drive/My\ Drive/nil-todo-data data
+ln -s ~/Google\\ Drive/My\\ Drive/nil-data ~/Library/Application\\ Support/Nil
 
 # 4. Verify the link
-ls -la data/
+ls -la ~/Library/Application\\ Support/
 
 # 5. Restart the app
 ```
@@ -70,7 +67,7 @@ ls -la data/
 
 ### WAL Mode Benefits
 
-- **Three files**: `todo.db`, `todo.db-wal`, `todo.db-shm`
+- **Three files**: `nil.db`, `nil.db-wal`, `nil.db-shm` or your named vault equivalents
 - **Better concurrency**: Readers don't block writers
 - **Safer for cloud sync**: Checkpoint operations are atomic
 - **Faster writes**: Changes written to WAL file first
@@ -102,8 +99,8 @@ ls -la data/
 **Solution**:
 1. Quit app on all computers
 2. Identify which conflict file is newer (check timestamps)
-3. Keep the newer file, rename it to `todo.db`
-4. Delete old `todo.db` and all `-wal`/`-shm` files
+3. Keep the newer database file and rename it back to your expected vault filename
+4. Delete the old primary `.db` file and its `-wal`/`-shm` companions
 5. Restart app
 
 ### Data loss concerns
@@ -116,9 +113,9 @@ Settings → Import/Export → Export to todo.txt
 
 ### Database Files
 
-- `todo.db`: Main database file
-- `todo.db-wal`: Write-Ahead Log (recent changes)
-- `todo.db-shm`: Shared memory file (index)
+- `*.db`: Main SQLite database file
+- `*.db-wal`: Write-Ahead Log (recent changes)
+- `*.db-shm`: Shared memory file (index)
 
 ### WAL Checkpointing
 

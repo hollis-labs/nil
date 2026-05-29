@@ -359,11 +359,12 @@ export namespace store {
 	    threshold_at?: string;
 	    recurrence_rule?: string;
 	    source_line: string;
-	    notes_md: string;
-	    notes_text?: string;
+	    notes_doc: string;
+	    notes_html: string;
+	    notes_html_version: number;
 	    section: string;
 	    pinned: boolean;
-	    type: string;
+	    kind: string;
 	    inbox: boolean;
 	    api_source?: string;
 	    projects: string[];
@@ -387,16 +388,45 @@ export namespace store {
 	        this.threshold_at = source["threshold_at"];
 	        this.recurrence_rule = source["recurrence_rule"];
 	        this.source_line = source["source_line"];
-	        this.notes_md = source["notes_md"];
-	        this.notes_text = source["notes_text"];
+	        this.notes_doc = source["notes_doc"];
+	        this.notes_html = source["notes_html"];
+	        this.notes_html_version = source["notes_html_version"];
 	        this.section = source["section"];
 	        this.pinned = source["pinned"];
-	        this.type = source["type"];
+	        this.kind = source["kind"];
 	        this.inbox = source["inbox"];
 	        this.api_source = source["api_source"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];
+	    }
+	}
+	export class Kind {
+	    id: number;
+	    name: string;
+	    display_name: string;
+	    icon: string;
+	    default_view: string;
+	    plugin_id?: string;
+	    is_core: boolean;
+	    created_at: string;
+	    updated_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Kind(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.display_name = source["display_name"];
+	        this.icon = source["icon"];
+	        this.default_view = source["default_view"];
+	        this.plugin_id = source["plugin_id"];
+	        this.is_core = source["is_core"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
 	    }
 	}
 	export class SearchRequest {
@@ -412,7 +442,7 @@ export namespace store {
 	    page_size: number;
 	    sort_by: string;
 	    sort_dir: string;
-	    type: string;
+	    kind: string;
 	    include_inbox: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -433,7 +463,7 @@ export namespace store {
 	        this.page_size = source["page_size"];
 	        this.sort_by = source["sort_by"];
 	        this.sort_dir = source["sort_dir"];
-	        this.type = source["type"];
+	        this.kind = source["kind"];
 	        this.include_inbox = source["include_inbox"];
 	    }
 	}

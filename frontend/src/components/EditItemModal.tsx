@@ -22,6 +22,10 @@ type Props = {
   onOpenChange: (v: boolean) => void;
   onSubmit: (line: string, extras: any) => void;
   onUpdate?: (todo: ItemRow) => void;
+  // onSaveStay: save without closing (Cmd+S). Edit mode only; parent should
+  // persist the item but leave the modal open. If omitted, Cmd+S falls back
+  // to the normal save-and-close path.
+  onSaveStay?: (todo: ItemRow) => Promise<void> | void;
   onDelete?: (id: number) => void;
   editItem?: ItemRow | null;
   defaultContexts?: string[];
@@ -32,7 +36,7 @@ type Props = {
   onRefClick?: (id: number, refType: string) => void;
 };
 
-export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, onDelete, editItem, defaultContexts = [], defaultProjects = [], defaultTags = [], isNoteMode = false, onConvertType, onRefClick }: Props) {
+export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, onSaveStay, onDelete, editItem, defaultContexts = [], defaultProjects = [], defaultTags = [], isNoteMode = false, onConvertType, onRefClick }: Props) {
   const isEditMode = !!editItem;
   const { settings, setSettings } = useSettings();
 
@@ -53,9 +57,22 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
   const [showClosePrompt, setShowClosePrompt] = React.useState(false);
   const [pendingBehavior, setPendingBehavior] = React.useState<'never' | 'always' | 'ask'>('ask');
+  // Fullscreen toggle: when true the modal expands to fill the viewport.
+  // Persists per session in component state only — intentionally not in
+  // localStorage so each editor opening starts in the default size.
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+  // Renderer version stamped on fresh saves. Mirrors the Go-side
+  // `notesHTMLVersion` constant; bump both together when the renderer (TipTap
+  // extensions, ingest.DocToHTML mapping) changes in a way that would
+  // produce different output for the same input.
+  const NOTES_HTML_VERSION = 1;
+
   const initialValuesRef = React.useRef<{
     line: string; priority: string; due: string;
-    tags: string[]; contexts: string[]; projects: string[]; notes_md: string;
+    tags: string[]; contexts: string[]; projects: string[];
+    // Stringified PM JSON; comparison is by JSON equality, which is stable
+    // for TipTap output because the editor normalizes its own doc shape.
+    notes_doc: string;
   } | null>(null);
 
   React.useEffect(() => {
@@ -133,30 +150,9 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         class: "tiptap-editor prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
         style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
       },
-      handlePaste: (_view, event) => {
-        const text = event.clipboardData?.getData('text/plain');
-        if (text && editor) {
-          if (text.match(/^#{1,6}\s|^\*\*|^##|^\-\s|^\*\s|^\d+\.\s/m)) {
-            event.preventDefault();
-            try {
-              let cleanedText = text
-                .split('\n')
-                .filter(line => {
-                  const trimmed = line.trim();
-                  return !(trimmed === '-' || trimmed === '*' || trimmed === '+' || /^\d+\.$/.test(trimmed));
-                })
-                .join('\n');
-
-              editor.commands.insertContent(cleanedText);
-              return true;
-            } catch (err) {
-              console.warn('Failed to paste markdown, using default paste:', err);
-              return false;
-            }
-          }
-        }
-        return false;
-      },
+      // No custom handlePaste — tiptap-markdown's transformPastedText handles
+      // markdown paste uniformly (headings, lists, inline emphasis, links,
+      // code), avoiding the first-line-only heuristic of the old custom code.
     },
   });
 
@@ -177,8 +173,23 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         setProjects(editItem.projects || []);
         setUseDefaults(false);
         if (editor) {
-          editor.commands.setContent(editItem.notes_md || "");
+          // Load the stored PM JSON directly. Empty doc falls back to
+          // setContent('') which TipTap renders as an empty paragraph.
+          if (editItem.notes_doc) {
+            try {
+              editor.commands.setContent(JSON.parse(editItem.notes_doc));
+            } catch {
+              editor.commands.setContent("");
+            }
+          } else {
+            editor.commands.setContent("");
+          }
         }
+        // Snapshot the editor's *normalized* doc as the initial-state baseline.
+        // Reading getJSON() after setContent() captures whatever shape TipTap
+        // produces, so isDirty() compares apples-to-apples and won't false-fire
+        // on round-trip drift (the bug this whole migration fixes).
+        const initialDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
         initialValuesRef.current = {
           line: editItem.title,
           priority: editItem.priority || "",
@@ -186,7 +197,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           tags: [...(editItem.tags || [])],
           contexts: [...(editItem.contexts || [])],
           projects: [...(editItem.projects || [])],
-          notes_md: editItem.notes_md || "",
+          notes_doc: initialDocJSON,
         };
       } else {
         // Priority order: session context > search filters > default tags
@@ -212,6 +223,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         if (editor) {
           editor.commands.setContent("");
         }
+        const initialDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
         initialValuesRef.current = {
           line: "",
           priority: activeSession?.priority || "",
@@ -219,7 +231,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           tags: [...mergedTags],
           contexts: [...mergedContexts],
           projects: [...mergedProjects],
-          notes_md: "",
+          notes_doc: initialDocJSON,
         };
       }
     }
@@ -235,24 +247,36 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && open) {
+        // Cmd+Enter: save AND close (existing behavior)
         e.preventDefault();
         handleSubmit(e as any);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S') && open) {
+        // Cmd+S: save in place (edit mode). Falls back to save+close in
+        // create mode or when no onSaveStay handler is wired.
+        e.preventDefault();
+        if (isEditMode && onSaveStay) {
+          doSaveStay();
+        } else {
+          handleSubmit(e as any);
+        }
+        return;
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, showClosePrompt, line, priority, due, tags, contexts, projects, editItem, onUpdate, onSubmit, settings]);
+  }, [open, showClosePrompt, line, priority, due, tags, contexts, projects, editItem, onUpdate, onSaveStay, onSubmit, settings, isEditMode]);
 
   if (!open) return null;
 
   function isDirty(): boolean {
     const initial = initialValuesRef.current;
     if (!initial) return false;
-    const currentNotes = editor?.getHTML() || '';
-    const norm = (s: string) => {
-      const t = s.trim();
-      return (!t || t === '<p></p>' || t === '<p><br></p>') ? '' : t;
-    };
+    // JSON-at-rest: compare PM doc trees as their canonical JSON. TipTap
+    // normalizes its own doc shape on setContent(), so getJSON() round-trips
+    // are byte-stable — no normalization layer needed here.
+    const currentDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
     const arrSame = (a: string[], b: string[]) =>
       JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
     return (
@@ -262,12 +286,16 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
       !arrSame(tags, initial.tags) ||
       !arrSame(contexts, initial.contexts) ||
       !arrSame(projects, initial.projects) ||
-      norm(currentNotes) !== norm(initial.notes_md)
+      currentDocJSON !== initial.notes_doc
     );
   }
 
   function doSave(forceInbox?: boolean) {
-    const notes_md = editor?.getHTML() || "";
+    // Send both: JSON is the source of truth, HTML is the write-time cache.
+    // Backend stores both directly (no Go-side rendering), keeping TipTap as
+    // the single source of HTML rendering for GUI-saved content.
+    const notes_doc = editor ? JSON.stringify(editor.getJSON()) : "";
+    const notes_html = editor?.getHTML() || "";
     let cleanTags = tags.map(t => t.replace(/^#/, ''));
     const cleanContexts = contexts.map(c => c.replace(/^@/, ''));
     const cleanProjects = projects.map(p => p.replace(/^\+/, ''));
@@ -277,7 +305,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
     if (isEditMode && editItem && onUpdate) {
       const updated: ItemRow = { ...editItem, title: line, tags: cleanTags, contexts: cleanContexts,
-        projects: cleanProjects, notes_md };
+        projects: cleanProjects, notes_doc, notes_html, notes_html_version: NOTES_HTML_VERSION };
       if (priority) updated.priority = priority; else delete updated.priority;
       if (due) updated.due_at = due; else delete updated.due_at;
       onUpdate(updated);
@@ -285,9 +313,51 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
       const extras: any = { tags: cleanTags, contexts: cleanContexts, projects: cleanProjects };
       if (priority) extras.priority = priority;
       if (due) extras.due = due;
-      if (notes_md) extras.notes_md = notes_md;
+      if (notes_doc) {
+        extras.notes_doc = notes_doc;
+        extras.notes_html = notes_html;
+        extras.notes_html_version = NOTES_HTML_VERSION;
+      }
       if (forceInbox) extras.inbox = true;
       onSubmit(line, extras);
+    }
+  }
+
+  // Save without closing. Edit mode only — refreshes the initial-state
+  // snapshot after the save so isDirty() correctly reports clean afterward.
+  async function doSaveStay() {
+    if (!isEditMode || !editItem || !onSaveStay) return;
+    const notes_doc = editor ? JSON.stringify(editor.getJSON()) : "";
+    const notes_html = editor?.getHTML() || "";
+    const cleanTags = tags.map(t => t.replace(/^#/, ''));
+    const cleanContexts = contexts.map(c => c.replace(/^@/, ''));
+    const cleanProjects = projects.map(p => p.replace(/^\+/, ''));
+    const updated: ItemRow = {
+      ...editItem,
+      title: line,
+      tags: cleanTags,
+      contexts: cleanContexts,
+      projects: cleanProjects,
+      notes_doc,
+      notes_html,
+      notes_html_version: NOTES_HTML_VERSION,
+    };
+    if (priority) updated.priority = priority; else delete updated.priority;
+    if (due) updated.due_at = due; else delete updated.due_at;
+    try {
+      await onSaveStay(updated);
+      // Re-baseline so the just-saved state reads as clean for isDirty().
+      initialValuesRef.current = {
+        line,
+        priority,
+        due,
+        tags: [...cleanTags],
+        contexts: [...cleanContexts],
+        projects: [...cleanProjects],
+        notes_doc,
+      };
+    } catch (err) {
+      console.error('Save (stay) failed:', err);
     }
   }
 
@@ -522,17 +592,21 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
       `}</style>
       <div style={modalStyle}>
         <div className="terminal-card" style={{
-        width: '720px',
-        maxWidth: '95vw',
-        height: '750px',
-        maxHeight: '750px',
+        // Fullscreen mode fills the viewport; default mode is the original
+        // 720x750 sizing but capped to the viewport so the footer can never
+        // be pushed off-screen on short windows.
+        width: isFullscreen ? '100vw' : '720px',
+        maxWidth: isFullscreen ? '100vw' : '95vw',
+        height: isFullscreen ? '100vh' : 'min(750px, calc(100vh - 40px))',
+        maxHeight: isFullscreen ? '100vh' : 'calc(100vh - 40px)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         position: 'relative',
+        borderRadius: isFullscreen ? 0 : undefined,
       }}>
         {/* Fixed Header */}
-        <div style={{ padding: '20px 20px 0 20px' }}>
+        <div style={{ padding: '20px 20px 0 20px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ fontWeight: 600 }}>{isEditMode ? (isNoteMode ? 'Edit Note' : 'Edit Todo') : (isNoteMode ? 'Add Note' : 'Add Todo')}</div>
@@ -557,41 +631,56 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
                 </button>
               )}
             </div>
-            <button
-              className="badge info"
-              onClick={() => requestClose()}
-              style={{
-                padding: '6px 9px',
-                fontSize: '12px',
-                borderRadius: '6px'
-              }}
-            >
-              Close
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                className="badge"
+                onClick={() => setIsFullscreen(v => !v)}
+                style={{
+                  padding: '6px 8px',
+                  fontSize: '12px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              >
+                {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              </button>
+              <button
+                className="badge info"
+                onClick={() => requestClose()}
+                style={{
+                  padding: '6px 9px',
+                  fontSize: '12px',
+                  borderRadius: '6px'
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Modal Body - NO SCROLLBAR
-            FIX: CustomScrollbar component was causing content to auto-scroll/jump when TipTap
-            markdown elements changed (e.g. typing # for headings, - for bullets).
-            Solution:
-            1. Removed CustomScrollbar wrapper (no scrollbar needed with 750px height)
-            2. Added overflow: 'hidden' to prevent scrolling
-            3. Added position: 'relative' to both outer and inner divs to anchor content in place
-            4. Added height: '100%' to inner div to lock positioning
-            This prevents the "jump to top" bug when typing markdown in the description editor.
+        {/* Modal Body
+            Scrolls vertically when content exceeds the available space between
+            the fixed header and fixed footer. Native browser scrollbar is fine
+            here — the previous CustomScrollbar caused a "jump to top" bug when
+            TipTap re-rendered for markdown shortcuts (# for headings, - for
+            bullets); native scroll behavior doesn't have that issue.
         */}
         <div style={{
           flex: 1,
           minHeight: 0,
-          overflow: 'hidden',
+          overflowY: 'auto',
+          overflowX: 'hidden',
           overflowAnchor: 'none',
           position: 'relative',
         }}>
           <div style={{
-            padding: '8px 20px 40px 20px',
+            padding: '8px 20px 16px 20px',
             overflowAnchor: 'none',
-            height: '100%',
             position: 'relative',
           }}>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1008,13 +1097,14 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
                 borderRadius: '6px',
                 background: 'var(--term-bg)',
                 overflow: 'hidden',
-                minHeight: '300px',
-                maxHeight: '300px'
+                // Grow with the viewport in fullscreen; capped in default mode.
+                minHeight: isFullscreen ? '60vh' : '300px',
+                maxHeight: isFullscreen ? '70vh' : '300px',
               }}>
                 <CustomScrollbar style={{
-                  height: '296px',
-                  minHeight: '296px',
-                  maxHeight: '296px',
+                  height: isFullscreen ? '70vh' : '296px',
+                  minHeight: isFullscreen ? '60vh' : '296px',
+                  maxHeight: isFullscreen ? '70vh' : '296px',
                   background: 'var(--term-bg)'
                 }}>
                   <div ref={editorContainerRef}>
@@ -1028,13 +1118,15 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
         </div>
 
-        {/* Fixed Footer */}
+        {/* Fixed Footer — pinned to the bottom of the card via flexShrink: 0
+            so a long body can scroll while the save button stays in view. */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 20px 20px 20px',
-          borderTop: '1px solid var(--term-border)'
+          borderTop: '1px solid var(--term-border)',
+          flexShrink: 0,
         }}>
           <div style={{ display: 'flex', gap: '8px' }}>
             {isEditMode && onDelete && !showDeleteConfirm && (
@@ -1053,7 +1145,26 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
             {!isEditMode && (
               <button type="button" className="badge" onClick={(e) => { e.preventDefault(); doSave(true); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }} title="Create and send to Inbox for later review">→ Inbox</button>
             )}
-            <button type="button" className="badge success" onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>{isEditMode ? 'Save' : 'Create'}</button>
+            {isEditMode && onSaveStay && (
+              <button
+                type="button"
+                className="badge"
+                onClick={(e) => { e.preventDefault(); doSaveStay(); }}
+                style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+                title="Save and keep editing (⌘S)"
+              >
+                Save
+              </button>
+            )}
+            <button
+              type="button"
+              className="badge success"
+              onClick={(e) => { e.preventDefault(); handleSubmit(e as any); }}
+              style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}
+              title={isEditMode ? 'Save and close (⌘↵)' : 'Create (⌘↵)'}
+            >
+              {isEditMode ? (onSaveStay ? 'Save & Close' : 'Save') : 'Create'}
+            </button>
           </div>
         </div>
 

@@ -17,7 +17,7 @@ function fmtShortDate(iso?: string): string {
 
 export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Props) {
   const [query, setQuery] = React.useState("");
-  const [typeFilter, setTypeFilter] = React.useState<"" | "todo" | "note">("");
+  const [typeFilter, setTypeFilter] = React.useState<"" | "todo" | "note" | "scratch">("");
   const [results, setResults] = React.useState<ItemRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [focusedIndex, setFocusedIndex] = React.useState(0);
@@ -38,7 +38,7 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
         page_size: 20,
         sort_by: "created_at",
         sort_dir: "desc",
-        type: type === "" ? "all" : type,
+        kind: type === "" ? "all" : type,
         include_inbox: false,
       } as any);
       setResults(Array.isArray(res) ? (res as ItemRow[]) : []);
@@ -110,10 +110,11 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
 
   if (!open) return null;
 
-  const filterChips: { label: string; value: "" | "todo" | "note" }[] = [
+  const filterChips: { label: string; value: "" | "todo" | "note" | "scratch" }[] = [
     { label: "All", value: "" },
     { label: "Todos", value: "todo" },
     { label: "Notes", value: "note" },
+    { label: "Scratch", value: "scratch" },
   ];
 
   return (
@@ -293,9 +294,9 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
                         minHeight: "48px",
                       }}
                     >
-                      {/* Type badge */}
+                      {/* Kind badge */}
                       <span
-                        className={`badge ${row.type === "note" ? "info" : "success"}`}
+                        className={`badge ${row.kind === "note" ? "info" : row.kind === "scratch" ? "dim" : "success"}`}
                         style={{
                           fontSize: "9px",
                           padding: "2px 5px",
@@ -307,7 +308,7 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
                           textAlign: "center",
                         }}
                       >
-                        {row.type === "note" ? "NOTE" : "TODO"}
+                        {(row.kind || "todo").toUpperCase()}
                       </span>
 
                       {/* Title */}
