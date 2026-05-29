@@ -3,7 +3,7 @@ import * as React from "react";
 type RefItem = {
   id: number;
   title: string;
-  type: string;
+  kind: string;
 };
 
 type Props = {
@@ -24,7 +24,7 @@ const WikilinkSuggestion = React.forwardRef<
   const selectItem = (index: number) => {
     const item = items[index];
     if (item) {
-      command({ id: item.id, label: item.title, refType: item.type });
+      command({ id: item.id, label: item.title, refType: item.kind });
     }
   };
 
@@ -90,16 +90,16 @@ const WikilinkSuggestion = React.forwardRef<
               fontWeight: 600,
               letterSpacing: "0.04em",
               flexShrink: 0,
-              background: item.type === "note"
+              background: item.kind === "note"
                 ? "rgba(96,165,250,0.25)"
                 : "rgba(74,222,128,0.25)",
-              color: item.type === "note"
+              color: item.kind === "note"
                 ? (index === selectedIndex ? "#000" : "var(--term-info)")
                 : (index === selectedIndex ? "#000" : "var(--term-success)"),
-              border: `1px solid ${item.type === "note" ? "var(--term-info)" : "var(--term-success)"}`,
+              border: `1px solid ${item.kind === "note" ? "var(--term-info)" : "var(--term-success)"}`,
             }}
           >
-            {item.type}
+            {item.kind}
           </span>
           <span
             style={{

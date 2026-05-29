@@ -7,14 +7,15 @@ import * as Backend from "../../wailsjs/go/main/App";
 type RefItem = {
   id: number;
   title: string;
-  type: string;
+  kind: string;
 };
 
 type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   todo: any;
-  onSave: (md: string) => void;
+  // onSave receives (notesDoc JSON, notesHTML cache) — caller persists both.
+  onSave: (notesDoc: string, notesHTML: string) => void;
   onRefClick?: (id: number, refType: string) => void;
 };
 
@@ -31,7 +32,7 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
 
   const editor = useEditor({
     extensions: [StarterKit, WikilinkExtension],
-    content: todo?.notes_md || "",
+    content: "",
     editorProps: {
       attributes: {
         class: "prose",
@@ -64,12 +65,21 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
 
   React.useEffect(() => {
     if (editor && open && todo) {
-      editor.commands.setContent(todo.notes_md || "");
+      // Load the stored PM doc (JSON). Empty falls back to a blank doc.
+      if (todo.notes_doc) {
+        try {
+          editor.commands.setContent(JSON.parse(todo.notes_doc));
+        } catch {
+          editor.commands.setContent("");
+        }
+      } else {
+        editor.commands.setContent("");
+      }
       setBacklinksExpanded(false);
       if (todo.id) {
         Backend.GetBackrefs(todo.id).then((results: any) => {
           setBacklinks(
-            (results || []).map((t: any) => ({ id: t.id, title: t.title, type: t.type || "todo" }))
+            (results || []).map((t: any) => ({ id: t.id, title: t.title, kind: t.kind || "todo" }))
           );
         }).catch(() => setBacklinks([]));
       }
@@ -89,8 +99,10 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
   if (!open) return null;
 
   function handleSave() {
+    // Send both — caller stamps both notes_doc (source of truth) and notes_html (cache).
+    const doc = editor ? JSON.stringify(editor.getJSON()) : "";
     const html = editor?.getHTML() || "";
-    onSave(html);
+    onSave(doc, html);
   }
 
   return (
@@ -142,7 +154,7 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
                 {backlinks.map((bl) => (
                   <button
                     key={bl.id}
-                    onClick={() => onRefClick?.(bl.id, bl.type)}
+                    onClick={() => onRefClick?.(bl.id, bl.kind)}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
@@ -151,15 +163,15 @@ export default function NotesModal({ open, onOpenChange, todo, onSave, onRefClic
                       borderRadius: "4px",
                       fontSize: "12px",
                       cursor: "pointer",
-                      background: bl.type === "note"
+                      background: bl.kind === "note"
                         ? "rgba(96,165,250,0.12)"
                         : "rgba(74,222,128,0.12)",
-                      color: bl.type === "note" ? "var(--term-info)" : "var(--term-success)",
-                      border: `1px solid ${bl.type === "note" ? "var(--term-info)" : "var(--term-success)"}`,
+                      color: bl.kind === "note" ? "var(--term-info)" : "var(--term-success)",
+                      border: `1px solid ${bl.kind === "note" ? "var(--term-info)" : "var(--term-success)"}`,
                       fontFamily: "monospace",
                     }}
                   >
-                    <span style={{ fontSize: "10px", opacity: 0.7 }}>{bl.type}</span>
+                    <span style={{ fontSize: "10px", opacity: 0.7 }}>{bl.kind}</span>
                     {bl.title}
                   </button>
                 ))}

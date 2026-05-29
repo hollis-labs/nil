@@ -19,7 +19,7 @@ import RadialMenuWrapper from "@/components/RadialMenuWrapper";
 import MetaModal from "@/components/MetaModal";
 import { CopyrightFooter } from "@/components/CopyrightFooter";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Search, Target, Power, HelpCircle, FileText, CheckSquare } from "lucide-react";
+import { Settings, Plus, Search, Target, Power, HelpCircle, FileText, CheckSquare, Layers } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
@@ -28,7 +28,7 @@ import { config } from "../../wailsjs/go/models";
 import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
-type AppMode = 'todos' | 'notes' | 'inbox';
+type AppMode = 'todos' | 'notes' | 'all' | 'inbox';
 
 function Inner() {
   const [allRows, setAllRows] = React.useState<ItemRow[]>([]);
@@ -80,6 +80,9 @@ function Inner() {
   React.useEffect(() => {
     localStorage.setItem('nil.viewMode', viewMode);
   }, [viewMode]);
+  // Note: notes_md → notes_doc backfill is handled server-side by migration
+  // v11 in store/store.go. The v1.3.0 frontend backfill hook was removed
+  // after a silent-failure bug — see CHANGELOG.
 
   React.useEffect(() => {
     // Don't persist inbox mode
@@ -301,8 +304,12 @@ function Inner() {
       // Use explicit status filters if provided, otherwise let frontend handle filtering
       // Backend combines multiple statuses with AND (not OR), so we can only use single statuses
       const isNotesMode = appMode === 'notes';
-      const statusesToSearch = isNotesMode
-        ? [] // Notes don't have completion state, fetch all
+      const isAllMode = appMode === 'all';
+      // Notes and All modes fetch every status (notes don't have completion;
+      // All mixes kinds so a single status filter is too coarse). Todos mode
+      // defaults to 'open' when no explicit status was queried.
+      const statusesToSearch = (isNotesMode || isAllMode)
+        ? []
         : (merged.statuses.length > 0 ? merged.statuses : ['open']);
 
       const req: any = {
@@ -312,7 +319,7 @@ function Inner() {
         sort_by: "created_at",
         sort_dir: "desc",
         statuses: statusesToSearch,
-        type: isNotesMode ? 'note' : 'todo'
+        kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo')
       };
 
       // Only include filter arrays if they have values
@@ -344,7 +351,7 @@ function Inner() {
           for (const kw of merged.negativeKeywords) {
             const kwLower = kw.toLowerCase();
             if (todo.title?.toLowerCase().includes(kwLower) ||
-                todo.notes_md?.toLowerCase().includes(kwLower)) {
+                todo.notes_html?.toLowerCase().includes(kwLower)) {
               return false;
             }
           }
@@ -480,10 +487,12 @@ function Inner() {
         projects: todo.projects || [],
         contexts: todo.contexts || [],
         tags: todo.tags || [],
-        notes_md: todo.notes_md,
+        notes_doc: todo.notes_doc,
+        notes_html: todo.notes_html,
+        notes_html_version: todo.notes_html_version,
         section: todo.section || "anytime",
         pinned: todo.pinned,
-        type: todo.type,
+        kind: todo.kind,
       };
       setNotesOpen(false);
       setNotesItem(null);
@@ -493,9 +502,14 @@ function Inner() {
       console.error("Failed to open linked item:", err);
     }
   }
-  async function handleSaveNotes(md: string) {
+  async function handleSaveNotes(notesDoc: string, notesHTML: string) {
     if (!notesItem) return;
-    await Backend.UpdateItem({ ...notesItem, notes_md: md } as any);
+    await Backend.UpdateItem({
+      ...notesItem,
+      notes_doc: notesDoc,
+      notes_html: notesHTML,
+      notes_html_version: 1,
+    } as any);
     setNotesOpen(false); setNotesItem(null); runSearch();
   }
   async function handleQuickAdd(line: string, extras: any) {
@@ -508,7 +522,9 @@ function Inner() {
       projects: extras.projects?.length ? extras.projects : created.projects,
       contexts: extras.contexts?.length ? extras.contexts : created.contexts,
       tags: extras.tags?.length ? extras.tags : created.tags,
-      notes_md: extras.notes_md || created.notes_md,
+      notes_doc: extras.notes_doc ?? created.notes_doc,
+      notes_html: extras.notes_html ?? created.notes_html,
+      notes_html_version: extras.notes_html_version ?? created.notes_html_version,
       inbox: extras.inbox ? true : created.inbox,
     };
     await Backend.UpdateItem(merged as any);
@@ -523,7 +539,9 @@ function Inner() {
       projects: extras.projects?.length ? extras.projects : created.projects,
       contexts: extras.contexts?.length ? extras.contexts : created.contexts,
       tags: extras.tags?.length ? extras.tags : created.tags,
-      notes_md: extras.notes_md || created.notes_md,
+      notes_doc: extras.notes_doc ?? created.notes_doc,
+      notes_html: extras.notes_html ?? created.notes_html,
+      notes_html_version: extras.notes_html_version ?? created.notes_html_version,
       inbox: extras.inbox ? true : created.inbox,
     };
     await Backend.UpdateItem(merged as any);
@@ -544,8 +562,17 @@ function Inner() {
     runSearch();
   }
 
+  // Save-in-place handler for Cmd+S / Save button. Updates the row and
+  // refreshes the list, but leaves the modal open. The modal itself
+  // re-baselines its dirty-check snapshot after we return.
+  async function handleUpdateItemStay(todo: ItemRow) {
+    await Backend.UpdateItem(todo as any);
+    setEditItem(todo);
+    runSearch();
+  }
+
   async function handleCloneItem(todo: ItemRow) {
-    const isNote = todo.type === 'note';
+    const isNote = todo.kind === 'note';
     const created = isNote
       ? await Backend.CreateNoteFromLine(todo.title)
       : await Backend.CreateItemFromLine(todo.title);
@@ -557,7 +584,9 @@ function Inner() {
       projects: todo.projects,
       contexts: todo.contexts,
       tags: todo.tags,
-      notes_md: todo.notes_md,
+      notes_doc: todo.notes_doc,
+      notes_html: todo.notes_html,
+      notes_html_version: todo.notes_html_version,
       section: todo.section,
     };
     await Backend.UpdateItem(cloned as any);
@@ -580,10 +609,10 @@ function Inner() {
   }
 
   async function handleConvertType(todo: ItemRow) {
-    const newType = todo.type === 'note' ? 'todo' : 'note';
-    const label = newType === 'note' ? 'Converted to Note!' : 'Converted to Todo!';
+    const newKind = todo.kind === 'note' ? 'todo' : 'note';
+    const label = newKind === 'note' ? 'Converted to Note!' : 'Converted to Todo!';
     animateAction(todo.id, label, async () => {
-      await Backend.UpdateItem({ ...todo, type: newType } as any);
+      await Backend.UpdateItem({ ...todo, kind: newKind } as any);
       runSearch();
     }, false);
   }
@@ -638,14 +667,15 @@ function Inner() {
       // Force refresh the entire list
       try {
         const isNotesMode = appMode === 'notes';
+        const isAllMode = appMode === 'all';
         const req: any = {
           query: '',
           page: 0,
           page_size: 500,
           sort_by: 'created_at',
           sort_dir: 'desc',
-          statuses: isNotesMode ? [] : ['open'],
-          type: isNotesMode ? 'note' : 'todo'
+          statuses: (isNotesMode || isAllMode) ? [] : ['open'],
+          kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo')
         };
         let allResults = await Backend.Search(req);
         if (!isNotesMode && settings.showCompleted) {
@@ -1052,7 +1082,11 @@ function Inner() {
                 }}
                 onClick={() => {
                   if (!appModeLPFired.current) {
-                    setAppMode(appMode === 'todos' ? 'notes' : 'todos');
+                    // 3-cycle: todos → notes → all → todos
+                    const next: AppMode = appMode === 'todos' ? 'notes'
+                                       : appMode === 'notes' ? 'all'
+                                       : 'todos';
+                    setAppMode(next);
                   }
                   appModeLPFired.current = false;
                 }}
@@ -1067,17 +1101,26 @@ function Inner() {
                   cursor: 'pointer',
                   userSelect: 'none'
                 }}
-                title={appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)' : 'Switch to Items (long-press for tab settings)'}
+                title={
+                  appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)'
+                  : appMode === 'notes' ? 'Switch to All (long-press for tab settings)'
+                  : 'Switch to Items (long-press for tab settings)'
+                }
             >
               {appMode === 'todos' ? (
                 <>
                   <CheckSquare size={12} />
                   Items
                 </>
-              ) : (
+              ) : appMode === 'notes' ? (
                 <>
                   <FileText size={12} />
                   Notes
+                </>
+              ) : (
+                <>
+                  <Layers size={12} />
+                  All
                 </>
               )}
             </button>
@@ -1309,12 +1352,13 @@ function Inner() {
         onOpenChange={(v) => { setQuickOpen(v); if (!v) setEditItem(null); }}
         onSubmit={appMode === 'notes' ? handleQuickAddNote : handleQuickAdd}
         onUpdate={handleUpdateItem}
+        onSaveStay={handleUpdateItemStay}
         onDelete={handleDeleteTodo}
         editItem={editItem}
         defaultContexts={defaultNewTodoFilters.contexts}
         defaultProjects={defaultNewTodoFilters.projects}
         defaultTags={defaultNewTodoFilters.tags}
-        isNoteMode={editItem ? editItem.type === 'note' : appMode === 'notes'}
+        isNoteMode={editItem ? editItem.kind === 'note' : appMode === 'notes'}
         onConvertType={(todo) => {
           handleConvertType(todo);
           setQuickOpen(false);
@@ -1361,7 +1405,7 @@ function Inner() {
         onOpenChange={setQuickSearchOpen}
         onOpenItem={(row) => {
           setQuickSearchOpen(false);
-          if (row.type === 'note') {
+          if (row.kind === 'note') {
             setNotesItem(row);
             setNotesOpen(true);
           } else {

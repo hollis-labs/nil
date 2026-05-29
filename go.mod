@@ -5,6 +5,8 @@ go 1.26.1
 require (
 	github.com/hollis-labs/go-otel v0.0.2
 	github.com/wailsapp/wails/v2 v2.10.2
+	github.com/yuin/goldmark v1.8.2
+	golang.org/x/net v0.50.0
 	modernc.org/sqlite v1.39.1
 )
 
@@ -50,7 +52,6 @@ require (
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/hollis-labs/nil/store"
 )
 
@@ -92,7 +93,7 @@ func (r *ActionRunner) Approve(
 	switch p.ActionType {
 	case "create":
 		item := p.Payload
-		item.Type = p.ItemType
+		item.Kind = p.ItemType
 		created, err := vaultStore.CreateItem(ctx, &item)
 		if err != nil {
 			execErr = err

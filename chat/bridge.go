@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/hollis-labs/nil/store"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/store"
 )
 
 const claudeAPIURL = "https://api.anthropic.com/v1/messages"
@@ -553,7 +555,7 @@ func (b *Bridge) executeSearchVault(ctx context.Context, inputJSON json.RawMessa
 
 	req := store.SearchRequest{
 		Query:      input.Query,
-		Type:       itemType,
+		Kind:       itemType,
 		Statuses:   input.Statuses,
 		Priorities: input.Priorities,
 		Projects:   input.Projects,
@@ -600,13 +602,13 @@ func (b *Bridge) executeSearchVault(ctx context.Context, inputJSON json.RawMessa
 		if r.DueAt != nil {
 			dueAt = *r.DueAt
 		}
-		notes := r.NotesText
+		notes, _ := ingest.DocToPlainText(r.NotesDoc)
 		if len(notes) > 400 {
 			notes = notes[:400] + "…"
 		}
 		slim = append(slim, slimItem{
 			ID:        r.ID,
-			Type:      r.Type,
+			Type:      r.Kind,
 			Title:     r.Title,
 			Priority:  priority,
 			Section:   r.Section,
@@ -649,9 +651,10 @@ func (b *Bridge) executeGetItem(ctx context.Context, inputJSON json.RawMessage, 
 	if item.DueAt != nil {
 		dueAt = *item.DueAt
 	}
+	notesText, _ := ingest.DocToPlainText(item.NotesDoc)
 	out, _ := json.Marshal(map[string]any{
 		"id":         item.ID,
-		"type":       item.Type,
+		"type":       item.Kind,
 		"title":      item.Title,
 		"priority":   priority,
 		"section":    item.Section,
@@ -661,7 +664,7 @@ func (b *Bridge) executeGetItem(ctx context.Context, inputJSON json.RawMessage, 
 		"projects":   item.Projects,
 		"contexts":   item.Contexts,
 		"tags":       item.Tags,
-		"notes":      item.NotesText,
+		"notes":      notesText,
 		"created_at": item.CreatedAt,
 		"updated_at": item.UpdatedAt,
 	})
@@ -736,15 +739,26 @@ func (b *Bridge) executeCreateItem(ctx context.Context, inputJSON json.RawMessag
 		p := input.Priority
 		pri = &p
 	}
+	// AI passes markdown in the "notes" field; convert to PM JSON before storing.
+	notesDoc, err := ingest.MarkdownToDoc(input.Notes)
+	if err != nil {
+		return fmt.Sprintf(`{"error": "convert notes: %s"}`, err.Error())
+	}
+	notesHTML, err := ingest.DocToHTML(notesDoc)
+	if err != nil {
+		return fmt.Sprintf(`{"error": "render notes: %s"}`, err.Error())
+	}
 	item := &store.Item{
-		Title:    input.Title,
-		Type:     itemType,
-		Section:  section,
-		Priority: pri,
-		NotesMD:  input.Notes,
-		Projects: input.Projects,
-		Contexts: input.Contexts,
-		Tags:     input.Tags,
+		Title:            input.Title,
+		Kind:             itemType,
+		Section:          section,
+		Priority:         pri,
+		NotesDoc:         notesDoc,
+		NotesHTML:        notesHTML,
+		NotesHTMLVersion: 1,
+		Projects:         input.Projects,
+		Contexts:         input.Contexts,
+		Tags:             input.Tags,
 	}
 	created, err := st.CreateItem(ctx, item)
 	if err != nil {
@@ -753,7 +767,7 @@ func (b *Bridge) executeCreateItem(ctx context.Context, inputJSON json.RawMessag
 	out, _ := json.Marshal(map[string]any{
 		"id":         created.ID,
 		"title":      created.Title,
-		"type":       created.Type,
+		"type":       created.Kind,
 		"section":    created.Section,
 		"created_at": created.CreatedAt,
 	})

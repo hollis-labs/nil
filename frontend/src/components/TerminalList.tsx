@@ -9,15 +9,19 @@ export type ItemRow = {
   due_at?: string; created_at?: string; threshold_at?: string;
   completed: boolean; archived: boolean;
   projects: string[]; contexts: string[]; tags: string[];
-  notes_md?: string;
+  notes_doc?: string;  // TipTap PM JSON (source of truth)
+  notes_html?: string; // write-time render cache (for previews)
+  notes_html_version?: number;
   section: string; // now, soon, anytime
   pinned?: boolean;
-  type?: string; // 'todo' | 'note'
+  kind?: string; // 'todo' | 'note' | 'scratch' (kinds registry)
   inbox?: boolean;
 };
 
 type ViewMode = 'scope' | 'date';
-type AppMode = 'todos' | 'notes';
+// 'all' renders with the todos layout (single mixed list); the kind badge
+// on each row is up to the consumer to surface if it matters.
+type AppMode = 'todos' | 'notes' | 'all';
 
 function fmtDateLabel(iso?: string) {
   const d = iso ? new Date(iso) : new Date();
@@ -539,7 +543,7 @@ export default function TerminalList({ rows, onToggle, onMoveSection, onDelete, 
             {r.contexts.map((c: string) => `@${c}`).join(" ")}
           </span>
         </div>
-        {r.notes_md && (
+        {r.notes_html && (
           <div style={{
             fontSize: '11px',
             color: 'var(--term-dim)',
@@ -550,7 +554,7 @@ export default function TerminalList({ rows, onToggle, onMoveSection, onDelete, 
             whiteSpace: 'nowrap',
             maxWidth: '500px'
           }}>
-            {stripHtml(r.notes_md).slice(0, 80)}
+            {stripHtml(r.notes_html).slice(0, 80)}
           </div>
         )}
         <div className="meta" style={{ fontSize: '11px' }}>

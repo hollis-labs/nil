@@ -128,7 +128,7 @@ export default function RadialMenuWrapper({
     }
   };
 
-  const isNote = todo.type === 'note';
+  const isNote = todo.kind === 'note';
 
   const mainMenuItems = isNote
     ? [

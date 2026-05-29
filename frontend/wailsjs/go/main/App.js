@@ -18,6 +18,10 @@ export function CreateNoteFromLine(arg1) {
   return window['go']['main']['App']['CreateNoteFromLine'](arg1);
 }
 
+export function CreateScratchFromLine(arg1) {
+  return window['go']['main']['App']['CreateScratchFromLine'](arg1);
+}
+
 export function CreateVault(arg1, arg2) {
   return window['go']['main']['App']['CreateVault'](arg1, arg2);
 }
@@ -108,6 +112,10 @@ export function ImportTodoTxt(arg1) {
 
 export function ListChatTemplates() {
   return window['go']['main']['App']['ListChatTemplates']();
+}
+
+export function ListKinds() {
+  return window['go']['main']['App']['ListKinds']();
 }
 
 export function NeedsSetup() {

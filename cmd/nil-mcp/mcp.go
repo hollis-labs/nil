@@ -79,7 +79,7 @@ type contentItem struct {
 
 type argsSearch struct {
 	Q        string   `json:"q"`
-	Type     string   `json:"type"`
+	Kind     string   `json:"kind"`
 	Tags     []string `json:"tags"`
 	Contexts []string `json:"contexts"`
 	Projects []string `json:"projects"`
@@ -93,30 +93,38 @@ type argsGetItem struct {
 	VaultID string `json:"vault_id"`
 }
 
+// Notes input on create/update accepts exactly one of notes_doc / notes_md /
+// notes_html. The HTTP API does the conversion server-side via ingest;
+// MCP just forwards whichever field is set.
 type argsCreateItem struct {
-	Title    string   `json:"title"`
-	Type     string   `json:"type"`
-	NotesMD  string   `json:"notes_md"`
-	Priority string   `json:"priority"`
-	DueAt    string   `json:"due_at"`
-	Section  string   `json:"section"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
-	VaultID  string   `json:"vault_id"`
+	Title     string   `json:"title"`
+	Kind      string   `json:"kind"`
+	NotesDoc  string   `json:"notes_doc"`
+	NotesMD   string   `json:"notes_md"`
+	NotesHTML string   `json:"notes_html"`
+	Priority  string   `json:"priority"`
+	DueAt     string   `json:"due_at"`
+	Section   string   `json:"section"`
+	Tags      []string `json:"tags"`
+	Contexts  []string `json:"contexts"`
+	Projects  []string `json:"projects"`
+	VaultID   string   `json:"vault_id"`
 }
 
 type argsUpdateItem struct {
-	ID       int      `json:"id"`
-	Title    string   `json:"title"`
-	NotesMD  string   `json:"notes_md"`
-	Priority string   `json:"priority"`
-	DueAt    string   `json:"due_at"`
-	Section  string   `json:"section"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
-	VaultID  string   `json:"vault_id"`
+	ID        int      `json:"id"`
+	Title     string   `json:"title"`
+	Kind      string   `json:"kind"`
+	NotesDoc  string   `json:"notes_doc"`
+	NotesMD   string   `json:"notes_md"`
+	NotesHTML string   `json:"notes_html"`
+	Priority  string   `json:"priority"`
+	DueAt     string   `json:"due_at"`
+	Section   string   `json:"section"`
+	Tags      []string `json:"tags"`
+	Contexts  []string `json:"contexts"`
+	Projects  []string `json:"projects"`
+	VaultID   string   `json:"vault_id"`
 }
 
 type argsDeleteItem struct {
@@ -143,14 +151,16 @@ type argsListInbox struct {
 }
 
 type argsCreateInbox struct {
-	Title    string   `json:"title"`
-	NotesMD  string   `json:"notes_md"`
-	Type     string   `json:"type"`
-	Priority string   `json:"priority"`
-	DueAt    string   `json:"due_at"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
+	Title     string   `json:"title"`
+	NotesDoc  string   `json:"notes_doc"`
+	NotesMD   string   `json:"notes_md"`
+	NotesHTML string   `json:"notes_html"`
+	Kind      string   `json:"kind"`
+	Priority  string   `json:"priority"`
+	DueAt     string   `json:"due_at"`
+	Tags      []string `json:"tags"`
+	Contexts  []string `json:"contexts"`
+	Projects  []string `json:"projects"`
 }
 
 type argsProcessInbox struct {
@@ -426,8 +436,8 @@ func (s *Server) toolSearch(args json.RawMessage) (string, error) {
 	if a.Q != "" {
 		q.Set("q", a.Q)
 	}
-	if a.Type != "" && a.Type != "all" {
-		q.Set("type", a.Type)
+	if a.Kind != "" && a.Kind != "all" {
+		q.Set("kind", a.Kind)
 	}
 	for _, t := range a.Tags {
 		q.Add("tags", t)
@@ -485,11 +495,17 @@ func (s *Server) toolCreateItem(args json.RawMessage) (string, error) {
 	body := map[string]any{
 		"title": a.Title,
 	}
-	if a.Type != "" {
-		body["type"] = a.Type
+	if a.Kind != "" {
+		body["kind"] = a.Kind
+	}
+	if a.NotesDoc != "" {
+		body["notes_doc"] = a.NotesDoc
 	}
 	if a.NotesMD != "" {
 		body["notes_md"] = a.NotesMD
+	}
+	if a.NotesHTML != "" {
+		body["notes_html"] = a.NotesHTML
 	}
 	if a.Priority != "" {
 		body["priority"] = a.Priority
@@ -535,8 +551,17 @@ func (s *Server) toolUpdateItem(args json.RawMessage) (string, error) {
 	if _, ok := raw["title"]; ok {
 		body["title"] = a.Title
 	}
+	if _, ok := raw["kind"]; ok {
+		body["kind"] = a.Kind
+	}
+	if _, ok := raw["notes_doc"]; ok {
+		body["notes_doc"] = a.NotesDoc
+	}
 	if _, ok := raw["notes_md"]; ok {
 		body["notes_md"] = a.NotesMD
+	}
+	if _, ok := raw["notes_html"]; ok {
+		body["notes_html"] = a.NotesHTML
 	}
 	if _, ok := raw["priority"]; ok {
 		body["priority"] = a.Priority
@@ -652,11 +677,17 @@ func (s *Server) toolCreateInbox(args json.RawMessage) (string, error) {
 	if a.Title != "" {
 		body["title"] = a.Title
 	}
+	if a.NotesDoc != "" {
+		body["notes_doc"] = a.NotesDoc
+	}
 	if a.NotesMD != "" {
 		body["notes_md"] = a.NotesMD
 	}
-	if a.Type != "" {
-		body["type"] = a.Type
+	if a.NotesHTML != "" {
+		body["notes_html"] = a.NotesHTML
+	}
+	if a.Kind != "" {
+		body["kind"] = a.Kind
 	}
 	if a.Priority != "" {
 		body["priority"] = a.Priority
@@ -748,7 +779,7 @@ func toolList() []toolDef {
 				Type: "object",
 				Properties: map[string]schemaProp{
 					"q":         strProp("Search query"),
-					"type":      strEnumProp("Item type filter", "todo", "note", "all"),
+					"kind":      strEnumProp("Item kind filter", "todo", "note", "scratch", "all"),
 					"tags":      strArrayProp("Filter by tags"),
 					"contexts":  strArrayProp("Filter by contexts"),
 					"projects":  strArrayProp("Filter by projects"),
@@ -772,40 +803,45 @@ func toolList() []toolDef {
 		},
 		{
 			Name:        "nil_create_item",
-			Description: "Create a new todo or note in a NIL vault (not the inbox).",
+			Description: "Create a new item in a NIL vault (not the inbox). Notes body accepts markdown (notes_md), HTML (notes_html), or pre-built TipTap doc JSON (notes_doc); precedence is doc > md > html.",
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"title":    strProp("Item title"),
-					"type":     strEnumProp("Item type", "todo", "note"),
-					"notes_md": strProp("HTML content for the notes field (TipTap output)"),
-					"priority": strEnumProp("Priority", "A", "B", "C"),
-					"due_at":   strProp("Due date in RFC3339 format"),
-					"section":  strEnumProp("Section", "now", "soon", "anytime"),
-					"tags":     strArrayProp("Tags"),
-					"contexts": strArrayProp("Contexts"),
-					"projects": strArrayProp("Projects"),
-					"vault_id": vaultIDProp,
+					"title":      strProp("Item title"),
+					"kind":       strEnumProp("Item kind", "todo", "note", "scratch"),
+					"notes_md":   strProp("Markdown body (converted server-side to TipTap doc)"),
+					"notes_html": strProp("HTML body (converted server-side to TipTap doc)"),
+					"notes_doc":  strProp("Pre-built TipTap doc JSON (skips server conversion)"),
+					"priority":   strEnumProp("Priority", "A", "B", "C"),
+					"due_at":     strProp("Due date in RFC3339 format"),
+					"section":    strEnumProp("Section", "now", "soon", "anytime"),
+					"tags":       strArrayProp("Tags"),
+					"contexts":   strArrayProp("Contexts"),
+					"projects":   strArrayProp("Projects"),
+					"vault_id":   vaultIDProp,
 				},
 				Required: []string{"title"},
 			},
 		},
 		{
 			Name:        "nil_update_item",
-			Description: "Update fields of an existing item. Only provided fields are changed.",
+			Description: "Update fields of an existing item. Only provided fields are changed. Notes body accepts markdown (notes_md), HTML (notes_html), or pre-built TipTap doc JSON (notes_doc).",
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"id":       intProp("Item ID"),
-					"title":    strProp("New title"),
-					"notes_md": strProp("New HTML content for the notes field"),
-					"priority": strEnumProp("Priority", "A", "B", "C"),
-					"due_at":   strProp("Due date in RFC3339 format"),
-					"section":  strEnumProp("Section", "now", "soon", "anytime"),
-					"tags":     strArrayProp("Tags (replaces existing)"),
-					"contexts": strArrayProp("Contexts (replaces existing)"),
-					"projects": strArrayProp("Projects (replaces existing)"),
-					"vault_id": vaultIDProp,
+					"id":         intProp("Item ID"),
+					"title":      strProp("New title"),
+					"kind":       strEnumProp("New kind", "todo", "note", "scratch"),
+					"notes_md":   strProp("New markdown body (converted server-side)"),
+					"notes_html": strProp("New HTML body (converted server-side)"),
+					"notes_doc":  strProp("New pre-built TipTap doc JSON"),
+					"priority":   strEnumProp("Priority", "A", "B", "C"),
+					"due_at":     strProp("Due date in RFC3339 format"),
+					"section":    strEnumProp("Section", "now", "soon", "anytime"),
+					"tags":       strArrayProp("Tags (replaces existing)"),
+					"contexts":   strArrayProp("Contexts (replaces existing)"),
+					"projects":   strArrayProp("Projects (replaces existing)"),
+					"vault_id":   vaultIDProp,
 				},
 				Required: []string{"id"},
 			},
@@ -862,18 +898,20 @@ func toolList() []toolDef {
 		},
 		{
 			Name:        "nil_create_inbox",
-			Description: "Fast-capture a new item to the NIL inbox. No taxonomy required — great for quick ideas.",
+			Description: "Fast-capture a new item to the NIL inbox. No taxonomy required — great for quick ideas. Notes body accepts markdown (notes_md), HTML (notes_html), or pre-built TipTap doc JSON (notes_doc).",
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"title":    strProp("Item title (can be blank)"),
-					"notes_md": strProp("HTML content for the notes field"),
-					"type":     strEnumProp("Item type", "todo", "note"),
-					"priority": strEnumProp("Priority", "A", "B", "C"),
-					"due_at":   strProp("Due date in RFC3339 format"),
-					"tags":     strArrayProp("Tags"),
-					"contexts": strArrayProp("Contexts"),
-					"projects": strArrayProp("Projects"),
+					"title":      strProp("Item title (can be blank)"),
+					"notes_md":   strProp("Markdown body (converted server-side)"),
+					"notes_html": strProp("HTML body (converted server-side)"),
+					"notes_doc":  strProp("Pre-built TipTap doc JSON"),
+					"kind":       strEnumProp("Item kind", "todo", "note", "scratch"),
+					"priority":   strEnumProp("Priority", "A", "B", "C"),
+					"due_at":     strProp("Due date in RFC3339 format"),
+					"tags":       strArrayProp("Tags"),
+					"contexts":   strArrayProp("Contexts"),
+					"projects":   strArrayProp("Projects"),
 				},
 			},
 		},

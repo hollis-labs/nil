@@ -69,7 +69,7 @@ export const WikilinkExtension = Mention.extend({
       try {
         const results = await (Backend.Search as any)({
           query,
-          type: "all",
+          kind: "all",
           page: 0,
           page_size: 8,
           sort_by: "updated_at",
@@ -83,7 +83,7 @@ export const WikilinkExtension = Mention.extend({
         return (results || []).map((t: any) => ({
           id: t.id,
           title: t.title,
-          type: t.type || "todo",
+          kind: t.kind || "todo",
         }));
       } catch {
         return [];

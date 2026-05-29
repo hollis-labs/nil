@@ -12,6 +12,7 @@ import (
 
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
+	"github.com/hollis-labs/nil/ingest"
 	"github.com/hollis-labs/nil/parse"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
@@ -293,7 +294,7 @@ func (a *App) CreateItemFromLine(line string) (*store.Item, error) {
 		DueAt:     p.Due,
 		Threshold: p.Thresh,
 		Source:    line,
-		Type:      "todo",
+		Kind:      "todo",
 	}
 	// Route blank-title items to the shared inbox store
 	if strings.TrimSpace(t.Title) == "" {
@@ -311,9 +312,28 @@ func (a *App) CreateNoteFromLine(line string) (*store.Item, error) {
 		Contexts: p.Contexts,
 		Tags:     p.Tags,
 		Source:   line,
-		Type:     "note",
+		Kind:     "note",
 	}
 	// Route blank-title items to the shared inbox store
+	if strings.TrimSpace(t.Title) == "" {
+		t.Inbox = true
+		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
+	}
+	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
+}
+
+// CreateScratchFromLine creates a scratch-kind item. Scratch items behave
+// like notes until the scratch UX follow-up defines dedicated behavior.
+func (a *App) CreateScratchFromLine(line string) (*store.Item, error) {
+	p := parse.ParseLine(line)
+	t := &store.Item{
+		Title:    p.Title,
+		Projects: p.Projects,
+		Contexts: p.Contexts,
+		Tags:     p.Tags,
+		Source:   line,
+		Kind:     "scratch",
+	}
 	if strings.TrimSpace(t.Title) == "" {
 		t.Inbox = true
 		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
@@ -451,7 +471,7 @@ func (a *App) HasDemoData() (bool, error) {
 	req := store.SearchRequest{
 		Tags:     []string{demoDataTag},
 		PageSize: 1,
-		Type:     "todo",
+		Kind:     "todo",
 	}
 	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
@@ -541,23 +561,46 @@ func (a *App) SeedDemoData() error {
 
 	for _, demo := range demos {
 		p := parse.ParseLine(demo.line)
+		docJSON, err := ingest.MarkdownToDoc(demo.notes)
+		if err != nil {
+			return fmt.Errorf("seed demo: convert notes: %w", err)
+		}
+		htmlStr, err := ingest.DocToHTML(docJSON)
+		if err != nil {
+			return fmt.Errorf("seed demo: render html: %w", err)
+		}
 		todo := &store.Item{
-			Title:     p.Title,
-			Priority:  p.Priority,
-			Projects:  p.Projects,
-			Contexts:  p.Contexts,
-			Tags:      append(p.Tags, demoDataTag),
-			DueAt:     p.Due,
-			Threshold: p.Thresh,
-			Source:    demo.line,
-			NotesMD:   demo.notes,
-			Section:   demo.section,
+			Title:            p.Title,
+			Priority:         p.Priority,
+			Projects:         p.Projects,
+			Contexts:         p.Contexts,
+			Tags:             append(p.Tags, demoDataTag),
+			DueAt:            p.Due,
+			Threshold:        p.Thresh,
+			Source:           demo.line,
+			NotesDoc:         docJSON,
+			NotesHTML:        htmlStr,
+			NotesHTMLVersion: notesHTMLVersion,
+			Section:          demo.section,
 		}
 		if _, err := a.vaultMgr.ActiveStore().CreateItem(a.ctx, todo); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// notesHTMLVersion identifies the current notes_html renderer. Bump when the
+// renderer (TipTap extensions, ingest.DocToHTML mapping) changes in a way
+// that would produce different output for the same input.
+const notesHTMLVersion = 1
+
+// ListKinds returns all registered kinds for the kind switcher UI.
+func (a *App) ListKinds() ([]store.Kind, error) {
+	if a.vaultMgr == nil || a.vaultMgr.ActiveStore() == nil {
+		return []store.Kind{}, nil
+	}
+	return a.vaultMgr.ActiveStore().ListKinds(a.ctx)
 }
 
 func (a *App) RemoveDemoData() error {
@@ -567,7 +610,7 @@ func (a *App) RemoveDemoData() error {
 	req := store.SearchRequest{
 		Tags:     []string{demoDataTag},
 		PageSize: 500,
-		Type:     "todo",
+		Kind:     "todo",
 	}
 	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
@@ -588,7 +631,7 @@ func (a *App) ExportTodoTxt() (string, error) {
 		PageSize: 10000,
 		SortBy:   "created_at",
 		SortDir:  "asc",
-		Type:     "todo",
+		Kind:     "todo",
 	}
 	todos, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
 	if err != nil {
