@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -425,13 +426,20 @@ func migrateV8(ctx context.Context, db *sql.DB) error {
 		notesMD string
 	}
 	var items []ftsRow
+	scanErrs := 0
 	for rows.Next() {
 		var r ftsRow
-		if err := rows.Scan(&r.id, &r.title, &r.notesMD); err == nil {
-			items = append(items, r)
+		if err := rows.Scan(&r.id, &r.title, &r.notesMD); err != nil {
+			scanErrs++
+			fmt.Fprintf(os.Stderr, "migration v8: scan error on a todos row, skipping: %v\n", err)
+			continue
 		}
+		items = append(items, r)
 	}
 	rows.Close()
+	if scanErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v8: %d row(s) skipped due to scan errors; those rows will not be in the search index until they are next edited\n", scanErrs)
+	}
 	for _, r := range items {
 		text := stripHTML(r.notesMD)
 		if _, err := db.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", r.id, r.title, text); err != nil {
@@ -481,13 +489,20 @@ WHERE notes_md IS NOT NULL AND notes_md != ''
 		notesMD string
 	}
 	var candidates []cand
+	scanErrs := 0
 	for rows.Next() {
 		var c cand
-		if err := rows.Scan(&c.id, &c.title, &c.notesMD); err == nil {
-			candidates = append(candidates, c)
+		if err := rows.Scan(&c.id, &c.title, &c.notesMD); err != nil {
+			scanErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: scan error on a todos row, skipping: %v\n", err)
+			continue
 		}
+		candidates = append(candidates, c)
 	}
 	rows.Close()
+	if scanErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v11: %d row(s) skipped due to scan errors; their notes_md content will not be converted\n", scanErrs)
+	}
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -501,14 +516,19 @@ WHERE notes_md IS NOT NULL AND notes_md != ''
 			_ = tx.Rollback()
 		}
 	}()
+	convertErrs := 0
+	ftsErrs := 0
+	converted := 0
 	for _, c := range candidates {
 		// notes_md is TipTap HTML (v1.3.0 column-naming legacy). Convert to
 		// PM JSON via the ingest package; keep the original HTML as the cache.
 		doc, ierr := ingest.HTMLToDoc(c.notesMD)
 		if ierr != nil {
-			// Skip the row but record the issue. Failing the whole migration
+			// Skip the row but record the failure. Failing the whole migration
 			// over one bad row would block startup; the row stays in its
 			// pre-backfill state and can be recovered via the nil-recover tool.
+			convertErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d HTML→doc conversion failed (skipping): %v\n", c.id, ierr)
 			continue
 		}
 		if _, uerr := tx.ExecContext(ctx, `
@@ -516,15 +536,29 @@ UPDATE todos SET notes_doc = ?, notes_html = ?, notes_html_version = 1
 WHERE id = ?`, doc, c.notesMD, c.id); uerr != nil {
 			return fmt.Errorf("migration v11 update id=%d: %w", c.id, uerr)
 		}
-		// Refresh FTS5 to reflect the new plain-text projection.
+		// Refresh FTS5 to reflect the new plain-text projection. Failures
+		// here mean search will be stale for this row until the user next
+		// edits it — log but continue so a broken FTS index can't block the
+		// whole backfill.
 		plain, _ := ingest.DocToPlainText(doc)
-		_, _ = tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", c.id)
-		_, _ = tx.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", c.id, c.title, plain)
+		if _, ferr := tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", c.id); ferr != nil {
+			ftsErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d FTS delete failed: %v\n", c.id, ferr)
+		}
+		if _, ferr := tx.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", c.id, c.title, plain); ferr != nil {
+			ftsErrs++
+			fmt.Fprintf(os.Stderr, "migration v11: id=%d FTS insert failed: %v\n", c.id, ferr)
+		}
+		converted++
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("migration v11 commit: %w", err)
 	}
 	commit = true
+	if convertErrs > 0 || ftsErrs > 0 {
+		fmt.Fprintf(os.Stderr, "migration v11 summary: %d converted, %d conversion errors, %d FTS errors\n",
+			converted, convertErrs, ftsErrs)
+	}
 	return nil
 }
 
@@ -655,9 +689,11 @@ func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	if t.Kind == "" {
-		t.Kind = "todo"
+	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	if err != nil {
+		return nil, err
 	}
+	t.Kind = kind
 	if strings.TrimSpace(t.Title) == "" {
 		t.Inbox = true
 	}
@@ -706,10 +742,12 @@ func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	if t.Kind == "" {
-		t.Kind = "todo"
+	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	if err != nil {
+		return err
 	}
-	_, err := s.DB.ExecContext(ctx, `
+	t.Kind = kind
+	_, err = s.DB.ExecContext(ctx, `
 UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_doc=?, notes_html=?, notes_html_version=?, section=?, pinned=?, kind=?, inbox=? WHERE id=?`,
 		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur,
 		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
@@ -851,10 +889,22 @@ func (s *Store) DeleteItem(ctx context.Context, id int64) error {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.delete")
 	defer span.End()
 
-	if _, err := s.DB.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id); err != nil {
+	// Wrap the row delete + FTS delete in a transaction so the two stay in
+	// sync — if either fails the whole operation rolls back and search won't
+	// reference a now-missing row (or vice versa).
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-	return s.deleteFTS(ctx, id)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM todos WHERE id=?`, id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 type qparts struct {
@@ -1270,6 +1320,29 @@ func (s *Store) IsValidKind(ctx context.Context, name string) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+// ErrInvalidKind is returned by CreateItem / UpdateItem when the supplied
+// kind isn't in the kinds registry. Callers should surface this as a 4xx /
+// validation error rather than a 5xx.
+var ErrInvalidKind = errors.New("invalid kind: not in kinds registry")
+
+// validateKindOrDefault enforces that t.Kind matches a registered kind.
+// Empty kind is filled with "todo" as the canonical default. An unknown
+// non-empty kind is rejected outright — we'd rather block the write than
+// silently coerce, which would hide caller typos.
+func (s *Store) validateKindOrDefault(ctx context.Context, kind string) (string, error) {
+	if kind == "" {
+		kind = "todo"
+	}
+	ok, err := s.IsValidKind(ctx, kind)
+	if err != nil {
+		return "", fmt.Errorf("validate kind: %w", err)
+	}
+	if !ok {
+		return "", fmt.Errorf("%w: %q", ErrInvalidKind, kind)
+	}
+	return kind, nil
 }
 
 // ListKinds returns all registered kinds (core first, then plugin-registered).
