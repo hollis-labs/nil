@@ -585,7 +585,7 @@ func cmdBackrefs(ctx context.Context, args []string, env *commandEnv) {
 		die("backrefs: requires <id>")
 	}
 	var id int64
-	if _, err := fmt.Sscan(positional[0], &id); err != nil {
+	if _, scanErr := fmt.Sscan(positional[0], &id); scanErr != nil {
 		die("backrefs: invalid id %q", positional[0])
 	}
 	loc, err := findItem(ctx, env.mgr, id, *vaultID)
