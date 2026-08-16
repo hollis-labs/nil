@@ -33,8 +33,8 @@ docs:
   adrs: null                        # no docs/adrs/; ADR-004 (semantic search) referenced in knowledge file only
   roadmap: ROADMAP.md
 roadmap:
-  current_phase: 'v1.3.0 beta — rename cleanup, default tabs, Tailwind/shadcn migration; F1 Inbox MVP shipped'
-  pointer: null
+  current_phase: 'v1.3.3 beta — External Data Access API epic shipped (headless serve-api, bulk list w/ updated_since, notes_text, backlinks, deletion-signal ID-diff, batch create + external_ref); Nil modernization baseline portfolio in progress (verification workflow done, backend/frontend test coverage + architecture docs + file-splitting still outstanding); Tailwind/shadcn migration still pending'
+  pointer: 'Torque project PRJ-20260417-0005 is the live tracker; this line is a point-in-time snapshot, not authoritative — refreshed 2026-08-16'
 usage_examples:
   - intent: Run the full local verification path before a commit
     command: make verify
