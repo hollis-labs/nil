@@ -639,10 +639,29 @@ document, without a fresh check.
 
 ---
 
+## 12. Architectural Decision Records
+
+The *why* behind five of this document's major structural choices —
+desktop-shell direction, the vault/data model, the local API model, the
+MCP surface, and the chat permission/safety model — plus the chat
+bridge's direct-API transport choice, is recorded as ADRs rather than
+re-derived here. See [`docs/adr/README.md`](../adr/README.md) for the
+full index:
+
+- [ADR-0001](../adr/0001-chat-bridge-direct-api.md) — Chat bridge calls the Anthropic API directly, not a CLI subprocess
+- [ADR-0002](../adr/0002-wails-desktop-shell.md) — Desktop shell: Wails v2, same-process IPC over generated bindings
+- [ADR-0003](../adr/0003-vault-per-file-sqlite-single-kind-table.md) — Vault/data model: per-vault SQLite files, one kind-discriminated table
+- [ADR-0004](../adr/0004-loopback-http-api.md) — Local HTTP API: loopback-only, shared-secret auth, alongside the Wails IPC bridge
+- [ADR-0005](../adr/0005-mcp-thin-http-proxy.md) — MCP surface: `nil-mcp` is a thin HTTP-proxying stdio server
+- [ADR-0006](../adr/0006-chat-propose-approve-capability-model.md) — Chat permission/safety model: propose/approve gated by per-vault capabilities
+
+---
+
 ## Cross-references
 
 - Narrative/domain orientation: [`AGENTS.md`](../../AGENTS.md)
 - Code conventions, schema-change checklist, roadmap: [`CLAUDE.md`](../../CLAUDE.md)
 - CLI reference: [`docs/CLI.md`](../CLI.md)
 - Distribution/build specifics: [`docs/DISTRIBUTION.md`](../DISTRIBUTION.md)
+- Architectural Decision Records: [`docs/adr/README.md`](../adr/README.md)
 - Live task tracking: Torque project `PRJ-20260417-0005`

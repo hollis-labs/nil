@@ -88,7 +88,7 @@ Docs:
 - **Wikilinks** — `@reference` chips link items, with backlinks. Built on
   TipTap's Mention extension.
 - **Search** — FTS5 full-text search shipped. Semantic/embedding search is
-  proposed (ADR-004) but not yet built.
+  proposed but not yet built (no ADR yet — see `docs/adr/`).
 - **Terminal aesthetic** — the custom CSS theme system (`--term-*` variables) is
   intentional product design, not tech debt. A Tailwind v4 + shadcn/ui migration
   is planned that must preserve it.
