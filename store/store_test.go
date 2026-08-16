@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hollis-labs/nil/ingest"
@@ -262,5 +263,145 @@ func TestGetBackrefsUnknownTargetReturnsEmpty(t *testing.T) {
 	}
 	if len(backrefs) != 0 {
 		t.Fatalf("got %d backrefs, want 0; backrefs=%+v", len(backrefs), backrefs)
+	}
+}
+
+// idSet builds a set of the IDs present in an []ItemIDStamp for convenient
+// membership checks.
+func idSet(items []ItemIDStamp) map[int64]bool {
+	out := make(map[int64]bool, len(items))
+	for _, it := range items {
+		out[it.ID] = true
+	}
+	return out
+}
+
+// TestListItemIDsReflectsCurrentExistence is the core deletion-detection
+// contract this endpoint exists to provide: create items across kinds and
+// statuses (a plain open todo, a completed todo, an archived note, an inbox
+// item, and a scratch item), delete one of them, then confirm
+// ListItemIDs' result is exactly "every item that still exists" — the
+// deleted item's ID is absent, every other item's ID (regardless of
+// completed/archived/inbox state) is present. This is precisely what an
+// external sync consumer relies on to infer a hard DELETE occurred.
+func TestListItemIDsReflectsCurrentExistence(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	plain, err := st.CreateItem(ctx, &Item{Title: "plain todo", Kind: "todo"})
+	if err != nil {
+		t.Fatalf("CreateItem plain: %v", err)
+	}
+	completed, err := st.CreateItem(ctx, &Item{Title: "completed todo", Kind: "todo", Completed: true})
+	if err != nil {
+		t.Fatalf("CreateItem completed: %v", err)
+	}
+	archived, err := st.CreateItem(ctx, &Item{Title: "archived note", Kind: "note", Archived: true})
+	if err != nil {
+		t.Fatalf("CreateItem archived: %v", err)
+	}
+	inboxItem, err := st.CreateItem(ctx, &Item{Title: "inbox capture", Kind: "todo", Inbox: true})
+	if err != nil {
+		t.Fatalf("CreateItem inbox: %v", err)
+	}
+	scratch, err := st.CreateItem(ctx, &Item{Title: "scratch pad", Kind: "scratch"})
+	if err != nil {
+		t.Fatalf("CreateItem scratch: %v", err)
+	}
+	toDelete, err := st.CreateItem(ctx, &Item{Title: "about to be deleted", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem toDelete: %v", err)
+	}
+
+	// Sanity: before deletion, every created item's ID is present.
+	before, err := st.ListItemIDs(ctx, "")
+	if err != nil {
+		t.Fatalf("ListItemIDs (before delete): %v", err)
+	}
+	beforeIDs := idSet(before)
+	for _, want := range []int64{plain.ID, completed.ID, archived.ID, inboxItem.ID, scratch.ID, toDelete.ID} {
+		if !beforeIDs[want] {
+			t.Errorf("before delete: id %d missing from ListItemIDs result; got %+v", want, before)
+		}
+	}
+
+	if err = st.DeleteItem(ctx, toDelete.ID); err != nil {
+		t.Fatalf("DeleteItem: %v", err)
+	}
+
+	after, err := st.ListItemIDs(ctx, "")
+	if err != nil {
+		t.Fatalf("ListItemIDs (after delete): %v", err)
+	}
+	afterIDs := idSet(after)
+
+	// The deleted item's ID must be genuinely gone.
+	if afterIDs[toDelete.ID] {
+		t.Errorf("deleted item id %d still present in ListItemIDs result: %+v", toDelete.ID, after)
+	}
+
+	// Every other item — including completed, archived, and inbox items,
+	// none of which are "deleted" — must still be present.
+	for _, want := range []int64{plain.ID, completed.ID, archived.ID, inboxItem.ID, scratch.ID} {
+		if !afterIDs[want] {
+			t.Errorf("after delete: id %d (still exists) missing from ListItemIDs result; got %+v", want, after)
+		}
+	}
+
+	if len(after) != len(before)-1 {
+		t.Errorf("got %d ids after delete, want %d (one fewer than before)", len(after), len(before)-1)
+	}
+
+	// updated_at must be populated (non-empty) on the surviving rows — the
+	// whole point of this endpoint is (id, updated_at) pairs, not bare IDs.
+	for _, it := range after {
+		if strings.TrimSpace(it.UpdatedAt) == "" {
+			t.Errorf("item id %d has empty updated_at in ListItemIDs result", it.ID)
+		}
+	}
+}
+
+// TestListItemIDsKindFilter confirms the kind filter narrows the result to
+// just that kind, while "" and "all" both mean "every kind" (unlike
+// Search's kind="" -> "todo" backward-compat default).
+func TestListItemIDsKindFilter(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	todo, err := st.CreateItem(ctx, &Item{Title: "a todo", Kind: "todo"})
+	if err != nil {
+		t.Fatalf("CreateItem todo: %v", err)
+	}
+	note, err := st.CreateItem(ctx, &Item{Title: "a note", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem note: %v", err)
+	}
+	scratch, err := st.CreateItem(ctx, &Item{Title: "a scratch", Kind: "scratch"})
+	if err != nil {
+		t.Fatalf("CreateItem scratch: %v", err)
+	}
+
+	todoOnly, err := st.ListItemIDs(ctx, "todo")
+	if err != nil {
+		t.Fatalf("ListItemIDs kind=todo: %v", err)
+	}
+	if len(todoOnly) != 1 || todoOnly[0].ID != todo.ID {
+		t.Fatalf("kind=todo got %+v, want exactly [%d]", todoOnly, todo.ID)
+	}
+
+	for _, kind := range []string{"", "all"} {
+		everything, err := st.ListItemIDs(ctx, kind)
+		if err != nil {
+			t.Fatalf("ListItemIDs kind=%q: %v", kind, err)
+		}
+		got := idSet(everything)
+		for _, want := range []int64{todo.ID, note.ID, scratch.ID} {
+			if !got[want] {
+				t.Errorf("kind=%q missing id %d; got %+v", kind, want, everything)
+			}
+		}
+		if len(everything) != 3 {
+			t.Errorf("kind=%q got %d ids, want 3", kind, len(everything))
+		}
 	}
 }

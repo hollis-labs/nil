@@ -99,6 +99,11 @@ type argsGetBackrefs struct {
 	VaultID string `json:"vault_id"`
 }
 
+type argsListItemIDs struct {
+	Kind    string `json:"kind"`
+	VaultID string `json:"vault_id"`
+}
+
 // Notes input on create/update accepts exactly one of notes_doc / notes_md /
 // notes_html. The HTTP API does the conversion server-side via ingest;
 // MCP just forwards whichever field is set.
@@ -325,6 +330,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (string, error) {
 		return s.toolGetItem(args)
 	case "nil_get_backrefs":
 		return s.toolGetBackrefs(args)
+	case "nil_list_item_ids":
+		return s.toolListItemIDs(args)
 	case "nil_create_item":
 		return s.toolCreateItem(args)
 	case "nil_update_item":
@@ -511,6 +518,38 @@ func (s *Server) toolGetBackrefs(args json.RawMessage) (string, error) {
 	}
 
 	data, err := s.apiDo("GET", fmt.Sprintf("/api/v1/items/%d/backrefs", a.ID), nil, a.VaultID)
+	if err != nil {
+		return "", err
+	}
+	return prettyJSON(data), nil
+}
+
+// toolListItemIDs is a separate tool rather than a flag on nil_search: it
+// backs the deletion/change-signal endpoint (GET /api/v1/items/ids), whose
+// entire point is a minimal id+updated_at response an external sync
+// consumer can cheaply diff against its own known-ID set to detect
+// deletions — Nil has no soft-delete/tombstone concept, so this is the only
+// way such a consumer learns an item was hard-deleted. Deliberately does
+// NOT accept updated_since (unlike nil_search): this call always needs the
+// FULL current-ID set to diff against, not an incremental slice, or
+// currently-existing IDs outside the window would read as false deletions.
+func (s *Server) toolListItemIDs(args json.RawMessage) (string, error) {
+	var a argsListItemIDs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+
+	q := url.Values{}
+	if a.Kind != "" && a.Kind != "all" {
+		q.Set("kind", a.Kind)
+	}
+
+	path := "/api/v1/items/ids"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+
+	data, err := s.apiDo("GET", path, nil, a.VaultID)
 	if err != nil {
 		return "", err
 	}
@@ -846,6 +885,17 @@ func toolList() []toolDef {
 					"vault_id": vaultIDProp,
 				},
 				Required: []string{"id"},
+			},
+		},
+		{
+			Name:        "nil_list_item_ids",
+			Description: "List every current item's id + updated_at in a vault (no title, no notes body, no taxonomy). For deletion detection: Nil has no soft-delete/tombstone concept, so a sync consumer diffs this full current-ID set against its own known-ID set on each sync cycle — any previously-seen ID missing here has been genuinely deleted. Deliberately has no updated_since filter (unlike nil_search): it always needs the full ID set, not an incremental slice, or existing IDs outside the window would look deleted. This call is single-vault, so loop over nil_list_vaults for a cross-vault check.",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]schemaProp{
+					"kind":     strEnumProp("Item kind filter. Omit or use \"all\" to return every kind (default).", "todo", "note", "scratch", "all"),
+					"vault_id": vaultIDProp,
+				},
 			},
 		},
 		{

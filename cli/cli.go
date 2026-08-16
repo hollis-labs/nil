@@ -75,6 +75,12 @@ func init() {
 			run:   cmdBackrefs,
 		},
 		{
+			name:  "ids",
+			short: "List every current item's id + updated_at (deletion/change signal for sync consumers)",
+			usage: "nil ids [--vault id|inbox] [--kind todo|note|scratch|all]",
+			run:   cmdIDs,
+		},
+		{
 			name:  "context",
 			short: "Emit agent-friendly context snapshots",
 			usage: "nil context [topic]",
@@ -484,6 +490,51 @@ func cmdBackrefs(ctx context.Context, args []string, env *commandEnv) {
 		"vault":    loc.location,
 		"backrefs": svc.WithTextSlice(backrefs),
 	}})
+}
+
+// cmdIDs lists every current item's id + updated_at in the resolved vault —
+// no title, no notes body, no taxonomy. This is the deletion/change-signal
+// primitive: Nil has no soft-delete/tombstone concept (DeleteItem is a real,
+// hard DELETE), so an external sync consumer has no other way to learn an
+// item was removed. It fetches this full current-ID set on each sync cycle
+// and diffs it against its own known-ID set; any previously-seen ID that's
+// missing here has been genuinely deleted. See Store.ListItemIDs and the
+// GET /api/v1/items/ids handler in apiserver.go for the full filter-support
+// reasoning (kind defaults to "all"; archived/completed/inbox items are
+// always included; updated_since is deliberately not supported — it would
+// hide currently-existing IDs and produce false deletion signals). A
+// dedicated command rather than a `show`/`search` flag, mirroring the
+// backrefs command's one-command-per-read-op pattern above.
+func cmdIDs(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("ids", flag.ContinueOnError)
+	vaultID := fs.String("vault", "", "vault id or 'inbox' (omit for active vault)")
+	kind := fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
+	if _, err := parseInterspersed(args, fs); err != nil {
+		die("ids: %v", err)
+	}
+
+	var s *store.Store
+	switch *vaultID {
+	case "inbox":
+		s = env.mgr.InboxStore()
+	case "":
+		s = env.mgr.ActiveStore()
+	default:
+		var err error
+		s, err = env.mgr.StoreForID(*vaultID)
+		if err != nil {
+			die("ids: vault %q: %v", *vaultID, err)
+		}
+	}
+	if s == nil {
+		die("ids: vault not available")
+	}
+
+	ids, err := s.ListItemIDs(ctx, *kind)
+	if err != nil {
+		die("ids: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: ids})
 }
 
 func cmdContext(ctx context.Context, args []string, env *commandEnv) {

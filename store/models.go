@@ -68,6 +68,16 @@ type VaultStats struct {
 	BySection VaultBySection `json:"by_section"`
 }
 
+// ItemIDStamp is the minimal (id, updated_at) shape returned by
+// Store.ListItemIDs — deliberately just enough for an external sync
+// consumer to diff its own known-ID set against what currently exists in
+// the vault and infer deletions. No title, no notes body, no taxonomy: see
+// ListItemIDs' doc comment for why.
+type ItemIDStamp struct {
+	ID        int64  `json:"id"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type SearchRequest struct {
 	Query        string   `json:"query"`
 	Projects     []string `json:"projects"`

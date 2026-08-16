@@ -1111,6 +1111,65 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	return out, nil
 }
 
+// ListItemIDs returns the id + updated_at of every item currently in the
+// store — nothing else (no title, no notes_doc/notes_html, no taxonomy).
+// It exists for the deletion/change-signal use case (see the epic's Option B
+// decision, documented on the HTTP handler in apiserver.go): DeleteItem
+// performs a real, hard DELETE with no tombstone, so an external sync
+// consumer has no other way to learn an item is gone — it just silently
+// stops appearing. This endpoint gives that consumer a cheap way to fetch
+// the FULL current ID set and diff it against its own known-ID set: any ID
+// it previously saw that's absent here has been genuinely deleted.
+//
+// Deliberately unfiltered by inbox/archived/completed status: none of those
+// states mean "deleted" (the row still exists), so filtering on them here
+// would produce false-positive deletion signals for a consumer that synced
+// an item before it was archived, completed, or triaged into the inbox.
+// Only a row's absence from the todos table (a genuine DELETE) should read
+// as "deleted".
+//
+// kind: "" or "all" returns every kind (unlike Search's kind="" -> "todo"
+// backward-compat default — there's no legacy caller to preserve here, and
+// "does this ID exist" is naturally a whole-vault question). Any other
+// value filters to just that kind, for a consumer that only tracks one
+// kind's IDs. No validation against the kinds registry, matching Search's
+// existing behavior — an unknown kind simply yields an empty result, not an
+// error.
+func (s *Store) ListItemIDs(ctx context.Context, kind string) ([]ItemIDStamp, error) {
+	ctx, span := feotel.StartSpan(ctx, "nil.item.list_ids")
+	defer span.End()
+
+	q := "SELECT id, updated_at FROM todos"
+	var args []any
+	if kind != "" && kind != "all" {
+		q += " WHERE kind = ?"
+		args = append(args, kind)
+	}
+	q += " ORDER BY id"
+
+	rows, err := s.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return []ItemIDStamp{}, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ItemIDStamp
+	for rows.Next() {
+		var it ItemIDStamp
+		if err := rows.Scan(&it.ID, &it.UpdatedAt); err != nil {
+			return []ItemIDStamp{}, err
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return []ItemIDStamp{}, err
+	}
+	if out == nil {
+		return []ItemIDStamp{}, nil
+	}
+	return out, nil
+}
+
 // GetInboxCount returns the count of non-archived inbox items.
 func (s *Store) GetInboxCount(ctx context.Context) (int, error) {
 	var count int
@@ -1411,4 +1470,3 @@ FROM kinds ORDER BY is_core DESC, name`)
 	}
 	return out, nil
 }
-

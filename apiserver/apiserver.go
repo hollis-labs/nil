@@ -47,6 +47,7 @@ func New(cfg *config.Config, vm *vault.Manager) *http.Server {
 
 	// Item CRUD routes
 	mux.Handle("POST /api/v1/items", h.auth(h.handleCreateItem))
+	mux.Handle("GET /api/v1/items/ids", h.auth(h.handleListItemIDs))
 	mux.Handle("GET /api/v1/items/{id}", h.auth(h.handleGetItem))
 	mux.Handle("PUT /api/v1/items/{id}", h.auth(h.handleUpdateItem))
 	mux.Handle("DELETE /api/v1/items/{id}", h.auth(h.handleDeleteItem))
@@ -343,6 +344,61 @@ func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// GET /api/v1/items/ids — the deletion/change-signal endpoint. Returns the
+// id + updated_at of every item currently in the vault resolved by
+// X-Vault-ID — no title, no notes_doc/notes_html/notes_text, no taxonomy.
+// That minimalism is the whole point: this is meant to be cheap enough for
+// an external sync consumer to fetch on every sync cycle and diff against
+// its own known-ID set to detect deletions.
+//
+// Why this exists (Option B from the epic): DeleteItem performs a real, hard
+// DELETE — there is no soft-delete/tombstone concept anywhere in Nil, and
+// deliberately so (no Trash/undo UI to hang a tombstone off of, and "filter
+// deleted_at IS NULL everywhere" is an ongoing correctness risk for a small
+// solo-maintained codebase). So a consumer polling /api/v1/search by
+// updated_since has no way to ever learn an item was removed — it just
+// silently stops appearing. This endpoint is that signal: any ID a consumer
+// previously saw that's absent from this response has been genuinely
+// deleted; that's the only reason an ID is ever missing here.
+//
+// Filter decisions (see Store.ListItemIDs for the full reasoning):
+//   - Deliberately includes inbox, archived, and completed items. None of
+//     those states mean "deleted" — the row still exists — so excluding them
+//     would produce false-positive deletion signals for a consumer that
+//     synced an item before it was archived, completed, or triaged into the
+//     inbox after the fact.
+//   - kind: optional ?kind=<name> filter; empty or "all" (the default)
+//     returns every kind. Unlike /api/v1/search's kind=todo legacy default,
+//     there's no backward-compat caller to preserve here, and "does this ID
+//     still exist" is naturally a whole-vault question by default.
+//   - updated_since is deliberately NOT supported here, unlike
+//     /api/v1/search. This endpoint's entire purpose is letting a consumer
+//     diff its locally-known ID set against the FULL current set to infer
+//     deletions; an incremental/time-windowed result would hide any
+//     currently-existing ID that falls outside the window, and the consumer
+//     would then wrongly conclude that ID was deleted. Use /api/v1/search's
+//     updated_since for incremental content sync; use this endpoint for the
+//     full existence check that makes deletion detection possible.
+func (h *apiHandler) handleListItemIDs(w http.ResponseWriter, r *http.Request) {
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	kind := r.URL.Query().Get("kind")
+	if kind == "" {
+		kind = r.URL.Query().Get("type")
+	}
+
+	ids, err := s.ListItemIDs(r.Context(), kind)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list item ids")
+		return
+	}
+	writeJSON(w, http.StatusOK, ids)
 }
 
 // GET /api/v1/items/{id} — fetch a single item from the vault resolved by X-Vault-ID.

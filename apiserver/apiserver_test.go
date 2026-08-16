@@ -339,3 +339,124 @@ func TestHandleListInboxIncludesNotesText(t *testing.T) {
 		t.Errorf("notes_text=%q, want it to contain the inbox item's body", notesText)
 	}
 }
+
+// createItemID posts a minimal item and returns its ID, failing the test on
+// any error along the way.
+func createItemID(t *testing.T, e *testEnv, path string, body map[string]any) int64 {
+	t.Helper()
+	res := e.do("POST", path, body)
+	if res.Code != http.StatusCreated {
+		t.Fatalf("create (%s) status=%d body=%s", path, res.Code, res.Body.String())
+	}
+	env := decodeEnvelope(t, res)
+	var item itemJSON
+	if err := json.Unmarshal(env.Data, &item); err != nil {
+		t.Fatalf("decode created item: %v", err)
+	}
+	return int64(item["id"].(float64))
+}
+
+// TestHandleListItemIDs is the deletion/change-signal endpoint's HTTP-level
+// contract test: create items across every "still exists but not plain"
+// state (archived, completed, inbox) plus a plain item and one that's about
+// to be hard-deleted, then confirm GET /api/v1/items/ids reflects exactly
+// what currently exists — the deleted item's ID is absent, everything else
+// (regardless of archived/completed/inbox status) is present — and that
+// each entry in the response is the minimal {id, updated_at} shape with no
+// title/notes/taxonomy fields leaking through.
+func TestHandleListItemIDs(t *testing.T) {
+	e := newTestEnv(t)
+
+	plainID := createItemID(t, e, "/api/v1/items", map[string]any{"title": "plain item"})
+
+	archivedID := createItemID(t, e, "/api/v1/items", map[string]any{"title": "will be archived"})
+	if r := e.do("POST", "/api/v1/items/"+strconv.FormatInt(archivedID, 10)+"/archive", map[string]any{"archived": true}); r.Code != http.StatusOK {
+		t.Fatalf("archive status=%d body=%s", r.Code, r.Body.String())
+	}
+
+	completedID := createItemID(t, e, "/api/v1/items", map[string]any{"title": "will be completed"})
+	if r := e.do("POST", "/api/v1/items/"+strconv.FormatInt(completedID, 10)+"/complete", map[string]any{"completed": true}); r.Code != http.StatusOK {
+		t.Fatalf("complete status=%d body=%s", r.Code, r.Body.String())
+	}
+
+	inboxID := createItemID(t, e, "/api/v1/inbox", map[string]any{"title": "inbox capture"})
+
+	deletedID := createItemID(t, e, "/api/v1/items", map[string]any{"title": "about to be deleted"})
+	if r := e.do("DELETE", "/api/v1/items/"+strconv.FormatInt(deletedID, 10), nil); r.Code != http.StatusNoContent {
+		t.Fatalf("delete status=%d body=%s", r.Code, r.Body.String())
+	}
+
+	res := e.do("GET", "/api/v1/items/ids", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list ids status=%d body=%s", res.Code, res.Body.String())
+	}
+	env := decodeEnvelope(t, res)
+	var stamps []itemJSON
+	if err := json.Unmarshal(env.Data, &stamps); err != nil {
+		t.Fatalf("decode ids result: %v", err)
+	}
+
+	seen := map[int64]bool{}
+	for _, s := range stamps {
+		id := int64(s["id"].(float64))
+		seen[id] = true
+
+		// Minimal shape: exactly {id, updated_at}, nothing else.
+		if len(s) != 2 {
+			t.Errorf("id %d: entry has %d fields, want exactly 2 (id, updated_at); entry=%v", id, len(s), s)
+		}
+		if _, ok := s["updated_at"]; !ok {
+			t.Errorf("id %d: entry missing updated_at; entry=%v", id, s)
+		}
+		for _, leaked := range []string{"title", "notes_doc", "notes_html", "notes_text", "kind", "tags", "projects", "contexts"} {
+			if _, ok := s[leaked]; ok {
+				t.Errorf("id %d: entry unexpectedly includes %q; entry=%v", id, leaked, s)
+			}
+		}
+	}
+
+	for _, want := range []int64{plainID, archivedID, completedID, inboxID} {
+		if !seen[want] {
+			t.Errorf("id %d (still exists) missing from /api/v1/items/ids result: %v", want, stamps)
+		}
+	}
+	if seen[deletedID] {
+		t.Errorf("deleted id %d still present in /api/v1/items/ids result: %v", deletedID, stamps)
+	}
+}
+
+// TestHandleListItemIDsKindFilter confirms ?kind= narrows the result, and
+// that the default (kind omitted) returns every kind — unlike
+// /api/v1/search, whose store-level default is kind=todo.
+func TestHandleListItemIDsKindFilter(t *testing.T) {
+	e := newTestEnv(t)
+
+	todoID := createItemID(t, e, "/api/v1/items", map[string]any{"title": "a todo"})
+	createItemID(t, e, "/api/v1/items", map[string]any{"title": "a note", "kind": "note"})
+
+	res := e.do("GET", "/api/v1/items/ids?kind=todo", nil)
+	if res.Code != http.StatusOK {
+		t.Fatalf("list ids status=%d body=%s", res.Code, res.Body.String())
+	}
+	env := decodeEnvelope(t, res)
+	var stamps []itemJSON
+	if err := json.Unmarshal(env.Data, &stamps); err != nil {
+		t.Fatalf("decode ids result: %v", err)
+	}
+	if len(stamps) != 1 || int64(stamps[0]["id"].(float64)) != todoID {
+		t.Fatalf("kind=todo got %v, want exactly [%d]", stamps, todoID)
+	}
+
+	all := e.do("GET", "/api/v1/items/ids", nil)
+	if all.Code != http.StatusOK {
+		t.Fatalf("list ids (no filter) status=%d body=%s", all.Code, all.Body.String())
+	}
+	allEnv := decodeEnvelope(t, all)
+	var allStamps []itemJSON
+	if err := json.Unmarshal(allEnv.Data, &allStamps); err != nil {
+		t.Fatalf("decode ids result: %v", err)
+	}
+	if len(allStamps) != 2 {
+		t.Fatalf("no-filter got %d ids, want 2 (default is every kind); stamps=%v", len(allStamps), allStamps)
+	}
+}
