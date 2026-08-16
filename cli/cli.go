@@ -405,7 +405,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 		"command": "list",
 		"view":    view,
 		"count":   len(items),
-		"items":   items,
+		"items":   svc.WithTextSlice(items),
 	}})
 }
 
@@ -428,17 +428,18 @@ func cmdShow(ctx context.Context, args []string, env *commandEnv) {
 	if err != nil {
 		die("show: %v", err)
 	}
+	itemView := svc.WithText(loc.item)
 	data := map[string]any{
 		"command": "show",
 		"id":      id,
 		"vault":   loc.location,
-		"item":    loc.item,
+		"item":    itemView,
 	}
 	if strings.ToLower(*format) == "detail" {
 		printJSON(envelope{OK: true, Data: data})
 		return
 	}
-	printJSON(envelope{OK: true, Data: loc.item})
+	printJSON(envelope{OK: true, Data: itemView})
 }
 
 func cmdContext(ctx context.Context, args []string, env *commandEnv) {
@@ -1034,7 +1035,7 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 	if results == nil {
 		results = []store.Item{}
 	}
-	printJSON(envelope{OK: true, Data: results})
+	printJSON(envelope{OK: true, Data: svc.WithTextSlice(results)})
 }
 
 // cmdInbox lists items in the shared inbox store.
@@ -1060,7 +1061,7 @@ func cmdInbox(ctx context.Context, args []string, mgr *vault.Manager) {
 	if results == nil {
 		results = []store.Item{}
 	}
-	printJSON(envelope{OK: true, Data: results})
+	printJSON(envelope{OK: true, Data: svc.WithTextSlice(results)})
 }
 
 // cmdGet fetches a single item by ID.
@@ -1113,7 +1114,7 @@ func cmdGet(ctx context.Context, args []string, mgr *vault.Manager) {
 	if gerr != nil || item == nil {
 		die("get: item %d not found", id)
 	}
-	printJSON(envelope{OK: true, Data: item})
+	printJSON(envelope{OK: true, Data: svc.WithText(item)})
 }
 
 // vaultsData is the shape returned by the vaults command.

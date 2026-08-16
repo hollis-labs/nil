@@ -308,3 +308,94 @@ func TestSearchUpdatedSinceFutureExcludesEverything(t *testing.T) {
 		t.Errorf("got %d items, want 0 (updated_since in the future excludes everything)", len(items))
 	}
 }
+
+// TestPlainTextRendersDocBody confirms PlainText reuses ingest.DocToPlainText
+// to produce readable text from a stored notes_doc, and that the text
+// reflects real body content (not just present-but-empty).
+func TestPlainTextRendersDocBody(t *testing.T) {
+	svc := New()
+	doc := `{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"hello world"}]}]}`
+	got := svc.PlainText(doc)
+	if !strings.Contains(got, "hello world") {
+		t.Errorf("PlainText(%q) = %q, want it to contain %q", doc, got, "hello world")
+	}
+}
+
+// TestPlainTextEmptyDocIsEmptyNotError confirms an empty notes_doc (the
+// common case for inbox-capture items with no body) renders to "" rather
+// than surfacing an error to the caller.
+func TestPlainTextEmptyDocIsEmptyNotError(t *testing.T) {
+	svc := New()
+	if got := svc.PlainText(""); got != "" {
+		t.Errorf("PlainText(\"\") = %q, want \"\"", got)
+	}
+}
+
+// TestPlainTextMalformedDocIsEmptyNotError confirms a corrupt/malformed
+// notes_doc is swallowed to "" instead of erroring, so one bad item can't
+// break an entire list/search response for every other item alongside it.
+func TestPlainTextMalformedDocIsEmptyNotError(t *testing.T) {
+	svc := New()
+	if got := svc.PlainText("{not valid json"); got != "" {
+		t.Errorf("PlainText(malformed) = %q, want \"\"", got)
+	}
+}
+
+// TestWithTextIsAdditive confirms WithText preserves every existing
+// store.Item field unchanged (via embedding) while adding notes_text
+// alongside them — purely additive, no existing-field behavior change.
+func TestWithTextIsAdditive(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	created, err := svc.Create(ctx, st, CreateInput{
+		Title:   "with body",
+		NotesMD: "hello from markdown",
+	})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	view := svc.WithText(created)
+
+	if view.ID != created.ID || view.Title != created.Title || view.NotesDoc != created.NotesDoc || view.NotesHTML != created.NotesHTML {
+		t.Errorf("WithText did not preserve existing fields: got %+v, from %+v", view.Item, created)
+	}
+	if !strings.Contains(view.NotesText, "hello from markdown") {
+		t.Errorf("NotesText=%q, want it to contain rendered markdown body", view.NotesText)
+	}
+}
+
+// TestWithTextSliceHandlesEmptyBodyItem confirms an item with no body at all
+// (e.g. a blank inbox capture) round-trips through WithTextSlice with an
+// empty notes_text instead of breaking the whole list response.
+func TestWithTextSliceHandlesEmptyBodyItem(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	withBody, err := svc.Create(ctx, st, CreateInput{Title: "has body", NotesMD: "some content here"})
+	if err != nil {
+		t.Fatalf("Create withBody: %v", err)
+	}
+	noBody, err := svc.Create(ctx, st, CreateInput{Title: "", Inbox: true})
+	if err != nil {
+		t.Fatalf("Create noBody: %v", err)
+	}
+
+	views := svc.WithTextSlice([]store.Item{*withBody, *noBody})
+	if len(views) != 2 {
+		t.Fatalf("got %d views, want 2", len(views))
+	}
+	if !strings.Contains(views[0].NotesText, "some content here") {
+		t.Errorf("views[0].NotesText=%q, want it to contain body content", views[0].NotesText)
+	}
+	if views[1].NotesText != "" {
+		t.Errorf("views[1].NotesText=%q, want \"\" for a bodyless item", views[1].NotesText)
+	}
+	// Existing fields still present and correct alongside the new field.
+	if views[1].Title != "" || !views[1].Inbox {
+		t.Errorf("views[1] existing fields not preserved: %+v", views[1].Item)
+	}
+}

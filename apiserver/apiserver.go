@@ -273,7 +273,7 @@ func (h *apiHandler) handleListInbox(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to list inbox items")
 		return
 	}
-	writeJSON(w, http.StatusOK, listed)
+	writeJSON(w, http.StatusOK, h.svc.WithTextSlice(listed))
 }
 
 // POST /api/v1/inbox/{id}/process — mark an inbox item as processed.
@@ -366,7 +366,7 @@ func (h *apiHandler) handleGetItem(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to get item")
 		return
 	}
-	writeJSON(w, http.StatusOK, item)
+	writeJSON(w, http.StatusOK, h.svc.WithText(item))
 }
 
 // PUT /api/v1/items/{id} — partial update of an existing item.
@@ -598,7 +598,7 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to search items")
 		return
 	}
-	writeJSON(w, http.StatusOK, results)
+	writeJSON(w, http.StatusOK, h.svc.WithTextSlice(results))
 }
 
 // GET /api/v1/taxonomy — return projects, contexts, and tags with item counts.

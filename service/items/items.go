@@ -326,6 +326,65 @@ func (s *Service) ProcessInbox(ctx context.Context, st *store.Store, id int64) e
 	return st.ProcessInboxItem(ctx, id)
 }
 
+// ItemView augments a store.Item with a plaintext rendering of its body
+// (NotesText) for API/CLI/MCP responses. It embeds store.Item by value, so
+// every existing field/JSON tag is preserved unchanged — this is a purely
+// additive wrapper, not a replacement shape. Callers on every transport
+// (HTTP API, CLI, and MCP via its raw-body passthrough of the HTTP API)
+// should serialize this type instead of a bare store.Item/[]store.Item once
+// they need notes_text in the response.
+type ItemView struct {
+	store.Item
+	NotesText string `json:"notes_text"`
+}
+
+// WithText wraps a single item for response shaping, computing notes_text
+// via PlainText. This is the single reuse point every surface should call
+// instead of invoking ingest.DocToPlainText (or writing its own PM-JSON
+// walker) independently.
+func (s *Service) WithText(item *store.Item) ItemView {
+	return ItemView{Item: *item, NotesText: s.PlainText(item.NotesDoc)}
+}
+
+// WithTextSlice applies WithText across a list response (search, inbox).
+func (s *Service) WithTextSlice(list []store.Item) []ItemView {
+	out := make([]ItemView, len(list))
+	for i := range list {
+		out[i] = ItemView{Item: list[i], NotesText: s.PlainText(list[i].NotesDoc)}
+	}
+	return out
+}
+
+// PlainText renders a stored notes_doc (TipTap/ProseMirror JSON) to plain
+// text by reusing ingest.DocToPlainText directly — no new conversion logic.
+// DocToPlainText already powers FTS5 indexing (see ingest/doc.go and
+// store/schema.sql's notes_text comment); this method is the single place
+// every external-facing surface (HTTP API, CLI, and MCP via its HTTP
+// passthrough) goes through, so none of them need to maintain their own
+// PM-JSON walker just to get readable text out of a note.
+//
+// Error handling: an empty notes_doc is NOT an error (UnmarshalDoc treats ""
+// as the canonical empty doc, common for inbox-capture items with no body,
+// and yields ""). DocToPlainText only errors on genuinely malformed JSON. In
+// that case this method swallows the error and returns "" rather than
+// propagating it — one corrupt item must not fail an entire list/search
+// response for every other item alongside it, and the raw notes_doc is still
+// returned unchanged so a caller that cares about the corruption can still
+// detect it via that field.
+//
+// DocToMarkdown: deliberately NOT added alongside this. Plaintext is
+// sufficient for today's actual consumers (search/ingest/sync); a
+// round-trippable markdown exporter is separate, real work (list/heading/
+// mark serialization, escaping) that no concrete consumer has asked for.
+// Revisit only if one does.
+func (s *Service) PlainText(notesDoc string) string {
+	text, err := ingest.DocToPlainText(notesDoc)
+	if err != nil {
+		return ""
+	}
+	return text
+}
+
 func (s *Service) applySearchDefaults(req store.SearchRequest) store.SearchRequest {
 	if req.Kind == "" {
 		req.Kind = "all"
