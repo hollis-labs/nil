@@ -108,34 +108,59 @@ type argsListItemIDs struct {
 // notes_html. The HTTP API does the conversion server-side via ingest;
 // MCP just forwards whichever field is set.
 type argsCreateItem struct {
-	Title     string   `json:"title"`
-	Kind      string   `json:"kind"`
-	NotesDoc  string   `json:"notes_doc"`
-	NotesMD   string   `json:"notes_md"`
-	NotesHTML string   `json:"notes_html"`
-	Priority  string   `json:"priority"`
-	DueAt     string   `json:"due_at"`
-	Section   string   `json:"section"`
-	Tags      []string `json:"tags"`
-	Contexts  []string `json:"contexts"`
-	Projects  []string `json:"projects"`
-	VaultID   string   `json:"vault_id"`
+	Title       string   `json:"title"`
+	Kind        string   `json:"kind"`
+	NotesDoc    string   `json:"notes_doc"`
+	NotesMD     string   `json:"notes_md"`
+	NotesHTML   string   `json:"notes_html"`
+	Priority    string   `json:"priority"`
+	DueAt       string   `json:"due_at"`
+	Section     string   `json:"section"`
+	Tags        []string `json:"tags"`
+	Contexts    []string `json:"contexts"`
+	Projects    []string `json:"projects"`
+	VaultID     string   `json:"vault_id"`
+	ExternalRef string   `json:"external_ref"`
+}
+
+// argsCreateItemBatchEntry is one element of argsCreateItemsBatch.Items —
+// deliberately the same field set as argsCreateItem (minus vault_id, which
+// applies once to the whole batch call, not per item).
+type argsCreateItemBatchEntry struct {
+	Title       string   `json:"title"`
+	Kind        string   `json:"kind"`
+	NotesDoc    string   `json:"notes_doc"`
+	NotesMD     string   `json:"notes_md"`
+	NotesHTML   string   `json:"notes_html"`
+	Priority    string   `json:"priority"`
+	DueAt       string   `json:"due_at"`
+	Section     string   `json:"section"`
+	Tags        []string `json:"tags"`
+	Contexts    []string `json:"contexts"`
+	Projects    []string `json:"projects"`
+	ExternalRef string   `json:"external_ref"`
+}
+
+type argsCreateItemsBatch struct {
+	Items   []argsCreateItemBatchEntry `json:"items"`
+	VaultID string                     `json:"vault_id"`
 }
 
 type argsUpdateItem struct {
-	ID        int      `json:"id"`
-	Title     string   `json:"title"`
-	Kind      string   `json:"kind"`
-	NotesDoc  string   `json:"notes_doc"`
-	NotesMD   string   `json:"notes_md"`
-	NotesHTML string   `json:"notes_html"`
-	Priority  string   `json:"priority"`
-	DueAt     string   `json:"due_at"`
-	Section   string   `json:"section"`
-	Tags      []string `json:"tags"`
-	Contexts  []string `json:"contexts"`
-	Projects  []string `json:"projects"`
-	VaultID   string   `json:"vault_id"`
+	ID          int      `json:"id"`
+	Title       string   `json:"title"`
+	Kind        string   `json:"kind"`
+	NotesDoc    string   `json:"notes_doc"`
+	NotesMD     string   `json:"notes_md"`
+	NotesHTML   string   `json:"notes_html"`
+	Priority    string   `json:"priority"`
+	DueAt       string   `json:"due_at"`
+	Section     string   `json:"section"`
+	Tags        []string `json:"tags"`
+	Contexts    []string `json:"contexts"`
+	Projects    []string `json:"projects"`
+	VaultID     string   `json:"vault_id"`
+	ExternalRef string   `json:"external_ref"`
 }
 
 type argsDeleteItem struct {
@@ -334,6 +359,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (string, error) {
 		return s.toolListItemIDs(args)
 	case "nil_create_item":
 		return s.toolCreateItem(args)
+	case "nil_create_items":
+		return s.toolCreateItemsBatch(args)
 	case "nil_update_item":
 		return s.toolUpdateItem(args)
 	case "nil_delete_item":
@@ -598,8 +625,80 @@ func (s *Server) toolCreateItem(args json.RawMessage) (string, error) {
 	if len(a.Projects) > 0 {
 		body["projects"] = a.Projects
 	}
+	if a.ExternalRef != "" {
+		body["external_ref"] = a.ExternalRef
+	}
 
 	data, err := s.apiDo("POST", "/api/v1/items", body, a.VaultID)
+	if err != nil {
+		return "", err
+	}
+	return prettyJSON(data), nil
+}
+
+// toolCreateItemsBatch is a separate tool rather than an "items" array
+// accepted by nil_create_item: this epic's established precedent is one
+// concern per tool (see nil_get_backrefs / nil_list_item_ids each getting
+// their own tool instead of a flag bolted onto nil_get_item / nil_search),
+// and a batch call has a materially different contract from a single create
+// — different response shape (a list, not one item) and all-or-nothing
+// failure semantics across every entry, not just one. Proxies straight to
+// POST /api/v1/items/batch, which is itself a dedicated route for the same
+// reasons (see apiserver.go's handleCreateItemsBatch doc comment).
+func (s *Server) toolCreateItemsBatch(args json.RawMessage) (string, error) {
+	var a argsCreateItemsBatch
+	if err := json.Unmarshal(args, &a); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+	if len(a.Items) == 0 {
+		return "", fmt.Errorf("items must be a non-empty array")
+	}
+	for i, it := range a.Items {
+		if it.Title == "" {
+			return "", fmt.Errorf("items[%d]: title is required", i)
+		}
+	}
+
+	bodyItems := make([]map[string]any, len(a.Items))
+	for i, it := range a.Items {
+		item := map[string]any{"title": it.Title}
+		if it.Kind != "" {
+			item["kind"] = it.Kind
+		}
+		if it.NotesDoc != "" {
+			item["notes_doc"] = it.NotesDoc
+		}
+		if it.NotesMD != "" {
+			item["notes_md"] = it.NotesMD
+		}
+		if it.NotesHTML != "" {
+			item["notes_html"] = it.NotesHTML
+		}
+		if it.Priority != "" {
+			item["priority"] = it.Priority
+		}
+		if it.DueAt != "" {
+			item["due_at"] = it.DueAt
+		}
+		if it.Section != "" {
+			item["section"] = it.Section
+		}
+		if len(it.Tags) > 0 {
+			item["tags"] = it.Tags
+		}
+		if len(it.Contexts) > 0 {
+			item["contexts"] = it.Contexts
+		}
+		if len(it.Projects) > 0 {
+			item["projects"] = it.Projects
+		}
+		if it.ExternalRef != "" {
+			item["external_ref"] = it.ExternalRef
+		}
+		bodyItems[i] = item
+	}
+
+	data, err := s.apiDo("POST", "/api/v1/items/batch", map[string]any{"items": bodyItems}, a.VaultID)
 	if err != nil {
 		return "", err
 	}
@@ -653,6 +752,9 @@ func (s *Server) toolUpdateItem(args json.RawMessage) (string, error) {
 	}
 	if _, ok := raw["projects"]; ok {
 		body["projects"] = a.Projects
+	}
+	if _, ok := raw["external_ref"]; ok {
+		body["external_ref"] = a.ExternalRef
 	}
 
 	data, err := s.apiDo("PUT", fmt.Sprintf("/api/v1/items/%d", a.ID), body, a.VaultID)
@@ -904,20 +1006,39 @@ func toolList() []toolDef {
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"title":      strProp("Item title"),
-					"kind":       strEnumProp("Item kind", "todo", "note", "scratch"),
-					"notes_md":   strProp("Markdown body (converted server-side to TipTap doc)"),
-					"notes_html": strProp("HTML body (converted server-side to TipTap doc)"),
-					"notes_doc":  strProp("Pre-built TipTap doc JSON (skips server conversion)"),
-					"priority":   strEnumProp("Priority", "A", "B", "C"),
-					"due_at":     strProp("Due date in RFC3339 format"),
-					"section":    strEnumProp("Section", "now", "soon", "anytime"),
-					"tags":       strArrayProp("Tags"),
-					"contexts":   strArrayProp("Contexts"),
-					"projects":   strArrayProp("Projects"),
-					"vault_id":   vaultIDProp,
+					"title":        strProp("Item title"),
+					"kind":         strEnumProp("Item kind", "todo", "note", "scratch"),
+					"notes_md":     strProp("Markdown body (converted server-side to TipTap doc)"),
+					"notes_html":   strProp("HTML body (converted server-side to TipTap doc)"),
+					"notes_doc":    strProp("Pre-built TipTap doc JSON (skips server conversion)"),
+					"priority":     strEnumProp("Priority", "A", "B", "C"),
+					"due_at":       strProp("Due date in RFC3339 format"),
+					"section":      strEnumProp("Section", "now", "soon", "anytime"),
+					"tags":         strArrayProp("Tags"),
+					"contexts":     strArrayProp("Contexts"),
+					"projects":     strArrayProp("Projects"),
+					"vault_id":     vaultIDProp,
+					"external_ref": strProp("Optional idempotency key identifying this item's corresponding record on your side. Re-calling with the same external_ref (in the same vault) updates the existing item instead of creating a duplicate — safe to retry/re-push."),
 				},
 				Required: []string{"title"},
+			},
+		},
+		{
+			Name:        "nil_create_items",
+			Description: "Create multiple items in a NIL vault in one call (batch create). All-or-nothing: if any item fails (e.g. an invalid kind), nothing in the batch is created and the error names which item (by index) and why — fix it and retry the whole batch. Each item supports the same fields as nil_create_item, including external_ref for idempotent re-push (an item whose external_ref matches an existing row updates it in place instead of duplicating it).",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]schemaProp{
+					"items": {
+						Type:        "array",
+						Description: "Items to create. Each entry accepts the same fields as nil_create_item (minus vault_id, which applies once to the whole call).",
+						Items: &schemaProp{
+							Type: "object",
+						},
+					},
+					"vault_id": vaultIDProp,
+				},
+				Required: []string{"items"},
 			},
 		},
 		{
@@ -926,19 +1047,20 @@ func toolList() []toolDef {
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"id":         intProp("Item ID"),
-					"title":      strProp("New title"),
-					"kind":       strEnumProp("New kind", "todo", "note", "scratch"),
-					"notes_md":   strProp("New markdown body (converted server-side)"),
-					"notes_html": strProp("New HTML body (converted server-side)"),
-					"notes_doc":  strProp("New pre-built TipTap doc JSON"),
-					"priority":   strEnumProp("Priority", "A", "B", "C"),
-					"due_at":     strProp("Due date in RFC3339 format"),
-					"section":    strEnumProp("Section", "now", "soon", "anytime"),
-					"tags":       strArrayProp("Tags (replaces existing)"),
-					"contexts":   strArrayProp("Contexts (replaces existing)"),
-					"projects":   strArrayProp("Projects (replaces existing)"),
-					"vault_id":   vaultIDProp,
+					"id":           intProp("Item ID"),
+					"title":        strProp("New title"),
+					"kind":         strEnumProp("New kind", "todo", "note", "scratch"),
+					"notes_md":     strProp("New markdown body (converted server-side)"),
+					"notes_html":   strProp("New HTML body (converted server-side)"),
+					"notes_doc":    strProp("New pre-built TipTap doc JSON"),
+					"priority":     strEnumProp("Priority", "A", "B", "C"),
+					"due_at":       strProp("Due date in RFC3339 format"),
+					"section":      strEnumProp("Section", "now", "soon", "anytime"),
+					"tags":         strArrayProp("Tags (replaces existing)"),
+					"contexts":     strArrayProp("Contexts (replaces existing)"),
+					"projects":     strArrayProp("Projects (replaces existing)"),
+					"vault_id":     vaultIDProp,
+					"external_ref": strProp("Set/change/clear this item's external idempotency key."),
 				},
 				Required: []string{"id"},
 			},

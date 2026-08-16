@@ -64,6 +64,14 @@ type CreateInput struct {
 	APISource  string
 	SourceLine string
 
+	// ExternalRef is an optional writer-supplied idempotency key (see
+	// store.Item.ExternalRef). Empty means "no external correlation" — the
+	// default, unaffected path for every caller that doesn't set it. When
+	// non-empty and an item with the same external_ref already exists in
+	// the target vault, Create (and CreateBatch) update that existing row
+	// instead of inserting a duplicate.
+	ExternalRef string
+
 	NotesDoc  string
 	NotesMD   string
 	NotesHTML string
@@ -98,6 +106,14 @@ type UpdatePatch struct {
 	Contexts *[]string
 	Tags     *[]string
 
+	// ExternalRef lets a caller explicitly set/change/clear the item's
+	// external_ref via a known ID (nil = leave unchanged, non-nil = replace,
+	// including with "" to clear). This is distinct from CreateInput's
+	// external_ref matching: that's for a caller that doesn't know Nil's
+	// internal ID and wants create-or-update-by-external_ref; this is for a
+	// caller that already has the ID and wants to (re)assign the key itself.
+	ExternalRef *string
+
 	Priority   NullableString
 	DueAt      NullableString
 	Threshold  NullableString
@@ -112,6 +128,41 @@ type UpdatePatch struct {
 // resolves notes input via the ingest pipeline, and writes via st.CreateItem.
 // The store validates kind against the kinds registry.
 func (s *Service) Create(ctx context.Context, st *store.Store, input CreateInput) (*store.Item, error) {
+	item, err := s.buildItem(input)
+	if err != nil {
+		return nil, err
+	}
+	return st.CreateItem(ctx, item)
+}
+
+// CreateBatch creates every input in a single all-or-nothing transaction
+// (see store.Store.CreateItemsBatch for the transactional/rollback-on-any-
+// failure rationale this shares). Each input gets the exact same
+// kind/section defaulting, notes-input resolution, and external_ref
+// dedup-or-insert behavior as a single Create call — the batch and
+// single-item paths are semantically identical, just wrapped in one
+// transaction. An input-resolution failure (e.g. malformed notes_md/html at
+// index i) is reported before any DB work happens and aborts the whole
+// batch, consistent with the all-or-nothing contract.
+func (s *Service) CreateBatch(ctx context.Context, st *store.Store, inputs []CreateInput) ([]store.Item, error) {
+	items := make([]store.Item, len(inputs))
+	for i, input := range inputs {
+		item, err := s.buildItem(input)
+		if err != nil {
+			return nil, fmt.Errorf("item %d: %w", i, err)
+		}
+		items[i] = *item
+	}
+	return st.CreateItemsBatch(ctx, items)
+}
+
+// buildItem applies CreateInput's kind/section defaults and resolves its
+// notes input into the (doc, html, version) triplet, producing the
+// *store.Item that Create and CreateBatch both hand to the store layer. No
+// store I/O happens here — it's pure input shaping, safe to call before a
+// transaction is open (as CreateBatch does, to fail the whole batch fast on
+// a bad input without touching the DB).
+func (s *Service) buildItem(input CreateInput) (*store.Item, error) {
 	kind := input.Kind
 	if kind == "" {
 		kind = "todo"
@@ -124,7 +175,7 @@ func (s *Service) Create(ctx context.Context, st *store.Store, input CreateInput
 	if err != nil {
 		return nil, fmt.Errorf("resolving notes input: %w", err)
 	}
-	item := &store.Item{
+	return &store.Item{
 		Title:            input.Title,
 		Kind:             kind,
 		Section:          section,
@@ -138,12 +189,12 @@ func (s *Service) Create(ctx context.Context, st *store.Store, input CreateInput
 		Pinned:           input.Pinned,
 		Inbox:            input.Inbox,
 		APISource:        input.APISource,
+		ExternalRef:      input.ExternalRef,
 		Source:           input.SourceLine,
 		NotesDoc:         doc,
 		NotesHTML:        htmlStr,
 		NotesHTMLVersion: version,
-	}
-	return st.CreateItem(ctx, item)
+	}, nil
 }
 
 // Update replaces an item wholesale. Caller has already populated every field
@@ -189,6 +240,9 @@ func (s *Service) UpdatePatch(ctx context.Context, st *store.Store, id int64, pa
 	}
 	if patch.Tags != nil {
 		existing.Tags = *patch.Tags
+	}
+	if patch.ExternalRef != nil {
+		existing.ExternalRef = *patch.ExternalRef
 	}
 	if patch.Priority.Set {
 		existing.Priority = patch.Priority.Value

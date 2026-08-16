@@ -399,3 +399,100 @@ func TestWithTextSliceHandlesEmptyBodyItem(t *testing.T) {
 		t.Errorf("views[1] existing fields not preserved: %+v", views[1].Item)
 	}
 }
+
+// TestCreateBatchAppliesSameDefaultsAsCreate confirms CreateBatch's
+// per-item shaping matches Create's exactly: kind/section defaulting and
+// notes-input resolution, for every item in one call.
+func TestCreateBatchAppliesSameDefaultsAsCreate(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	created, err := svc.CreateBatch(ctx, st, []CreateInput{
+		{Title: "minimal"},
+		{Title: "with markdown", NotesMD: "# Heading"},
+		{Title: "explicit kind", Kind: "note", Section: "now"},
+	})
+	if err != nil {
+		t.Fatalf("CreateBatch: %v", err)
+	}
+	if len(created) != 3 {
+		t.Fatalf("got %d created items, want 3", len(created))
+	}
+	if created[0].Kind != "todo" || created[0].Section != "anytime" {
+		t.Errorf("created[0] defaults not applied: kind=%q section=%q", created[0].Kind, created[0].Section)
+	}
+	if !strings.Contains(created[1].NotesDoc, "Heading") {
+		t.Errorf("created[1].NotesDoc missing resolved markdown: %q", created[1].NotesDoc)
+	}
+	if created[2].Kind != "note" || created[2].Section != "now" {
+		t.Errorf("created[2] explicit kind/section not honored: kind=%q section=%q", created[2].Kind, created[2].Section)
+	}
+}
+
+// TestCreateBatchExternalRefRepushSharesCreateSemantics confirms
+// CreateBatch's external_ref matching produces identical results to a
+// single Create call re-push, when called through the service layer (not
+// just the store layer directly).
+func TestCreateBatchExternalRefRepushSharesCreateSemantics(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	first, err := svc.Create(ctx, st, CreateInput{Title: "seed", ExternalRef: "svc-batch-1"})
+	if err != nil {
+		t.Fatalf("Create (seed): %v", err)
+	}
+
+	created, err := svc.CreateBatch(ctx, st, []CreateInput{
+		{Title: "seed (re-pushed)", ExternalRef: "svc-batch-1"},
+		{Title: "genuinely new"},
+	})
+	if err != nil {
+		t.Fatalf("CreateBatch: %v", err)
+	}
+	if created[0].ID != first.ID {
+		t.Errorf("CreateBatch re-push got new id=%d, want existing id=%d", created[0].ID, first.ID)
+	}
+	if created[0].Title != "seed (re-pushed)" {
+		t.Errorf("CreateBatch re-push title=%q, want the new value", created[0].Title)
+	}
+
+	all, err := svc.Search(ctx, st, store.SearchRequest{})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("got %d items, want 2 (one updated in place, one new)", len(all))
+	}
+}
+
+// TestCreateBatchAllOrNothingOnBadInput confirms a batch containing an
+// unresolvable notes input (malformed notes_doc JSON) fails the whole call
+// before any item is created — the service-layer half of the all-or-nothing
+// contract (input-shaping failures are caught before store.CreateItemsBatch
+// ever opens a transaction).
+func TestCreateBatchAllOrNothingOnBadInput(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	_, err := svc.CreateBatch(ctx, st, []CreateInput{
+		{Title: "valid"},
+		{Title: "bad doc", NotesDoc: "{not valid json"},
+	})
+	if err == nil {
+		t.Fatal("CreateBatch: expected an error for the malformed notes_doc item")
+	}
+	if !strings.Contains(err.Error(), "item 1") {
+		t.Errorf("err=%q, want it to name the failing item's index (item 1)", err.Error())
+	}
+
+	all, err := svc.Search(ctx, st, store.SearchRequest{})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(all) != 0 {
+		t.Fatalf("got %d items after a rejected batch, want 0 (nothing committed)", len(all))
+	}
+}

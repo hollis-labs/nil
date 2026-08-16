@@ -367,6 +367,7 @@ export namespace store {
 	    kind: string;
 	    inbox: boolean;
 	    api_source?: string;
+	    external_ref?: string;
 	    projects: string[];
 	    contexts: string[];
 	    tags: string[];
@@ -396,6 +397,7 @@ export namespace store {
 	        this.kind = source["kind"];
 	        this.inbox = source["inbox"];
 	        this.api_source = source["api_source"];
+	        this.external_ref = source["external_ref"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];

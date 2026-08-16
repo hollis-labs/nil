@@ -14,6 +14,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strconv"
@@ -47,6 +48,7 @@ func New(cfg *config.Config, vm *vault.Manager) *http.Server {
 
 	// Item CRUD routes
 	mux.Handle("POST /api/v1/items", h.auth(h.handleCreateItem))
+	mux.Handle("POST /api/v1/items/batch", h.auth(h.handleCreateItemsBatch))
 	mux.Handle("GET /api/v1/items/ids", h.auth(h.handleListItemIDs))
 	mux.Handle("GET /api/v1/items/{id}", h.auth(h.handleGetItem))
 	mux.Handle("PUT /api/v1/items/{id}", h.auth(h.handleUpdateItem))
@@ -174,6 +176,21 @@ type itemCreateRequest struct {
 	Tags      []string `json:"tags"`
 	Contexts  []string `json:"contexts"`
 	Projects  []string `json:"projects"`
+	// ExternalRef is an optional writer-supplied idempotency key. When set
+	// and an item with the same external_ref already exists in the target
+	// vault, the existing row is updated in place instead of a duplicate
+	// being inserted — see store.Item.ExternalRef and
+	// items.Service.buildItem. Empty/omitted is the default, unaffected
+	// plain-insert path.
+	ExternalRef string `json:"external_ref"`
+}
+
+// itemBatchCreateRequest is the request body for POST /api/v1/items/batch.
+// Each element uses the exact same shape as a single POST /api/v1/items
+// body, so a caller building a batch payload can reuse the same
+// per-item-construction code path they'd use for single creates.
+type itemBatchCreateRequest struct {
+	Items []itemCreateRequest `json:"items"`
 }
 
 // nullableString distinguishes "field omitted" (IsSet=false) from "field set to null"
@@ -205,18 +222,19 @@ func (n *nullableString) UnmarshalJSON(data []byte) error {
 // send null (leave unchanged) vs [] (clear). Priority and DueAt use nullableString
 // so that an explicit JSON null can clear the column.
 type itemUpdateRequest struct {
-	Title     *string        `json:"title"`
-	NotesDoc  *string        `json:"notes_doc"`
-	NotesMD   *string        `json:"notes_md"`
-	NotesHTML *string        `json:"notes_html"`
-	Priority  nullableString `json:"priority"`
-	DueAt     nullableString `json:"due_at"`
-	Kind      *string        `json:"kind"`
-	Section   *string        `json:"section"`
-	Pinned    *bool          `json:"pinned"`
-	Tags      *[]string      `json:"tags"`
-	Contexts  *[]string      `json:"contexts"`
-	Projects  *[]string      `json:"projects"`
+	Title       *string        `json:"title"`
+	NotesDoc    *string        `json:"notes_doc"`
+	NotesMD     *string        `json:"notes_md"`
+	NotesHTML   *string        `json:"notes_html"`
+	Priority    nullableString `json:"priority"`
+	DueAt       nullableString `json:"due_at"`
+	Kind        *string        `json:"kind"`
+	Section     *string        `json:"section"`
+	Pinned      *bool          `json:"pinned"`
+	Tags        *[]string      `json:"tags"`
+	Contexts    *[]string      `json:"contexts"`
+	Projects    *[]string      `json:"projects"`
+	ExternalRef *string        `json:"external_ref"`
 }
 
 type toggleCompleteRequest struct {
@@ -325,25 +343,102 @@ func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := h.svc.Create(r.Context(), s, items.CreateInput{
-		Title:     req.Title,
-		Kind:      req.Kind,
-		Section:   req.Section,
-		Priority:  req.Priority,
-		DueAt:     req.DueAt,
-		Pinned:    req.Pinned,
-		Tags:      req.Tags,
-		Contexts:  req.Contexts,
-		Projects:  req.Projects,
-		APISource: r.Header.Get("X-Agent-Source"),
-		NotesDoc:  req.NotesDoc,
-		NotesMD:   req.NotesMD,
-		NotesHTML: req.NotesHTML,
+		Title:       req.Title,
+		Kind:        req.Kind,
+		Section:     req.Section,
+		Priority:    req.Priority,
+		DueAt:       req.DueAt,
+		Pinned:      req.Pinned,
+		Tags:        req.Tags,
+		Contexts:    req.Contexts,
+		Projects:    req.Projects,
+		APISource:   r.Header.Get("X-Agent-Source"),
+		ExternalRef: req.ExternalRef,
+		NotesDoc:    req.NotesDoc,
+		NotesMD:     req.NotesMD,
+		NotesHTML:   req.NotesHTML,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create item: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// POST /api/v1/items/batch — create multiple items in the vault resolved by
+// X-Vault-ID in a single call. A dedicated route rather than overloading
+// POST /api/v1/items to accept either a single object or an array: it keeps
+// the existing single-create handler's request/response shape completely
+// unchanged for every existing caller (CLI, MCP, chat bridge), avoids
+// body-shape-sniffing logic in the handler, and matches this epic's
+// established precedent of adding a purpose-specific route per new concern
+// (see /api/v1/items/ids, /api/v1/items/{id}/backrefs) instead of cramming
+// multiple request/response shapes behind one route.
+//
+// All-or-nothing: the whole batch runs inside a single DB transaction (see
+// store.Store.CreateItemsBatch / items.Service.CreateBatch). If any item
+// fails — a validation error like an unknown kind, or a DB-level failure —
+// nothing in the batch is created and the response names which item (by
+// index) and why, so the caller can fix that one item and retry the entire
+// batch. This was chosen over best-effort/partial-success because it keeps
+// retry semantics simple for a future bulk-push caller: a failed batch call
+// means "try again after fixing X", never "some of these already landed,
+// diff your local state against ours to find out which".
+//
+// Each item is subject to the exact same external_ref idempotency matching
+// as a single POST /api/v1/items call: an item whose external_ref matches
+// an existing row in this vault updates that row instead of creating a
+// duplicate.
+func (h *apiHandler) handleCreateItemsBatch(w http.ResponseWriter, r *http.Request) {
+	var req itemBatchCreateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusBadRequest, "items must be a non-empty array")
+		return
+	}
+	for i, it := range req.Items {
+		if strings.TrimSpace(it.Title) == "" {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("item %d: title is required", i))
+			return
+		}
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	agentSource := r.Header.Get("X-Agent-Source")
+	inputs := make([]items.CreateInput, len(req.Items))
+	for i, it := range req.Items {
+		inputs[i] = items.CreateInput{
+			Title:       it.Title,
+			Kind:        it.Kind,
+			Section:     it.Section,
+			Priority:    it.Priority,
+			DueAt:       it.DueAt,
+			Pinned:      it.Pinned,
+			Tags:        it.Tags,
+			Contexts:    it.Contexts,
+			Projects:    it.Projects,
+			APISource:   agentSource,
+			ExternalRef: it.ExternalRef,
+			NotesDoc:    it.NotesDoc,
+			NotesMD:     it.NotesMD,
+			NotesHTML:   it.NotesHTML,
+		}
+	}
+
+	created, err := h.svc.CreateBatch(r.Context(), s, inputs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create items: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusCreated, h.svc.WithTextSlice(created))
 }
 
 // GET /api/v1/items/ids — the deletion/change-signal endpoint. Returns the
@@ -452,18 +547,19 @@ func (h *apiHandler) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	patch := items.UpdatePatch{
-		Title:     req.Title,
-		Kind:      req.Kind,
-		Section:   req.Section,
-		Pinned:    req.Pinned,
-		Tags:      req.Tags,
-		Contexts:  req.Contexts,
-		Projects:  req.Projects,
-		Priority:  items.NullableString{Set: req.Priority.IsSet, Value: req.Priority.Value},
-		DueAt:     items.NullableString{Set: req.DueAt.IsSet, Value: req.DueAt.Value},
-		NotesDoc:  req.NotesDoc,
-		NotesMD:   req.NotesMD,
-		NotesHTML: req.NotesHTML,
+		Title:       req.Title,
+		Kind:        req.Kind,
+		Section:     req.Section,
+		Pinned:      req.Pinned,
+		Tags:        req.Tags,
+		Contexts:    req.Contexts,
+		Projects:    req.Projects,
+		Priority:    items.NullableString{Set: req.Priority.IsSet, Value: req.Priority.Value},
+		DueAt:       items.NullableString{Set: req.DueAt.IsSet, Value: req.DueAt.Value},
+		ExternalRef: req.ExternalRef,
+		NotesDoc:    req.NotesDoc,
+		NotesMD:     req.NotesMD,
+		NotesHTML:   req.NotesHTML,
 	}
 
 	updated, err := h.svc.UpdatePatch(r.Context(), s, id, patch)

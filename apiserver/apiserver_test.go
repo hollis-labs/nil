@@ -460,3 +460,178 @@ func TestHandleListItemIDsKindFilter(t *testing.T) {
 		t.Fatalf("no-filter got %d ids, want 2 (default is every kind); stamps=%v", len(allStamps), allStamps)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// CW-20260816-0045: POST /api/v1/items/batch + external_ref idempotency
+// ---------------------------------------------------------------------------
+
+// TestHandleCreateItemsBatch confirms a batch of N items is created in one
+// call, each with notes_text present (same response shaping as every other
+// list-shaped response), and that they're actually persisted (visible via a
+// follow-up search), not just echoed back.
+func TestHandleCreateItemsBatch(t *testing.T) {
+	e := newTestEnv(t)
+
+	res := e.do("POST", "/api/v1/items/batch", map[string]any{
+		"items": []map[string]any{
+			{"title": "batch one", "notes_md": "first body"},
+			{"title": "batch two", "kind": "note"},
+			{"title": "batch three"},
+		},
+	})
+	if res.Code != http.StatusCreated {
+		t.Fatalf("batch create status=%d body=%s", res.Code, res.Body.String())
+	}
+	env := decodeEnvelope(t, res)
+	var created []itemJSON
+	if err := json.Unmarshal(env.Data, &created); err != nil {
+		t.Fatalf("decode batch create result: %v", err)
+	}
+	if len(created) != 3 {
+		t.Fatalf("got %d created items, want 3", len(created))
+	}
+	if created[0]["title"] != "batch one" {
+		t.Errorf("created[0].title=%v, want %q", created[0]["title"], "batch one")
+	}
+	if _, ok := created[0]["notes_text"]; !ok {
+		t.Errorf("created[0] missing notes_text — batch response should be shaped like every other list response")
+	}
+
+	search := e.do("GET", "/api/v1/search?kind=all", nil)
+	if search.Code != http.StatusOK {
+		t.Fatalf("search status=%d body=%s", search.Code, search.Body.String())
+	}
+	searchEnv := decodeEnvelope(t, search)
+	var items []itemJSON
+	if err := json.Unmarshal(searchEnv.Data, &items); err != nil {
+		t.Fatalf("decode search results: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("got %d items in vault after batch create, want 3", len(items))
+	}
+}
+
+// TestHandleCreateItemsBatchRejectsEmpty confirms an empty items array is a
+// 400, not a silent no-op 201.
+func TestHandleCreateItemsBatchRejectsEmpty(t *testing.T) {
+	e := newTestEnv(t)
+
+	res := e.do("POST", "/api/v1/items/batch", map[string]any{"items": []map[string]any{}})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("empty batch status=%d, want 400; body=%s", res.Code, res.Body.String())
+	}
+}
+
+// TestHandleCreateItemsBatchAllOrNothing confirms a batch where one item is
+// missing its required title fails before any DB work happens, and that
+// none of the batch's otherwise-valid items were created — the HTTP-level
+// contract test for the all-or-nothing design decision.
+func TestHandleCreateItemsBatchAllOrNothing(t *testing.T) {
+	e := newTestEnv(t)
+
+	res := e.do("POST", "/api/v1/items/batch", map[string]any{
+		"items": []map[string]any{
+			{"title": "valid item"},
+			{"title": ""},
+		},
+	})
+	if res.Code != http.StatusBadRequest {
+		t.Fatalf("batch with a missing title status=%d, want 400; body=%s", res.Code, res.Body.String())
+	}
+
+	search := e.do("GET", "/api/v1/search?kind=all", nil)
+	if search.Code != http.StatusOK {
+		t.Fatalf("search status=%d body=%s", search.Code, search.Body.String())
+	}
+	searchEnv := decodeEnvelope(t, search)
+	var items []itemJSON
+	if err := json.Unmarshal(searchEnv.Data, &items); err != nil {
+		t.Fatalf("decode search results: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("got %d items after a rejected batch, want 0 (nothing committed); items=%v", len(items), items)
+	}
+}
+
+// TestHandleCreateItemExternalRefRepushUpdatesInPlace is the HTTP-level
+// idempotent-write contract test: POSTing to /api/v1/items twice with the
+// same external_ref must update the existing item (same id, new field
+// values) rather than create a second one.
+func TestHandleCreateItemExternalRefRepushUpdatesInPlace(t *testing.T) {
+	e := newTestEnv(t)
+
+	first := e.do("POST", "/api/v1/items", map[string]any{
+		"title":        "original",
+		"external_ref": "fe-doc-42",
+	})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first create status=%d body=%s", first.Code, first.Body.String())
+	}
+	firstEnv := decodeEnvelope(t, first)
+	var firstItem itemJSON
+	if err := json.Unmarshal(firstEnv.Data, &firstItem); err != nil {
+		t.Fatalf("decode first item: %v", err)
+	}
+	firstID := int64(firstItem["id"].(float64))
+
+	second := e.do("POST", "/api/v1/items", map[string]any{
+		"title":        "updated via re-push",
+		"external_ref": "fe-doc-42",
+	})
+	if second.Code != http.StatusCreated {
+		t.Fatalf("re-push status=%d body=%s", second.Code, second.Body.String())
+	}
+	secondEnv := decodeEnvelope(t, second)
+	var secondItem itemJSON
+	if err := json.Unmarshal(secondEnv.Data, &secondItem); err != nil {
+		t.Fatalf("decode re-pushed item: %v", err)
+	}
+	secondID := int64(secondItem["id"].(float64))
+
+	if secondID != firstID {
+		t.Errorf("re-push id=%d, want the same id=%d as the original create", secondID, firstID)
+	}
+	if secondItem["title"] != "updated via re-push" {
+		t.Errorf("re-push title=%v, want the new value to have been applied", secondItem["title"])
+	}
+
+	search := e.do("GET", "/api/v1/search?kind=all", nil)
+	if search.Code != http.StatusOK {
+		t.Fatalf("search status=%d body=%s", search.Code, search.Body.String())
+	}
+	searchEnv := decodeEnvelope(t, search)
+	var items []itemJSON
+	if err := json.Unmarshal(searchEnv.Data, &items); err != nil {
+		t.Fatalf("decode search results: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items after re-push, want 1 (no duplicate); items=%v", len(items), items)
+	}
+}
+
+// TestHandleCreateItemNoExternalRefUnaffected confirms the default path —
+// no external_ref in the request body — is completely unchanged: repeated
+// creates with identical titles never dedup against each other.
+func TestHandleCreateItemNoExternalRefUnaffected(t *testing.T) {
+	e := newTestEnv(t)
+
+	for i := 0; i < 3; i++ {
+		res := e.do("POST", "/api/v1/items", map[string]any{"title": "plain item"})
+		if res.Code != http.StatusCreated {
+			t.Fatalf("create #%d status=%d body=%s", i, res.Code, res.Body.String())
+		}
+	}
+
+	search := e.do("GET", "/api/v1/search?kind=all", nil)
+	if search.Code != http.StatusOK {
+		t.Fatalf("search status=%d body=%s", search.Code, search.Body.String())
+	}
+	searchEnv := decodeEnvelope(t, search)
+	var items []itemJSON
+	if err := json.Unmarshal(searchEnv.Data, &items); err != nil {
+		t.Fatalf("decode search results: %v", err)
+	}
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3 distinct rows (no external_ref means no dedup)", len(items))
+	}
+}

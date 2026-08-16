@@ -20,6 +20,16 @@ type Item struct {
 	Kind             string  `json:"kind"` // todo, note, scratch, ... (kinds registry)
 	Inbox            bool    `json:"inbox"`
 	APISource        string  `json:"api_source,omitempty"`
+	// ExternalRef is a writer-supplied idempotency key identifying the
+	// corresponding record on an external system's side (e.g. a Fragments
+	// Engine document ID). Empty means "no external correlation" — the
+	// normal, unaffected default path for every existing caller. When
+	// non-empty and Store.CreateItem finds an existing row with the same
+	// value (scoped to this vault's todos table), it overwrites that row's
+	// create-payload fields instead of inserting a duplicate, so a writer
+	// can safely re-push the same logical item repeatedly. See
+	// CW-20260816-0045.
+	ExternalRef string `json:"external_ref,omitempty"`
 
 	Projects []string `json:"projects"`
 	Contexts []string `json:"contexts"`

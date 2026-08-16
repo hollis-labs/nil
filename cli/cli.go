@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	iofs "io/fs"
 	"net/http"
 	"os"
@@ -54,6 +55,12 @@ func init() {
 			short: "Create todos/notes from inline text or files",
 			usage: "nil add [title] [--file path] [--body text] [--type todo|note] [--vault id]",
 			run:   cmdAdd,
+		},
+		{
+			name:  "add-batch",
+			short: "Batch-create todos/notes from a JSON array (file or stdin)",
+			usage: "nil add-batch [--file path|-] [--vault id] [--inbox] [--source label]",
+			run:   cmdAddBatch,
 		},
 		{
 			name:  "list",
@@ -280,6 +287,7 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	projects := fs.String("projects", "", "comma-separated projects")
 	priority := fs.String("priority", "", "priority letter A|B|C")
 	due := fs.String("due", "", "due date YYYY-MM-DD")
+	externalRef := fs.String("external-ref", "", "idempotency key for a corresponding record on an external system; re-running add with the same value (in the same vault) updates the existing item instead of creating a duplicate")
 	var metaPairs stringSliceFlag
 	fs.Var(&metaPairs, "meta", "metadata key=value (repeatable; stored as meta:<key>=<value> tags for now)")
 	positional, err := parseInterspersed(args, fs)
@@ -311,13 +319,14 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 		die("add: %v", err)
 	}
 	input := items.CreateInput{
-		Title:     title,
-		Kind:      *kindFlag,
-		APISource: *source,
-		Tags:      appendMetaTags(splitCSV(*tags), parseKeyValuePairs(metaPairs)),
-		Contexts:  splitCSV(*contexts),
-		Projects:  splitCSV(*projects),
-		Inbox:     toInbox,
+		Title:       title,
+		Kind:        *kindFlag,
+		APISource:   *source,
+		Tags:        appendMetaTags(splitCSV(*tags), parseKeyValuePairs(metaPairs)),
+		Contexts:    splitCSV(*contexts),
+		Projects:    splitCSV(*projects),
+		Inbox:       toInbox,
+		ExternalRef: *externalRef,
 	}
 	if *priority != "" {
 		p := strings.ToUpper(*priority)
@@ -341,6 +350,109 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	printJSON(envelope{OK: true, Data: map[string]any{
 		"command": "add",
 		"item":    created,
+	}})
+}
+
+// cliBatchItem is one entry of the JSON array cmdAddBatch reads from a file
+// or stdin. It mirrors the HTTP API's per-item batch-create shape
+// (apiserver.itemCreateRequest) field-for-field, so a payload built for one
+// surface works unmodified against the other. Unlike cmdAdd's flags (which
+// can only describe one item per invocation), a batch naturally needs each
+// item to carry its own title/kind/tags/etc., which flags can't express —
+// hence a JSON array input rather than repeatable flags.
+type cliBatchItem struct {
+	Title       string   `json:"title"`
+	Kind        string   `json:"kind"`
+	Section     string   `json:"section"`
+	Pinned      bool     `json:"pinned"`
+	Priority    *string  `json:"priority"`
+	DueAt       *string  `json:"due_at"`
+	Tags        []string `json:"tags"`
+	Contexts    []string `json:"contexts"`
+	Projects    []string `json:"projects"`
+	ExternalRef string   `json:"external_ref"`
+	NotesDoc    string   `json:"notes_doc"`
+	NotesMD     string   `json:"notes_md"`
+	NotesHTML   string   `json:"notes_html"`
+}
+
+// cmdAddBatch creates multiple items from a JSON array in one call,
+// all-or-nothing (see items.Service.CreateBatch / store.CreateItemsBatch):
+// if any item fails, nothing is created and the error names which item (by
+// index) and why. --file reads from a path; "-" (the default) reads from
+// stdin, so callers can pipe generated JSON straight in
+// (e.g. `some-generator | nil add-batch`) without a temp file. --vault /
+// --inbox route the whole batch to one destination the same way they do for
+// `nil add`; there's no per-item destination override — a caller that needs
+// items split across vaults should make one add-batch call per vault.
+func cmdAddBatch(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("add-batch", flag.ContinueOnError)
+	file := fs.String("file", "-", "path to a JSON file containing an array of items, or '-' to read from stdin (default)")
+	vaultID := fs.String("vault", "", "vault ID to store the items")
+	inbox := fs.Bool("inbox", false, "route all items to inbox")
+	source := fs.String("source", "cli", "source label stored in api_source for every item")
+	if _, err := parseInterspersed(args, fs); err != nil {
+		die("add-batch: %v", err)
+	}
+
+	var raw []byte
+	var err error
+	if *file == "-" || *file == "" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(*file)
+	}
+	if err != nil {
+		die("add-batch: reading input: %v", err)
+	}
+
+	var batchItems []cliBatchItem
+	if err = json.Unmarshal(raw, &batchItems); err != nil {
+		die("add-batch: parsing JSON array: %v", err)
+	}
+	if len(batchItems) == 0 {
+		die("add-batch: input must be a non-empty JSON array of items")
+	}
+	for i, it := range batchItems {
+		if strings.TrimSpace(it.Title) == "" {
+			die("add-batch: item %d: title is required", i)
+		}
+	}
+
+	storeDest, toInbox, err := chooseCreateDestination(env.mgr, *vaultID, *inbox)
+	if err != nil {
+		die("add-batch: %v", err)
+	}
+
+	inputs := make([]items.CreateInput, len(batchItems))
+	for i, it := range batchItems {
+		inputs[i] = items.CreateInput{
+			Title:       it.Title,
+			Kind:        it.Kind,
+			Section:     it.Section,
+			Pinned:      it.Pinned,
+			Priority:    it.Priority,
+			DueAt:       it.DueAt,
+			Tags:        it.Tags,
+			Contexts:    it.Contexts,
+			Projects:    it.Projects,
+			APISource:   *source,
+			ExternalRef: it.ExternalRef,
+			Inbox:       toInbox,
+			NotesDoc:    it.NotesDoc,
+			NotesMD:     it.NotesMD,
+			NotesHTML:   it.NotesHTML,
+		}
+	}
+
+	created, err := svc.CreateBatch(ctx, storeDest, inputs)
+	if err != nil {
+		die("add-batch: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: map[string]any{
+		"command": "add-batch",
+		"count":   len(created),
+		"items":   svc.WithTextSlice(created),
 	}})
 }
 
