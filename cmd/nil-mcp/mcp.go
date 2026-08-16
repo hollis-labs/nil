@@ -94,6 +94,11 @@ type argsGetItem struct {
 	VaultID string `json:"vault_id"`
 }
 
+type argsGetBackrefs struct {
+	ID      int    `json:"id"`
+	VaultID string `json:"vault_id"`
+}
+
 // Notes input on create/update accepts exactly one of notes_doc / notes_md /
 // notes_html. The HTTP API does the conversion server-side via ingest;
 // MCP just forwards whichever field is set.
@@ -318,6 +323,8 @@ func (s *Server) callTool(name string, args json.RawMessage) (string, error) {
 		return s.toolSearch(args)
 	case "nil_get_item":
 		return s.toolGetItem(args)
+	case "nil_get_backrefs":
+		return s.toolGetBackrefs(args)
 	case "nil_create_item":
 		return s.toolCreateItem(args)
 	case "nil_update_item":
@@ -481,6 +488,29 @@ func (s *Server) toolGetItem(args json.RawMessage) (string, error) {
 	}
 
 	data, err := s.apiDo("GET", fmt.Sprintf("/api/v1/items/%d", a.ID), nil, a.VaultID)
+	if err != nil {
+		return "", err
+	}
+	return prettyJSON(data), nil
+}
+
+// toolGetBackrefs is a separate tool rather than a `backrefs` field folded
+// into nil_get_item's response: every other per-item read/action in this
+// tool list (nil_toggle_complete, nil_archive, nil_list_inbox,
+// nil_get_taxonomy) is already its own tool rather than a field bolted onto
+// nil_get_item, so this follows the dominant existing pattern. It also keeps
+// nil_get_item cheap — a plain fetch doesn't pay for the refs JOIN unless the
+// caller actually wants backlinks.
+func (s *Server) toolGetBackrefs(args json.RawMessage) (string, error) {
+	var a argsGetBackrefs
+	if err := json.Unmarshal(args, &a); err != nil {
+		return "", fmt.Errorf("invalid arguments: %w", err)
+	}
+	if a.ID == 0 {
+		return "", fmt.Errorf("id is required")
+	}
+
+	data, err := s.apiDo("GET", fmt.Sprintf("/api/v1/items/%d/backrefs", a.ID), nil, a.VaultID)
 	if err != nil {
 		return "", err
 	}
@@ -801,6 +831,18 @@ func toolList() []toolDef {
 				Type: "object",
 				Properties: map[string]schemaProp{
 					"id":       intProp("Item ID"),
+					"vault_id": vaultIDProp,
+				},
+				Required: []string{"id"},
+			},
+		},
+		{
+			Name:        "nil_get_backrefs",
+			Description: "List items that link to the given item via a wikilink (backlinks / \"what links here\"). Returns an empty list if the item exists but nothing links to it.",
+			InputSchema: inputSchema{
+				Type: "object",
+				Properties: map[string]schemaProp{
+					"id":       intProp("Item ID to find backlinks for"),
 					"vault_id": vaultIDProp,
 				},
 				Required: []string{"id"},

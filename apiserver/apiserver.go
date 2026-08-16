@@ -55,6 +55,9 @@ func New(cfg *config.Config, vm *vault.Manager) *http.Server {
 	mux.Handle("POST /api/v1/items/{id}/complete", h.auth(h.handleToggleComplete))
 	mux.Handle("POST /api/v1/items/{id}/archive", h.auth(h.handleArchive))
 
+	// Item sub-resource routes
+	mux.Handle("GET /api/v1/items/{id}/backrefs", h.auth(h.handleGetBackrefs))
+
 	// Search and taxonomy
 	mux.Handle("GET /api/v1/search", h.auth(h.handleSearch))
 	mux.Handle("GET /api/v1/taxonomy", h.auth(h.handleTaxonomy))
@@ -533,6 +536,45 @@ func (h *apiHandler) handleArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+// GET /api/v1/items/{id}/backrefs — list items that link to this item via a
+// wikilink. Backed directly by store.GetBackrefs — the same call app.go's
+// Wails-bound App.GetBackrefs makes for the GUI's backlinks panel — so the
+// underlying item shape returned here is identical to what the GUI already
+// gets; notes_text is layered on top the same way every other item-list
+// response gets it (see handleSearch, handleListInbox). 404s if the target
+// item itself doesn't exist (mirroring handleGetItem); returns an empty list
+// (not an error) if the item exists but nothing links to it.
+func (h *apiHandler) handleGetBackrefs(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid item ID")
+		return
+	}
+
+	s := h.storeForRequest(r)
+	if s == nil {
+		writeError(w, http.StatusServiceUnavailable, "vault not available")
+		return
+	}
+
+	if _, err := s.GetItem(r.Context(), id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "item not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch item")
+		return
+	}
+
+	backrefs, err := s.GetBackrefs(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get backrefs")
+		return
+	}
+	writeJSON(w, http.StatusOK, h.svc.WithTextSlice(backrefs))
 }
 
 // GET /api/v1/search — search items in the vault resolved by X-Vault-ID

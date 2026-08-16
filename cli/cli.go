@@ -69,6 +69,12 @@ func init() {
 			run:     cmdShow,
 		},
 		{
+			name:  "backrefs",
+			short: "List items that link to a given item (wikilink backlinks)",
+			usage: "nil backrefs <id> [--vault id|inbox]",
+			run:   cmdBackrefs,
+		},
+		{
 			name:  "context",
 			short: "Emit agent-friendly context snapshots",
 			usage: "nil context [topic]",
@@ -440,6 +446,44 @@ func cmdShow(ctx context.Context, args []string, env *commandEnv) {
 		return
 	}
 	printJSON(envelope{OK: true, Data: itemView})
+}
+
+// cmdBackrefs lists items that link to <id> via a wikilink (backlinks /
+// "what links here"). It is a dedicated command rather than a flag on
+// show/get: backrefs returns a different shape (a list of items) than show's
+// single-item response, and the CLI already has a one-command-per-read-op
+// pattern (show, get, search, inbox, vaults) rather than overloading one
+// command's flags to change its output shape. Mirrors GetBackrefs' existing
+// GUI contract (app.go's App.GetBackrefs); notes_text is layered on top the
+// same way `show`/`get` already add it via svc.WithText.
+func cmdBackrefs(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("backrefs", flag.ContinueOnError)
+	vaultID := fs.String("vault", "", "vault id or 'inbox'")
+	positional, err := parseInterspersed(args, fs)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	if len(positional) == 0 {
+		die("backrefs: requires <id>")
+	}
+	var id int64
+	if _, err := fmt.Sscan(positional[0], &id); err != nil {
+		die("backrefs: invalid id %q", positional[0])
+	}
+	loc, err := findItem(ctx, env.mgr, id, *vaultID)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	backrefs, err := loc.store.GetBackrefs(ctx, id)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: map[string]any{
+		"command":  "backrefs",
+		"id":       id,
+		"vault":    loc.location,
+		"backrefs": svc.WithTextSlice(backrefs),
+	}})
 }
 
 func cmdContext(ctx context.Context, args []string, env *commandEnv) {

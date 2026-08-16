@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/hollis-labs/nil/ingest"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -150,5 +152,115 @@ func TestSearchKindAllReturnsEveryKind(t *testing.T) {
 		if !seen[k] {
 			t.Errorf("kind=all results missing kind %q", k)
 		}
+	}
+}
+
+// wikilinkDoc builds a notes_doc PM-JSON string containing a single wikilink
+// node pointing at targetID, matching the shape the TipTap WikilinkExtension
+// produces client-side (see ingest.ExtractRefIDs / render.go).
+func wikilinkDoc(t *testing.T, targetID int64, label string) string {
+	t.Helper()
+	doc := ingest.Node{
+		Type: "doc",
+		Content: []ingest.Node{
+			{
+				Type: "paragraph",
+				Content: []ingest.Node{
+					{Type: "text", Text: "See "},
+					{Type: "wikilink", Attrs: map[string]any{
+						"id":      targetID,
+						"label":   label,
+						"refType": "note",
+					}},
+				},
+			},
+		},
+	}
+	docJSON, err := ingest.MarshalDoc(doc)
+	if err != nil {
+		t.Fatalf("MarshalDoc: %v", err)
+	}
+	return docJSON
+}
+
+// TestGetBackrefsReturnsLinkingItems locks in GetBackrefs' contract: given
+// item B wikilinks to item A, GetBackrefs(A) must return B. This is the same
+// query the GUI's App.GetBackrefs binding uses (app.go), and what the HTTP
+// API, CLI, and MCP surfaces added in CW-20260816-0038 all read through.
+func TestGetBackrefsReturnsLinkingItems(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	target, err := st.CreateItem(ctx, &Item{Title: "Target note", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem target: %v", err)
+	}
+
+	linker, err := st.CreateItem(ctx, &Item{
+		Title:    "Linking note",
+		Kind:     "note",
+		NotesDoc: wikilinkDoc(t, target.ID, "Target note"),
+	})
+	if err != nil {
+		t.Fatalf("CreateItem linker: %v", err)
+	}
+
+	// A third, unrelated item must not show up in target's backrefs.
+	_, err = st.CreateItem(ctx, &Item{Title: "Unrelated note", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem unrelated: %v", err)
+	}
+
+	backrefs, err := st.GetBackrefs(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetBackrefs: %v", err)
+	}
+	if len(backrefs) != 1 {
+		t.Fatalf("got %d backrefs, want 1; backrefs=%+v", len(backrefs), backrefs)
+	}
+	if backrefs[0].ID != linker.ID {
+		t.Errorf("backref ID=%d, want %d (the linking item)", backrefs[0].ID, linker.ID)
+	}
+	if backrefs[0].Title != "Linking note" {
+		t.Errorf("backref Title=%q, want %q", backrefs[0].Title, "Linking note")
+	}
+}
+
+// TestGetBackrefsEmptyWhenNoLinks confirms GetBackrefs returns an empty
+// slice (not an error) when the target item exists but nothing links to it.
+func TestGetBackrefsEmptyWhenNoLinks(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	target, err := st.CreateItem(ctx, &Item{Title: "Lonely note", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem: %v", err)
+	}
+
+	backrefs, err := st.GetBackrefs(ctx, target.ID)
+	if err != nil {
+		t.Fatalf("GetBackrefs: %v", err)
+	}
+	if len(backrefs) != 0 {
+		t.Fatalf("got %d backrefs, want 0; backrefs=%+v", len(backrefs), backrefs)
+	}
+}
+
+// TestGetBackrefsUnknownTargetReturnsEmpty documents GetBackrefs' own
+// behavior for a target ID that was never created: the refs join simply
+// matches nothing, so it returns an empty slice, not an error. The
+// not-found-vs-empty distinction ("does this item even exist?") is handled
+// one layer up, at the HTTP API (handleGetBackrefs 404s if the target item
+// itself doesn't exist) — see apiserver_test.go.
+func TestGetBackrefsUnknownTargetReturnsEmpty(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	backrefs, err := st.GetBackrefs(ctx, 999999)
+	if err != nil {
+		t.Fatalf("GetBackrefs: %v", err)
+	}
+	if len(backrefs) != 0 {
+		t.Fatalf("got %d backrefs, want 0; backrefs=%+v", len(backrefs), backrefs)
 	}
 }

@@ -200,6 +200,117 @@ func TestHandleSearchIncludesNotesTextAndHandlesEmptyBody(t *testing.T) {
 	}
 }
 
+// TestHandleGetBackrefs covers the GET /api/v1/items/{id}/backrefs route
+// added for CW-20260816-0038: linking item found, notes_text present on it,
+// empty-but-200 when nothing links to an existing item, and 404 when the
+// target item itself doesn't exist (mirroring handleGetItem's convention).
+func TestHandleGetBackrefs(t *testing.T) {
+	e := newTestEnv(t)
+
+	target := e.do("POST", "/api/v1/items", map[string]any{
+		"title": "Target note",
+	})
+	if target.Code != http.StatusCreated {
+		t.Fatalf("create target status=%d body=%s", target.Code, target.Body.String())
+	}
+	targetEnv := decodeEnvelope(t, target)
+	var targetItem itemJSON
+	if err := json.Unmarshal(targetEnv.Data, &targetItem); err != nil {
+		t.Fatalf("decode target item: %v", err)
+	}
+	targetID := int64(targetItem["id"].(float64))
+
+	// A wikilink node pointing at targetID, matching the shape the frontend's
+	// WikilinkExtension produces and ingest.ExtractRefIDs consumes.
+	linkerDoc := map[string]any{
+		"type": "doc",
+		"content": []any{
+			map[string]any{
+				"type": "paragraph",
+				"content": []any{
+					map[string]any{"type": "text", "text": "See "},
+					map[string]any{
+						"type": "wikilink",
+						"attrs": map[string]any{
+							"id":      targetID,
+							"label":   "Target note",
+							"refType": "note",
+						},
+					},
+				},
+			},
+		},
+	}
+	docJSON, err := json.Marshal(linkerDoc)
+	if err != nil {
+		t.Fatalf("marshal linker doc: %v", err)
+	}
+
+	linker := e.do("POST", "/api/v1/items", map[string]any{
+		"title":     "Linking note",
+		"notes_doc": string(docJSON),
+	})
+	if linker.Code != http.StatusCreated {
+		t.Fatalf("create linker status=%d body=%s", linker.Code, linker.Body.String())
+	}
+	linkerEnv := decodeEnvelope(t, linker)
+	var linkerItem itemJSON
+	if err := json.Unmarshal(linkerEnv.Data, &linkerItem); err != nil {
+		t.Fatalf("decode linker item: %v", err)
+	}
+	linkerID := int64(linkerItem["id"].(float64))
+
+	// An unrelated item must not appear in target's backrefs.
+	unrelated := e.do("POST", "/api/v1/items", map[string]any{"title": "Unrelated note"})
+	if unrelated.Code != http.StatusCreated {
+		t.Fatalf("create unrelated status=%d body=%s", unrelated.Code, unrelated.Body.String())
+	}
+
+	// Found case: backrefs for target returns exactly the linking item, with
+	// notes_text present.
+	got := e.do("GET", "/api/v1/items/"+strconv.FormatInt(targetID, 10)+"/backrefs", nil)
+	if got.Code != http.StatusOK {
+		t.Fatalf("backrefs status=%d body=%s", got.Code, got.Body.String())
+	}
+	gotEnv := decodeEnvelope(t, got)
+	var backrefs []itemJSON
+	if err := json.Unmarshal(gotEnv.Data, &backrefs); err != nil {
+		t.Fatalf("decode backrefs: %v", err)
+	}
+	if len(backrefs) != 1 {
+		t.Fatalf("got %d backrefs, want 1; backrefs=%v", len(backrefs), backrefs)
+	}
+	if id := int64(backrefs[0]["id"].(float64)); id != linkerID {
+		t.Errorf("backref id=%d, want %d", id, linkerID)
+	}
+	if _, ok := backrefs[0]["notes_text"]; !ok {
+		t.Errorf("backref item missing notes_text field: %v", backrefs[0])
+	}
+	if backrefs[0]["title"] != "Linking note" {
+		t.Errorf("backref title=%v, want %q", backrefs[0]["title"], "Linking note")
+	}
+
+	// Empty-but-200 case: an item that exists but has no backrefs.
+	emptyRes := e.do("GET", "/api/v1/items/"+strconv.FormatInt(linkerID, 10)+"/backrefs", nil)
+	if emptyRes.Code != http.StatusOK {
+		t.Fatalf("empty backrefs status=%d body=%s", emptyRes.Code, emptyRes.Body.String())
+	}
+	emptyEnv := decodeEnvelope(t, emptyRes)
+	var empty []itemJSON
+	if err := json.Unmarshal(emptyEnv.Data, &empty); err != nil {
+		t.Fatalf("decode empty backrefs: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("got %d backrefs for linker (which nothing links to), want 0", len(empty))
+	}
+
+	// Not-found case: the target item ID doesn't exist at all.
+	missing := e.do("GET", "/api/v1/items/999999/backrefs", nil)
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("missing-target backrefs status=%d, want 404; body=%s", missing.Code, missing.Body.String())
+	}
+}
+
 func TestHandleListInboxIncludesNotesText(t *testing.T) {
 	e := newTestEnv(t)
 
