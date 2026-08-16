@@ -22,6 +22,7 @@ const searchDefaults: store.SearchRequest = {
   sort_dir: "desc",
   kind: "all",
   include_inbox: false,
+  updated_since: "",
 };
 
 export function search(partial: Partial<store.SearchRequest>): Promise<store.Item[]> {

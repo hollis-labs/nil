@@ -444,6 +444,7 @@ export namespace store {
 	    sort_dir: string;
 	    kind: string;
 	    include_inbox: boolean;
+	    updated_since: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SearchRequest(source);
@@ -465,6 +466,7 @@ export namespace store {
 	        this.sort_dir = source["sort_dir"];
 	        this.kind = source["kind"];
 	        this.include_inbox = source["include_inbox"];
+	        this.updated_since = source["updated_since"];
 	    }
 	}
 
