@@ -171,15 +171,3 @@ a.term-link:hover { opacity: 0.9; }
   scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
 }
 
-.tiptap {
-  p {
-    @apply my-4 first:mt-0 last:mb-0 text-base leading-relaxed;
-  }
-  li {
-    @apply my-4 first:mt-2 last:mb-0 text-base leading-relaxed;
-  }
-
-  h1 {
-    @apply text-3xl font-bold mt-8 mb-4 first:mt-0 last:mb-0;
-  }
-}
