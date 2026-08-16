@@ -110,13 +110,31 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, err
 	}
-	dbPath := filepath.Join(dataDir, "todo.db?_fk=1")
+	// busy_timeout is a per-connection setting (unlike journal_mode, it is
+	// NOT persisted in the database file), and Go's database/sql pool opens
+	// additional physical connections on demand as concurrent callers show
+	// up — a one-time `PRAGMA busy_timeout` exec after Open only reaches
+	// whichever single connection runs it, leaving every other pooled
+	// connection at the default (0, i.e. fail fast on contention instead of
+	// waiting). Passing it via the DSN's _pragma param instead makes the
+	// modernc.org/sqlite driver apply it to every connection it opens, which
+	// is what actually matters once the GUI, a standalone `nil serve-api`
+	// process, and CLI invocations can all have live connections to the same
+	// vault at once. See modernc.org/sqlite's Driver.Open doc comment for
+	// the supported _pragma DSN syntax.
+	dbPath := filepath.Join(dataDir, "todo.db?_fk=1&_pragma=busy_timeout(5000)")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Enable WAL mode for better cloud sync compatibility
+	// Enable WAL mode for better cloud sync compatibility and true
+	// multi-process concurrency: the GUI, a standalone `nil serve-api`
+	// process, and CLI invocations can all open the same vault at once.
+	// Unlike busy_timeout, journal_mode=WAL is persisted in the database
+	// file itself, so setting it once here (on whichever connection runs
+	// it first) is sufficient — it doesn't need to be a per-connection DSN
+	// param.
 	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		return nil, err
 	}

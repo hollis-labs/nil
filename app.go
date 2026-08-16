@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hollis-labs/nil/apiserver"
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/parse"
@@ -95,7 +96,7 @@ func (a *App) startAPIServer(cfg *config.Config) {
 	if a.apiServer != nil {
 		return // already running
 	}
-	srv := NewAPIServer(cfg, a.vaultMgr)
+	srv := apiserver.New(cfg, a.vaultMgr)
 	a.apiServer = srv
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

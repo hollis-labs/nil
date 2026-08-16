@@ -1,4 +1,14 @@
-package main
+// Package apiserver implements NIL's local HTTP API: the routes, handlers,
+// and X-API-Key auth that let external tools (nil-mcp, scripts, scheduled
+// jobs) read and write vault data over HTTP.
+//
+// It has no dependency on the Wails GUI runtime — only on config, the
+// service/items layer, store, and vault.Manager — so the exact same
+// *http.Server returned by New can be embedded in the desktop app (see
+// app.go's startAPIServer) or run standalone via `nil serve-api` (see
+// cli/cli.go's cmdServeAPI). Both call sites share this package instead of
+// duplicating route/handler logic.
+package apiserver
 
 import (
 	"database/sql"
@@ -22,8 +32,10 @@ type apiHandler struct {
 	svc      *items.Service
 }
 
-// NewAPIServer constructs an *http.Server bound to 127.0.0.1 only.
-func NewAPIServer(cfg *config.Config, vm *vault.Manager) *http.Server {
+// New constructs an *http.Server bound to 127.0.0.1 only. The caller owns
+// the server's lifecycle (ListenAndServe / Shutdown) and the vault.Manager's
+// lifecycle (vm must stay open for as long as the server runs).
+func New(cfg *config.Config, vm *vault.Manager) *http.Server {
 	h := &apiHandler{cfg: cfg, vaultMgr: vm, svc: items.New()}
 
 	mux := http.NewServeMux()
