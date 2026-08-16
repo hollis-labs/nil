@@ -172,6 +172,12 @@ cd frontend && npx tsc --noEmit
 DEBUG=1 open build/bin/NIL.app
 ```
 
+**Git hooks**: `lefthook.yml` defines pre-commit (Go format/lint/vet + frontend
+lint) and pre-push (`go test` + `make codegen-check`) hooks so Wails binding
+drift is caught automatically, not just when a human remembers `make verify`.
+One-time setup: `lefthook install`. See "Git hooks (lefthook)" in AGENTS.md
+for the stale-`core.hooksPath` gotcha if hooks silently don't fire.
+
 ---
 
 ## Known Issues / Backlog

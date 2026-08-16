@@ -114,6 +114,18 @@ wails dev            # run in dev mode with hot reload
 DEBUG=1 open build/bin/NIL.app   # launch with WebKit inspector
 ```
 
+**Git hooks (lefthook)** — one-time setup: run `lefthook install` from the repo
+root. This activates `lefthook.yml`'s pre-commit (Go format/lint/vet +
+frontend lint on staged files) and pre-push (`go test` + `make codegen-check`
+— the Wails binding drift check) hooks. `make verify`/`make codegen-check`
+already catch drift locally when a human remembers to run them; the pre-push
+hook is what enforces it automatically. If hooks silently never fire, check
+`git config core.hooksPath` — it should be unset or point at `.git/hooks`
+(the default). A leftover absolute path from a previous clone location (e.g.
+after moving/renaming the repo directory) silently disables all hooks with no
+error; fix with `git config --unset core.hooksPath` then re-run
+`lefthook install`.
+
 Examples of agent intents:
 
 - *Add a backend method* → add it to `app.go` on `*App`, then run
