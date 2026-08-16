@@ -78,14 +78,15 @@ type contentItem struct {
 // ---------------------------------------------------------------------------
 
 type argsSearch struct {
-	Q        string   `json:"q"`
-	Kind     string   `json:"kind"`
-	Tags     []string `json:"tags"`
-	Contexts []string `json:"contexts"`
-	Projects []string `json:"projects"`
-	Page     int      `json:"page"`
-	PageSize int      `json:"page_size"`
-	VaultID  string   `json:"vault_id"`
+	Q            string   `json:"q"`
+	Kind         string   `json:"kind"`
+	Tags         []string `json:"tags"`
+	Contexts     []string `json:"contexts"`
+	Projects     []string `json:"projects"`
+	Page         int      `json:"page"`
+	PageSize     int      `json:"page_size"`
+	VaultID      string   `json:"vault_id"`
+	UpdatedSince string   `json:"updated_since"`
 }
 
 type argsGetItem struct {
@@ -454,6 +455,9 @@ func (s *Server) toolSearch(args json.RawMessage) (string, error) {
 	if a.PageSize > 0 {
 		q.Set("page_size", strconv.Itoa(a.PageSize))
 	}
+	if a.UpdatedSince != "" {
+		q.Set("updated_since", a.UpdatedSince)
+	}
 
 	path := "/api/v1/search"
 	if len(q) > 0 {
@@ -774,18 +778,19 @@ func toolList() []toolDef {
 		},
 		{
 			Name:        "nil_search",
-			Description: "Search todos and notes in a NIL vault using full-text search.",
+			Description: "Search todos and notes in a NIL vault using full-text search. For bulk/incremental sync (\"everything that changed recently\"), pass kind=\"all\" (or omit kind) with updated_since; this call is single-vault, so loop over nil_list_vaults for a cross-vault sync.",
 			InputSchema: inputSchema{
 				Type: "object",
 				Properties: map[string]schemaProp{
-					"q":         strProp("Search query"),
-					"kind":      strEnumProp("Item kind filter", "todo", "note", "scratch", "all"),
-					"tags":      strArrayProp("Filter by tags"),
-					"contexts":  strArrayProp("Filter by contexts"),
-					"projects":  strArrayProp("Filter by projects"),
-					"page":      intProp("Page number (0-based)"),
-					"page_size": intProp("Results per page (default 20)"),
-					"vault_id":  vaultIDProp,
+					"q":             strProp("Search query"),
+					"kind":          strEnumProp("Item kind filter. Omit or use \"all\" to return every kind (default).", "todo", "note", "scratch", "all"),
+					"tags":          strArrayProp("Filter by tags"),
+					"contexts":      strArrayProp("Filter by contexts"),
+					"projects":      strArrayProp("Filter by projects"),
+					"page":          intProp("Page number (0-based)"),
+					"page_size":     intProp("Results per page (default 20)"),
+					"vault_id":      vaultIDProp,
+					"updated_since": strProp("RFC3339 timestamp (e.g. 2026-08-01T00:00:00Z). Only return items updated on or after this instant. Omit for no time filter."),
 				},
 			},
 		},

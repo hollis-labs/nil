@@ -262,3 +262,49 @@ func TestSearchAppliesKindAllDefault(t *testing.T) {
 		t.Errorf("got %d items, want 2 (kind=all default)", len(items))
 	}
 }
+
+// TestSearchDefaultBehaviorUnchangedByUpdatedSince confirms the new
+// UpdatedSince field is additive: omitting it (the existing/default call
+// shape) returns everything regardless of update time, exactly like before
+// this field existed.
+func TestSearchDefaultBehaviorUnchangedByUpdatedSince(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	if _, err := svc.Create(ctx, st, CreateInput{Title: "a todo", Kind: "todo"}); err != nil {
+		t.Fatalf("Create todo: %v", err)
+	}
+	if _, err := svc.Create(ctx, st, CreateInput{Title: "a note", Kind: "note"}); err != nil {
+		t.Fatalf("Create note: %v", err)
+	}
+
+	items, err := svc.Search(ctx, st, store.SearchRequest{})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(items) != 2 {
+		t.Errorf("got %d items, want 2 (no updated_since → no time filter)", len(items))
+	}
+}
+
+// TestSearchUpdatedSinceFutureExcludesEverything confirms the service passes
+// UpdatedSince through to the store unmodified: a threshold in the future
+// (after every row's updated_at) should exclude all rows created just now.
+func TestSearchUpdatedSinceFutureExcludesEverything(t *testing.T) {
+	st := openTestStore(t)
+	svc := New()
+	ctx := context.Background()
+
+	if _, err := svc.Create(ctx, st, CreateInput{Title: "a todo", Kind: "todo"}); err != nil {
+		t.Fatalf("Create todo: %v", err)
+	}
+
+	items, err := svc.Search(ctx, st, store.SearchRequest{UpdatedSince: "2099-01-01T00:00:00Z"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items, want 0 (updated_since in the future excludes everything)", len(items))
+	}
+}

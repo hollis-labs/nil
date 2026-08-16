@@ -83,4 +83,18 @@ type SearchRequest struct {
 	SortDir      string   `json:"sort_dir"`
 	Kind         string   `json:"kind"`
 	IncludeInbox bool     `json:"include_inbox"`
+
+	// UpdatedSince filters results to items whose updated_at is on or after
+	// this instant. Accepts RFC3339 (e.g. "2026-08-01T00:00:00Z" or with an
+	// offset like "2026-08-01T00:00:00-07:00"); Store.Search parses it,
+	// converts to UTC, and compares against the naive
+	// "YYYY-MM-DD HH:MM:SS" UTC strings Nil actually stores in updated_at
+	// (see schema.sql's todos_update_ts trigger, which uses SQLite's
+	// datetime('now') — always UTC, no timezone suffix). RFC3339 was chosen
+	// over the raw SQLite format because it's the standard external API
+	// consumers expect; normalizing once at the store boundary keeps every
+	// caller (HTTP API, CLI, MCP) from having to know Nil's internal storage
+	// format. Empty string means no filter (default: unchanged, all rows
+	// regardless of update time).
+	UpdatedSince string `json:"updated_since"`
 }

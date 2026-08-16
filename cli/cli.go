@@ -58,7 +58,7 @@ func init() {
 		{
 			name:  "list",
 			short: "List common views like latest, inbox, today",
-			usage: "nil list [view] [--vault id] [--limit N] [--query q]",
+			usage: "nil list [view] [--vault id] [--limit N] [--query q] [--updated-since RFC3339]",
 			run:   cmdList,
 		},
 		{
@@ -339,6 +339,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 	limit := fs.Int("limit", 50, "max results")
 	query := fs.String("query", "", "keyword query")
 	includeInbox := fs.Bool("include-inbox", false, "include inbox results in non-inbox views")
+	updatedSince := fs.String("updated-since", "", "only items updated on/after this RFC3339 timestamp (e.g. 2026-08-01T00:00:00Z); not honored by the inbox view")
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
 		die("list: %v", err)
@@ -369,6 +370,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 			PageSize:     *limit,
 			IncludeInbox: *includeInbox,
 			Kind:         "all",
+			UpdatedSince: *updatedSince,
 		}
 		switch view {
 		case "today":
@@ -388,7 +390,12 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 		if err != nil {
 			die("list: %v", err)
 		}
-		results, err := storeDest.Search(ctx, req)
+		// Route through the service layer (rather than calling storeDest.Search
+		// directly) so this surface gets the same defaulting/validation as
+		// search/nil_search — a consistency fix that predates this change but
+		// is a no-op for existing behavior here (every field below is already
+		// explicitly set to what the service would default to anyway).
+		results, err := svc.Search(ctx, storeDest, req)
 		if err != nil {
 			die("list: %v", err)
 		}
@@ -979,13 +986,14 @@ func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	var (
-		vaultID  = fs.String("vault", "", "vault ID to search (omit for active vault)")
-		kindFlag = fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
-		tags     = fs.String("tags", "", "comma-separated tags")
-		contexts = fs.String("contexts", "", "comma-separated contexts")
-		projects = fs.String("projects", "", "comma-separated projects")
-		page     = fs.Int("page", 0, "zero-based page index")
-		pageSize = fs.Int("page-size", 50, "results per page")
+		vaultID      = fs.String("vault", "", "vault ID to search (omit for active vault)")
+		kindFlag     = fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
+		tags         = fs.String("tags", "", "comma-separated tags")
+		contexts     = fs.String("contexts", "", "comma-separated contexts")
+		projects     = fs.String("projects", "", "comma-separated projects")
+		page         = fs.Int("page", 0, "zero-based page index")
+		pageSize     = fs.Int("page-size", 50, "results per page")
+		updatedSince = fs.String("updated-since", "", "only items updated on/after this RFC3339 timestamp (e.g. 2026-08-01T00:00:00Z)")
 	)
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
@@ -995,13 +1003,14 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 	query := strings.Join(positional, " ")
 
 	req := store.SearchRequest{
-		Query:    query,
-		Tags:     splitCSV(*tags),
-		Contexts: splitCSV(*contexts),
-		Projects: splitCSV(*projects),
-		Page:     *page,
-		PageSize: *pageSize,
-		Kind:     *kindFlag,
+		Query:        query,
+		Tags:         splitCSV(*tags),
+		Contexts:     splitCSV(*contexts),
+		Projects:     splitCSV(*projects),
+		Page:         *page,
+		PageSize:     *pageSize,
+		Kind:         *kindFlag,
+		UpdatedSince: *updatedSince,
 	}
 
 	var s *store.Store

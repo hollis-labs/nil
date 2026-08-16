@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	feotel "github.com/hollis-labs/go-otel"
 	"github.com/hollis-labs/nil/ingest"
@@ -955,6 +956,21 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		q.args = append(q.args, kindFilter)
 	}
 
+	// updated_since: bulk/incremental-sync filter. Empty means no filter
+	// (existing default behavior is unchanged). Input is RFC3339; stored
+	// updated_at is naive UTC "YYYY-MM-DD HH:MM:SS" (see todos_update_ts
+	// trigger in schema.sql), so we normalize before the string comparison —
+	// SQLite's TEXT datetime format sorts/compares correctly lexicographically
+	// once both sides share the same shape.
+	if strings.TrimSpace(req.UpdatedSince) != "" {
+		since, err := time.Parse(time.RFC3339, strings.TrimSpace(req.UpdatedSince))
+		if err != nil {
+			return []Item{}, fmt.Errorf("%w: %q: %w", ErrInvalidUpdatedSince, req.UpdatedSince, err)
+		}
+		q.where = append(q.where, "t.updated_at >= ?")
+		q.args = append(q.args, since.UTC().Format("2006-01-02 15:04:05"))
+	}
+
 	// statuses
 	for _, st := range req.Statuses {
 		switch strings.ToLower(st) {
@@ -1344,6 +1360,11 @@ func (s *Store) IsValidKind(ctx context.Context, name string) (bool, error) {
 // kind isn't in the kinds registry. Callers should surface this as a 4xx /
 // validation error rather than a 5xx.
 var ErrInvalidKind = errors.New("invalid kind: not in kinds registry")
+
+// ErrInvalidUpdatedSince is returned (wrapped, via fmt.Errorf's %w) by Search
+// when SearchRequest.UpdatedSince is non-empty and not valid RFC3339. Callers
+// (apiserver) use errors.Is to map this to a 400 rather than a 500.
+var ErrInvalidUpdatedSince = errors.New("invalid updated_since: want RFC3339 (e.g. 2026-08-01T00:00:00Z)")
 
 // validateKindOrDefault enforces that t.Kind matches a registered kind.
 // Empty kind is filled with "todo" as the canonical default. An unknown

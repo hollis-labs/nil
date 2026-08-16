@@ -535,7 +535,32 @@ func (h *apiHandler) handleArchive(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// GET /api/v1/search — search items in the vault resolved by X-Vault-ID header.
+// GET /api/v1/search — search items in the vault resolved by X-Vault-ID
+// header. This is single-vault-per-call by design (see the multi-vault note
+// below); it is NOT a cross-vault search.
+//
+// Query params of note for bulk/incremental-sync consumers:
+//   - kind=all (or omit both kind and type) returns every kind in one call —
+//     the service layer (items.Service.applySearchDefaults) defaults empty
+//     Kind to "all", overriding the store's own "todo" default, which exists
+//     only for backward compat with pre-kind-registry callers that query the
+//     store directly.
+//   - updated_since=<RFC3339> filters to items updated on/after that instant
+//     (e.g. updated_since=2026-08-01T00:00:00Z). Omit for existing/unchanged
+//     behavior (all rows regardless of update time). Invalid values yield a
+//     400 with the parse error, not a silent no-op.
+//
+// Multi-vault decision: a single /api/v1/search call targets one vault (via
+// X-Vault-ID, defaulting to the active vault). We deliberately did NOT add a
+// "search all configured vaults in one call" option here — each vault is a
+// separate SQLite file/connection with its own independently-paginated
+// result set, and merging those server-side (interleaving pages, reconciling
+// sort order across DBs) adds real complexity for a desktop app whose vault
+// count is small. A bulk-sync consumer loops over GET /api/v1/vaults and
+// issues one /api/v1/search?updated_since=... call per vault (per X-Vault-ID)
+// — cheap in practice, and keeps this handler's pagination semantics simple
+// and correct. Revisit only if a consumer profile shows the per-vault loop is
+// the actual bottleneck (unlikely locally).
 func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	s := h.storeForRequest(r)
 	if s == nil {
@@ -554,17 +579,22 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := store.SearchRequest{
-		Query:    q.Get("q"),
-		Kind:     kindFilter,
-		Tags:     splitMultiParam(q["tags"]),
-		Contexts: splitMultiParam(q["contexts"]),
-		Projects: splitMultiParam(q["projects"]),
-		Page:     page,
-		PageSize: pageSize,
+		Query:        q.Get("q"),
+		Kind:         kindFilter,
+		Tags:         splitMultiParam(q["tags"]),
+		Contexts:     splitMultiParam(q["contexts"]),
+		Projects:     splitMultiParam(q["projects"]),
+		Page:         page,
+		PageSize:     pageSize,
+		UpdatedSince: q.Get("updated_since"),
 	}
 
 	results, err := h.svc.Search(r.Context(), s, req)
 	if err != nil {
+		if errors.Is(err, store.ErrInvalidUpdatedSince) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to search items")
 		return
 	}
