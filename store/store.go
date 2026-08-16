@@ -51,7 +51,7 @@ func stripHTML(s string) string {
 	return strings.TrimSpace(s)
 }
 
-const currentSchemaVersion = 12
+const currentSchemaVersion = 13
 
 type migration struct {
 	version int
@@ -95,6 +95,7 @@ var migrations = []migration{
 	{version: 10, sql: ""},
 	{version: 11, sql: ""},
 	{version: 12, sql: ""},
+	{version: 13, sql: ""},
 }
 
 // dbtx is satisfied by both *sql.DB and *sql.Tx. Internal item-mutation
@@ -136,7 +137,18 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// process, and CLI invocations can all have live connections to the same
 	// vault at once. See modernc.org/sqlite's Driver.Open doc comment for
 	// the supported _pragma DSN syntax.
-	dbPath := filepath.Join(dataDir, "todo.db?_fk=1&_pragma=busy_timeout(5000)")
+	//
+	// Foreign key enforcement (needed for refs' ON DELETE CASCADE, see
+	// schema.sql) is also per-connection in SQLite and must go through
+	// _pragma for the same reason — but the DSN param actually recognized by
+	// modernc.org/sqlite's applyQueryParams is "foreign_keys(1)", NOT "_fk=1"
+	// (that was never a real driver param; it was silently ignored, meaning
+	// foreign key enforcement was never actually turned on). _pragma may be
+	// repeated — applyQueryParams collects every "_pragma" value from the
+	// query string and execs each as its own "PRAGMA ..." statement (sorted
+	// so busy_timeout always runs first), so both pragmas below are applied
+	// on every connection the pool opens, not just the last one.
+	dbPath := filepath.Join(dataDir, "todo.db?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
@@ -404,6 +416,15 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			}
 			continue
 		}
+		if m.version == 13 {
+			if err = migrateV13CleanupOrphanedRefs(ctx, db); err != nil {
+				return err
+			}
+			if _, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
 
 		// Run migration
 		_, err = db.ExecContext(ctx, m.sql)
@@ -642,6 +663,33 @@ func migrateV12(ctx context.Context, db *sql.DB) error {
 		if _, err := db.ExecContext(ctx, "ALTER TABLE todos ADD COLUMN external_ref TEXT DEFAULT NULL"); err != nil {
 			return fmt.Errorf("migration v12 add column: %w", err)
 		}
+	}
+	return nil
+}
+
+// migrateV13CleanupOrphanedRefs is a one-time data cleanup (not a schema
+// shape change) for damage caused by CW-20260816-0059: Open's dbPath used
+// to build the DSN with a "_fk=1" query param, which modernc.org/sqlite's
+// applyQueryParams has never recognized (the real syntax is
+// "_pragma=foreign_keys(1)"). Unrecognized params are silently ignored
+// rather than erroring, so foreign key enforcement — which refs'
+// "ON DELETE CASCADE" (schema.sql) depends on — was never actually active.
+// DeleteItem's plain `DELETE FROM todos` therefore never cascaded to refs
+// rows pointing at the deleted id, leaving orphans behind. This was
+// confirmed against a real vault during the fix: 11 of 15 refs rows were
+// orphaned. Now that foreign_keys is genuinely enabled (see Open), no new
+// orphans can be created, so this only ever has real work to do once per
+// vault; idempotent because a second run simply deletes zero rows.
+func migrateV13CleanupOrphanedRefs(ctx context.Context, db *sql.DB) error {
+	res, err := db.ExecContext(ctx, `
+DELETE FROM refs
+WHERE source_id NOT IN (SELECT id FROM todos)
+   OR target_id NOT IN (SELECT id FROM todos)`)
+	if err != nil {
+		return fmt.Errorf("migration v13 cleanup orphaned refs: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		fmt.Fprintf(os.Stderr, "migration v13: removed %d orphaned refs row(s) left behind while foreign key enforcement was inactive (see CW-20260816-0059)\n", n)
 	}
 	return nil
 }
