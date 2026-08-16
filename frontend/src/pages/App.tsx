@@ -17,15 +17,20 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import PowerMenu from "@/components/PowerMenu";
 import RadialMenuWrapper from "@/components/RadialMenuWrapper";
 import MetaModal from "@/components/MetaModal";
-import { CopyrightFooter } from "@/components/CopyrightFooter";
+import AppHeaderBar from "@/components/AppHeaderBar";
+import AppFooterBar from "@/components/AppFooterBar";
+import AppModeToggleButton from "@/components/AppModeToggleButton";
 import { ThemeProvider } from "@/theme/ThemeProvider";
-import { Settings, Plus, Search, Target, Power, HelpCircle, FileText, CheckSquare, Layers } from "lucide-react";
+import { Plus, Search, Target } from "lucide-react";
 import { parseQuery } from "@/lib/query";
-import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
+import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
+import { useInboxCount } from "@/hooks/useInboxCount";
+import { useVaultState } from "@/hooks/useVaultState";
+import { useSessionFilterState } from "@/hooks/useSessionFilterState";
 
 import * as Backend from "../../wailsjs/go/main/App";
 import { search, updateItem } from "@/lib/backend";
-import { config, store } from "../../wailsjs/go/models";
+import { store } from "../../wailsjs/go/models";
 import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
@@ -42,8 +47,6 @@ function Inner() {
   const [sessionContextOpen, setSessionContextOpen] = React.useState(false);
   const [activeTabId, setActiveTabId] = React.useState<string>('1');
   const [editItem, setEditItem] = React.useState<ItemRow | null>(null);
-  const [sessionFilterCount, setSessionFilterCount] = React.useState(0);
-  const [sessionAsFilter, setSessionAsFilter] = React.useState(false);
   const [showWelcome, setShowWelcome] = React.useState(false);
   const [showDemoPrompt, setShowDemoPrompt] = React.useState(false);
   const [hasDemoData, setHasDemoData] = React.useState(false);
@@ -54,16 +57,13 @@ function Inner() {
   const [radialMenuItem, setRadialMenuItem] = React.useState<{todo: ItemRow; position: {x: number; y: number}} | null>(null);
   const [animatingRow, setAnimatingRow] = React.useState<{ id: number; action: string; phase?: 'collapsing' | 'expanding' } | null>(null);
   const [metaModalItem, setMetaModalItem] = React.useState<ItemRow | null>(null);
-  const [inboxCount, setInboxCount] = React.useState(0);
-  const [vaults, setVaults] = React.useState<config.Vault[]>([]);
-  const [activeVault, setActiveVault] = React.useState<config.Vault | null>(null);
-  const [showVaultSwitcher, setShowVaultSwitcher] = React.useState(false);
   const [quickSearchOpen, setQuickSearchOpen] = React.useState(false);
   const [chatOpen, setChatOpen] = React.useState(false);
   const [prevAppMode, setPrevAppMode] = React.useState<'todos' | 'notes'>('todos');
-  const appModeLPTimer = React.useRef<NodeJS.Timeout | null>(null);
-  const appModeLPFired = React.useRef(false);
   const { settings } = useSettings();
+  const { inboxCount, setInboxCount, refreshInboxCount } = useInboxCount();
+  const { vaults, activeVault, showVaultSwitcher, setShowVaultSwitcher, loadVaults, handleVaultSwitch, runSearchRef } = useVaultState(refreshInboxCount);
+  const { sessionFilterCount, sessionAsFilter, updateSessionFilterCount } = useSessionFilterState();
   const [viewMode] = React.useState<ViewMode>(() => {
     const saved = localStorage.getItem('nil.viewMode');
     return (saved as ViewMode) || settings.defaultView || 'scope';
@@ -102,69 +102,6 @@ function Inner() {
     }
   }, [appMode, settings.tabs]);
 
-  // Update session filter count when component mounts or session changes
-  const updateSessionFilterCount = React.useCallback(() => {
-    const session = getActiveSession();
-    if (!session) {
-      setSessionFilterCount(0);
-      setSessionAsFilter(false);
-      return;
-    }
-    const count =
-      (session.contexts?.length || 0) +
-      (session.projects?.length || 0) +
-      (session.tags?.length || 0) +
-      (session.priority ? 1 : 0);
-
-    // If session has useAsFilterTab enabled but no actual filters, clear it
-    if (session.useAsFilterTab && count === 0) {
-      setActiveSession({ ...session, useAsFilterTab: false });
-      setSessionFilterCount(0);
-      setSessionAsFilter(false);
-      return;
-    }
-
-    setSessionFilterCount(count);
-    setSessionAsFilter(session.useAsFilterTab || false);
-  }, []);
-
-  const refreshInboxCount = React.useCallback(async () => {
-    try {
-      const count = await Backend.GetInboxCount();
-      setInboxCount(count);
-    } catch (err) {
-      console.error('Failed to get inbox count:', err);
-    }
-  }, []);
-
-  const loadVaults = React.useCallback(async () => {
-    try {
-      const [allVaults, active] = await Promise.all([
-        Backend.GetVaults(),
-        Backend.GetActiveVault(),
-      ]);
-      setVaults(allVaults ?? []);
-      setActiveVault(active ?? null);
-    } catch (err) {
-      console.error('Failed to load vaults:', err);
-    }
-  }, []);
-
-  // Ref so handleVaultSwitch can call the latest runSearch without a forward-reference TDZ error
-  const runSearchRef = React.useRef<() => void>(() => {});
-
-  const handleVaultSwitch = React.useCallback(async (vault: config.Vault) => {
-    setShowVaultSwitcher(false);
-    try {
-      await Backend.SwitchVault(vault.id);
-      setActiveVault(vault);
-      runSearchRef.current();
-      refreshInboxCount();
-    } catch (err) {
-      console.error('Failed to switch vault:', err);
-    }
-  }, [refreshInboxCount]);
-
   // Cmd+Shift+V / Ctrl+Shift+V → vault switcher; Cmd+, / Ctrl+, → settings
   // Cmd+Shift+C / Ctrl+Shift+C → chat panel
   React.useEffect(() => {
@@ -184,7 +121,10 @@ function Inner() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+    // setShowVaultSwitcher is a React setState setter (from useVaultState) —
+    // stable identity for the component's lifetime, listed only to satisfy
+    // the lint rule since Biome can't see through the custom-hook indirection.
+  }, [setShowVaultSwitcher]);
 
   function openInbox() {
     if (appMode !== 'inbox') setPrevAppMode(appMode as 'todos' | 'notes');
@@ -196,35 +136,13 @@ function Inner() {
     refreshInboxCount();
   }
 
+  // Session validation/cleanup on mount lives in useSessionFilterState now;
+  // its internal effect fires before this one (hook is called earlier in
+  // Inner), preserving the original combined effect's execution order.
   React.useEffect(() => {
-    // Validate and clean session on mount
-    const session = getActiveSession();
-    console.log('[App Mount] Session on startup:', session);
-    if (session) {
-      const count =
-        (session.contexts?.length || 0) +
-        (session.projects?.length || 0) +
-        (session.tags?.length || 0) +
-        (session.priority ? 1 : 0);
-
-      console.log('[App Mount] Session filter count:', count, 'useAsFilterTab:', session.useAsFilterTab);
-
-      // If session has useAsFilterTab enabled but no actual filters, disable it immediately
-      if (session.useAsFilterTab && count === 0) {
-        console.log('[App Mount] Disabling empty useAsFilterTab');
-        setActiveSession({ ...session, useAsFilterTab: false });
-      }
-
-      // If session exists but has empty arrays, clear it entirely
-      if (count === 0 && !session.useAsFilterTab) {
-        console.log('[App Mount] Clearing empty session');
-        clearActiveSession();
-      }
-    }
-    updateSessionFilterCount();
     refreshInboxCount();
     loadVaults();
-  }, [updateSessionFilterCount, refreshInboxCount, loadVaults]);
+  }, [refreshInboxCount, loadVaults]);
 
   React.useEffect(() => {
     // Check if database is set up
@@ -385,7 +303,10 @@ function Inner() {
       console.error("Search failed:", err);
       setAllRows([]);
     }
-  }, [query, activeTabId, settings.tabs, settings.showCompleted, appMode]);
+    // setInboxCount is a React setState setter (from useInboxCount) — stable
+    // identity for the component's lifetime, listed only to satisfy the lint
+    // rule since Biome can't see through the custom-hook indirection.
+  }, [query, activeTabId, settings.tabs, settings.showCompleted, appMode, setInboxCount]);
 
   // Keep ref in sync so vault switch (defined earlier) always calls the latest runSearch
   runSearchRef.current = runSearch;
@@ -730,107 +651,12 @@ function Inner() {
         flexDirection: 'column'
       }} >
         {/* NIL Branding - Draggable */}
-        <div style={{ position: 'relative' }}>
-          <div
-            style={{
-              padding: '16px 20px',
-              paddingTop: '26px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'grab',
-              userSelect: 'none',
-              // @ts-ignore
-              '--wails-draggable': 'drag',
-              WebkitAppRegion: 'drag'
-            } as any}
-          >
-            <div className="planck-header-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span
-                className="badge warn planck-lightning"
-                style={{
-                  padding: '2px',
-                  fontSize: '10px',
-                  borderRadius: '3px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '14px',
-                  height: '14px',
-                  lineHeight: '1'
-                }}
-              >⚡</span>
-              <div className="planck-label" style={{
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                fontSize: '14px',
-                fontWeight: 800,
-                letterSpacing: '0.12em',
-                color: 'var(--term-info)',
-              }}>
-                NIL
-              </div>
-            </div>
-            <div style={{
-              fontSize: '10px',
-              color: 'var(--term-dim)',
-              fontFamily: 'serif',
-              fontStyle: 'italic',
-              opacity: 0.6,
-              letterSpacing: '0.02em'
-            }}>
-              <span style={{ fontStyle: 'italic' }}>(h)</span> — the quantum of action
-            </div>
-          </div>
-
-          {hasDemoData && (
-            <button
-              className="badge warn"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmRemoveDemo(true);
-              }}
-              style={{
-                position: 'absolute',
-                right: '18px',
-                top: '24px',
-                fontSize: '10px',
-                padding: '4px 8px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                zIndex: 50,
-                // @ts-ignore
-                WebkitAppRegion: 'no-drag'
-              } as any}
-            >
-              Remove Tutorial
-            </button>
-          )}
-
-          {/* Vault indicator — right-aligned with the search bar buttons below */}
-          {activeVault && (
-            <button
-              onClick={(e) => { e.stopPropagation(); setShowVaultSwitcher(true); }}
-              title={`Vault: ${activeVault.name} — Click or ⌘⇧V to switch`}
-              style={{
-                position: 'absolute',
-                right: 10,
-                top: 24,
-                padding: '2px 8px',
-                fontSize: '10px',
-                fontFamily: 'monospace',
-                background: 'var(--term-panel)',
-                border: '1px solid var(--term-border)',
-                borderRadius: '3px',
-                color: 'var(--term-dim)',
-                cursor: 'pointer',
-                // @ts-ignore
-                WebkitAppRegion: 'no-drag',
-              } as any}
-            >
-              {activeVault.name}
-            </button>
-          )}
-        </div>
+        <AppHeaderBar
+          hasDemoData={hasDemoData}
+          onRemoveDemoDataClick={() => setConfirmRemoveDemo(true)}
+          activeVault={activeVault}
+          onVaultIndicatorClick={() => setShowVaultSwitcher(true)}
+        />
 
         <div
           className="custom-scrollbar"
@@ -1033,75 +859,14 @@ function Inner() {
 
           <div style={{marginLeft: 'auto', display: 'flex', gap: '4px'}}>
             {/* Scope/Date toggle hidden — view mode UI to be redesigned */}
-            <button
-                className="badge info"
-                draggable
-                onDragStart={(e) => e.preventDefault()}
-                onContextMenu={(e) => e.preventDefault()}
-                onMouseDown={() => {
-                  appModeLPFired.current = false;
-                  appModeLPTimer.current = setTimeout(() => {
-                    appModeLPFired.current = true;
-                    setSettingsInitialTab('tabs');
-                    setSettingsOpen(true);
-                  }, 1000);
-                }}
-                onMouseUp={() => {
-                  if (appModeLPTimer.current) {
-                    clearTimeout(appModeLPTimer.current);
-                    appModeLPTimer.current = null;
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (appModeLPTimer.current) {
-                    clearTimeout(appModeLPTimer.current);
-                    appModeLPTimer.current = null;
-                  }
-                }}
-                onClick={() => {
-                  if (!appModeLPFired.current) {
-                    // 3-cycle: todos → notes → all → todos
-                    const next: AppMode = appMode === 'todos' ? 'notes'
-                                       : appMode === 'notes' ? 'all'
-                                       : 'todos';
-                    setAppMode(next);
-                  }
-                  appModeLPFired.current = false;
-                }}
-                style={{
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  cursor: 'pointer',
-                  userSelect: 'none'
-                }}
-                title={
-                  appMode === 'todos' ? 'Switch to Notes (long-press for tab settings)'
-                  : appMode === 'notes' ? 'Switch to All (long-press for tab settings)'
-                  : 'Switch to Items (long-press for tab settings)'
-                }
-            >
-              {appMode === 'todos' ? (
-                <>
-                  <CheckSquare size={12} />
-                  Items
-                </>
-              ) : appMode === 'notes' ? (
-                <>
-                  <FileText size={12} />
-                  Notes
-                </>
-              ) : (
-                <>
-                  <Layers size={12} />
-                  All
-                </>
-              )}
-            </button>
+            <AppModeToggleButton
+              appMode={appMode}
+              onCycle={(next) => setAppMode(next)}
+              onLongPress={() => {
+                setSettingsInitialTab('tabs');
+                setSettingsOpen(true);
+              }}
+            />
           </div>
         </div>
 
@@ -1133,47 +898,11 @@ function Inner() {
         </div>
 
         {/* Persistent footer — always visible regardless of content state */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          paddingTop: '8px',
-        }}>
-          <CopyrightFooter version="1.0.0" buildDate={new Date().toISOString().slice(0, 10)} />
-          <div style={{ display: 'flex', gap: '6px' }}>
-            {(['help', 'settings', 'power'] as const).map(btn => (
-              <button
-                key={btn}
-                style={{
-                  padding: '6px',
-                  background: 'var(--term-panel)',
-                  border: '1px solid var(--term-border)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'border-color 0.15s ease',
-                  height: '28px',
-                  width: '28px',
-                }}
-                title={btn === 'help' ? 'Help & Guide' : btn === 'settings' ? 'Settings (⌘,)' : 'Quit NIL'}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--term-accent)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--term-border)'; }}
-                onMouseDown={btn === 'power' ? (e) => { e.stopPropagation(); e.preventDefault(); } : undefined}
-                onClick={
-                  btn === 'help' ? () => setHelpOpen(true) :
-                  btn === 'settings' ? () => setSettingsOpen(true) :
-                  (e) => { e.stopPropagation(); e.preventDefault(); setShowPowerMenu(true); }
-                }
-              >
-                {btn === 'help' && <HelpCircle size={14} color="var(--term-fg)" />}
-                {btn === 'settings' && <Settings size={14} color="var(--term-fg)" />}
-                {btn === 'power' && <Power size={14} color="var(--term-fg)" />}
-              </button>
-            ))}
-          </div>
-        </div>
+        <AppFooterBar
+          onHelpClick={() => setHelpOpen(true)}
+          onSettingsClick={() => setSettingsOpen(true)}
+          onPowerClick={() => setShowPowerMenu(true)}
+        />
         </div>
       </div>
 
