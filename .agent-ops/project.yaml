@@ -47,7 +47,7 @@ usage_examples:
     note: Update both — schema.sql for fresh installs, a migration entry (increment currentSchemaVersion) for existing users.
   - intent: Expose NIL vault content to another agent
     command: build and run cmd/nil-mcp (the nil-mcp binary)
-    note: Standalone MCP stdio server exposing 12 JSON-RPC tools (nil_search, nil_create_item, nil_list_inbox, etc.).
+    note: Standalone MCP stdio server exposing 15 JSON-RPC tools (nil_search, nil_create_item, nil_list_inbox, etc.).
 scopes:
   - nil.backend.main
   - nil.frontend.main
