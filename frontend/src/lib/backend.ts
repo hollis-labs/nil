@@ -40,15 +40,27 @@ export function getInboxItems(
   });
 }
 
-// An update must carry id; everything else is optional. Optional fields are
-// allowed to be explicitly `undefined` so callers can spread Wails-generated
-// objects (which carry `undefined` for absent optionals) without fighting
-// exactOptionalPropertyTypes. Excess properties are still rejected, which is
-// the typo-catching guarantee these helpers exist for.
+// Backend.UpdateItem is a full-replace update on the Go side, not a patch —
+// an object missing a field (e.g. `tags`) blanks that field server-side
+// rather than leaving it untouched. Requiring every field at the type level
+// turns out to be impractical here: ItemRow (the shape most call sites
+// spread from) legitimately under-declares several fields as optional for
+// UI-rendering purposes, so "every key required" rejects call sites that are
+// actually safe at runtime (they spread a full store.Item) and there's no
+// clean way to distinguish those from a genuinely partial caller at the type
+// level alone.
+//
+// Instead, make partial calls safe by construction: fetch the current item
+// and merge the caller's fields onto it before writing, so an omitted field
+// is preserved rather than blanked, regardless of what the caller passes.
+// This mirrors service/items.Service.UpdatePatch's read-modify-write pattern
+// on the Go side. Costs one extra round-trip per save — acceptable for a
+// user-driven edit action, not a hot path.
 export type ItemUpdate = { id: number } & {
   [K in keyof Omit<store.Item, "id">]?: store.Item[K] | undefined;
 };
 
-export function updateItem(update: ItemUpdate): Promise<void> {
-  return Backend.UpdateItem(update as store.Item);
+export async function updateItem(update: ItemUpdate): Promise<void> {
+  const existing = await Backend.GetItem(update.id);
+  await Backend.UpdateItem({ ...existing, ...update } as store.Item);
 }

@@ -4,21 +4,18 @@
 
 ### Running the App
 
-**Canonical local verification path:**
+**Canonical local verification path** (run from the repo root):
 ```bash
-cd /Users/chrispian/dev/hollis-labs/apps/nil
 make verify
 ```
 
 **Development Mode (recommended for testing):**
 ```bash
-cd /Users/chrispian/Projects-apps/nil
 wails dev
 ```
 
 **Production Build:**
 ```bash
-cd /Users/chrispian/dev/hollis-labs/apps/nil
 make build
 open build/bin/NIL.app
 ```

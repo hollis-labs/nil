@@ -12,10 +12,10 @@ type Item struct {
 	Threshold        *string `json:"threshold_at,omitempty"`
 	Recur            *string `json:"recurrence_rule,omitempty"`
 	Source           string  `json:"source_line"`
-	NotesDoc         string  `json:"notes_doc"`           // TipTap PM JSON, source of truth
-	NotesHTML        string  `json:"notes_html"`          // write-time render cache
-	NotesHTMLVersion int     `json:"notes_html_version"`  // bump when renderer changes
-	Section          string  `json:"section"`             // now, soon, anytime
+	NotesDoc         string  `json:"notes_doc"`          // TipTap PM JSON, source of truth
+	NotesHTML        string  `json:"notes_html"`         // write-time render cache
+	NotesHTMLVersion int     `json:"notes_html_version"` // bump when renderer changes
+	Section          string  `json:"section"`            // now, soon, anytime
 	Pinned           bool    `json:"pinned"`
 	Kind             string  `json:"kind"` // todo, note, scratch, ... (kinds registry)
 	Inbox            bool    `json:"inbox"`

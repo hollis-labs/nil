@@ -249,4 +249,3 @@ func appendInline(out []Node, n ast.Node, src []byte, marks []Mark) []Node {
 	}
 	return out
 }
-

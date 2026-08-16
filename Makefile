@@ -39,19 +39,17 @@ codegen-check:
 	wails generate module
 	@changed="$$(git diff --name-only -- $(WAILSJS_DIR))"; \
 	if [ -n "$$changed" ]; then \
-		while IFS= read -r file; do \
+		printf '%s\n' "$$changed" | while IFS= read -r file; do \
 			[ -n "$$file" ] || continue; \
 			mode="$$(git ls-files --stage -- "$$file" | awk '{print $$1}')"; \
 			case "$$mode" in \
 				100644) chmod 644 "$$file" ;; \
 				100755) chmod 755 "$$file" ;; \
 			esac; \
-		done <<'EOF' \
-$$changed \
-EOF \
-	; fi; \
+		done; \
+	fi; \
 	git diff --exit-code -- $(WAILSJS_DIR) || \
-		(printf '%s\n' 'Generated Wails bindings are out of date. Review changes under $(WAILSJS_DIR).' && exit 1)
+		(printf '%s\n' "Generated Wails bindings are out of date. Review changes under $(WAILSJS_DIR)." && exit 1)
 
 format-check:
 	@unformatted="$$(gofmt -l . 2>/dev/null)"; \
