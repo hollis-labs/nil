@@ -18,9 +18,10 @@ aesthetic. The closest competitive reference is Logseq, but task-first.
 Lineage note: the app was formerly named **PLANCK**, then **NANITE**. It was
 renamed to **NIL** so the "Nanite" name could be reused by the CLI agent
 framework. The Go module is `github.com/hollis-labs/nil`; the binary is `nil`;
-the macOS bundle is `NIL.app`. Some legacy strings (`.agentrc/config.yaml`
-agent descriptions, the `todos` DB table name) still say "Nanite"/"todo" — that
-is known drift, not a signal to rename.
+the macOS bundle is `NIL.app`. The SQLite table is still named `todos` even
+though it holds both todos and notes — renaming would require a costly data
+migration with no user-visible benefit. That is known drift, not a signal to
+rename.
 
 ## (b) Where to start
 
@@ -32,9 +33,21 @@ Entry points:
 - `cli/cli.go` — CLI command registry (`nil <command>`); package `cli`.
 - `cmd/nil-mcp/` — standalone MCP stdio server (`main.go` + `mcp.go`),
   builds to the `nil-mcp` binary.
+- `cmd/nil-recover/` — offline recovery tool that runs the v11 backfill on a
+  closed DB. Used during the v1.3.0 → v1.3.1 incident; keep as a break-glass
+  utility.
+- `ingest/` — Go-side document conversion package. `MarkdownToDoc` (goldmark),
+  `HTMLToDoc` (x/net/html, handles wikilink spans), `DocToHTML`,
+  `DocToPlainText`, `ExtractRefIDs`. Every consumer that accepts raw markdown
+  or HTML body input (HTTP API, CLI, MCP via HTTP, chat-bridge AI tools) routes
+  through here.
 - `frontend/src/pages/App.tsx` — root React component; single source of truth
   for app-level state and top-level event wiring. Read it fully before adding
   state or handlers.
+- `frontend/src/lib/backend.ts` — typed `Partial<>` wrappers around the
+  generated `Backend.Search` / `Backend.UpdateItem` / `Backend.GetInboxItems`
+  calls. Use these instead of casting payloads with `as any` — the cast hides
+  field-name typos at compile time (the v1.3.2 silent-search-bug class).
 
 Docs:
 
@@ -46,13 +59,23 @@ Docs:
 - [INSTALL.md](INSTALL.md) — platform install instructions.
 - `docs/` — `CLI.md`, `DISTRIBUTION.md`, `QUICKSTART.md`, `SETTINGS.md`, and
   `docs/user docs/`.
-- [CHANGELOG.md](CHANGELOG.md) — release history (current version 1.3.0).
+- [CHANGELOG.md](CHANGELOG.md) — release history (current version 1.3.3).
 
 ## (c) Key domain concepts
 
 - **Items + Notes** — one model. The SQLite table is `todos`; the Go struct is
-  `store.Item`. The `type` column is `todo` or `note`. (Table name is legacy and
-  deliberately not renamed without a migration plan.)
+  `store.Item`. The `kind` column (renamed from `type` in schema v9) holds
+  `todo`, `note`, or `scratch`; values are validated against the `kinds`
+  registry table at the Go boundary. New built-in or plugin-supplied kinds
+  register there. (Table name is legacy and deliberately not renamed without a
+  migration plan.)
+- **Notes storage (JSON-at-rest)** — TipTap notes are stored as ProseMirror
+  document JSON in `notes_doc` (canonical), with `notes_html` as a write-time
+  cache for fast previews and `notes_html_version` for cache invalidation. The
+  earlier HTML-in-`notes_md` shape was retired in v7–v11; `notes_md` is
+  deadweight until a v12 drop. Frontend save extracts both `editor.getJSON()`
+  and `editor.getHTML()`; the dirty-check is JSON deep-equal. Servers that
+  accept raw markdown/HTML go through `ingest/` to produce `notes_doc`.
 - **Vaults** — each vault is a self-contained SQLite database plus file tree;
   multi-vault is supported. Portable, offline-first.
 - **Quick Add syntax** — todo.txt-inspired: `(A) Buy milk +project @context #tag
@@ -97,8 +120,15 @@ Examples of agent intents:
   `make codegen` so the TypeScript bindings stay in sync.
 - *Change the DB schema* → edit `store/schema.sql` (fresh installs) **and** add a
   migration entry in `store/store.go` with an incremented `currentSchemaVersion`.
+  Migrations should log convertErrs/ftsErrs counters to stderr and continue
+  rather than aborting — that pattern is established in `migrateV11`. Never
+  put data-shaping logic in a frontend `useEffect` gated on a localStorage
+  flag; see the v1.3.0 incident in CHANGELOG.
 - *Run NIL as a tool for another agent* → build and run the `nil-mcp` binary
   (`cmd/nil-mcp`); it speaks MCP over stdio.
+- *Pass a partial search/update to the backend from the frontend* → use the
+  `search` / `updateItem` / `getInboxItems` helpers in
+  `frontend/src/lib/backend.ts`. Do **not** cast payloads with `as any`.
 
 ## (e) Where to look for more
 

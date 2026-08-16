@@ -12,11 +12,15 @@ import (
 
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
-	"github.com/hollis-labs/nil/ingest"
 	"github.com/hollis-labs/nil/parse"
+	"github.com/hollis-labs/nil/service/items"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
+
+// svc is the package-level items service used by every Wails-bound handler.
+// Stateless; safe to share.
+var svc = items.New()
 
 type App struct {
 	ctx        context.Context
@@ -284,61 +288,47 @@ func (a *App) storeForItemID(id int64) (*store.Store, error) {
 // --- Item CRUD ---
 
 func (a *App) CreateItemFromLine(line string) (*store.Item, error) {
-	p := parse.ParseLine(line)
-	t := &store.Item{
-		Title:     p.Title,
-		Priority:  p.Priority,
-		Projects:  p.Projects,
-		Contexts:  p.Contexts,
-		Tags:      p.Tags,
-		DueAt:     p.Due,
-		Threshold: p.Thresh,
-		Source:    line,
-		Kind:      "todo",
-	}
-	// Route blank-title items to the shared inbox store
-	if strings.TrimSpace(t.Title) == "" {
-		t.Inbox = true
-		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
-	}
-	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
+	return a.createFromLine(line, "todo")
 }
 
 func (a *App) CreateNoteFromLine(line string) (*store.Item, error) {
-	p := parse.ParseLine(line)
-	t := &store.Item{
-		Title:    p.Title,
-		Projects: p.Projects,
-		Contexts: p.Contexts,
-		Tags:     p.Tags,
-		Source:   line,
-		Kind:     "note",
-	}
-	// Route blank-title items to the shared inbox store
-	if strings.TrimSpace(t.Title) == "" {
-		t.Inbox = true
-		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
-	}
-	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
+	return a.createFromLine(line, "note")
 }
 
 // CreateScratchFromLine creates a scratch-kind item. Scratch items behave
 // like notes until the scratch UX follow-up defines dedicated behavior.
 func (a *App) CreateScratchFromLine(line string) (*store.Item, error) {
+	return a.createFromLine(line, "scratch")
+}
+
+// createFromLine is the shared GUI create path. Parses the todo.txt-style
+// line and routes blank-title items to the shared inbox store, matching the
+// "capture without friction" UX from F1.
+func (a *App) createFromLine(line, kind string) (*store.Item, error) {
 	p := parse.ParseLine(line)
-	t := &store.Item{
-		Title:    p.Title,
-		Projects: p.Projects,
-		Contexts: p.Contexts,
-		Tags:     p.Tags,
-		Source:   line,
-		Kind:     "scratch",
+	input := items.CreateInput{
+		Title:      p.Title,
+		Kind:       kind,
+		Priority:   p.Priority,
+		DueAt:      p.Due,
+		Threshold:  p.Thresh,
+		Projects:   p.Projects,
+		Contexts:   p.Contexts,
+		Tags:       p.Tags,
+		SourceLine: line,
 	}
-	if strings.TrimSpace(t.Title) == "" {
-		t.Inbox = true
-		return a.vaultMgr.InboxStore().CreateItem(a.ctx, t)
+	// Only the todo kind carries scheduling fields; clear them for note/scratch
+	// to preserve the previous per-kind behavior.
+	if kind != "todo" {
+		input.Priority = nil
+		input.DueAt = nil
+		input.Threshold = nil
 	}
-	return a.vaultMgr.ActiveStore().CreateItem(a.ctx, t)
+	if strings.TrimSpace(input.Title) == "" {
+		input.Inbox = true
+		return svc.Create(a.ctx, a.vaultMgr.InboxStore(), input)
+	}
+	return svc.Create(a.ctx, a.vaultMgr.ActiveStore(), input)
 }
 
 func (a *App) GetItem(id int64) (*store.Item, error) {
@@ -377,9 +367,9 @@ func (a *App) UpdateItem(t store.Item) error {
 			}
 		}
 		// Item is already in inbox store — update in place
-		return a.vaultMgr.InboxStore().UpdateItem(a.ctx, &t)
+		return svc.Update(a.ctx, a.vaultMgr.InboxStore(), &t)
 	}
-	return a.vaultMgr.ActiveStore().UpdateItem(a.ctx, &t)
+	return svc.Update(a.ctx, a.vaultMgr.ActiveStore(), &t)
 }
 
 func (a *App) ToggleComplete(id int64, completed bool) error {
@@ -409,7 +399,7 @@ func (a *App) DeleteItem(id int64) error {
 func (a *App) Search(req store.SearchRequest) ([]store.Item, error) {
 	req.Query = strings.TrimSpace(req.Query)
 	println("Backend search query:", req.Query, "statuses:", len(req.Statuses))
-	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
+	results, err := svc.Search(a.ctx, a.vaultMgr.ActiveStore(), req)
 	println("Backend search returned:", len(results), "results, error:", err)
 	return results, err
 }
@@ -444,11 +434,11 @@ func (a *App) GetFilters() (*FiltersResult, error) {
 // --- Inbox methods ---
 
 func (a *App) GetInboxCount() (int, error) {
-	return a.vaultMgr.InboxStore().GetInboxCount(a.ctx)
+	return svc.InboxCount(a.ctx, a.vaultMgr.InboxStore())
 }
 
 func (a *App) GetInboxItems(req store.SearchRequest) ([]store.Item, error) {
-	return a.vaultMgr.InboxStore().GetInboxItems(a.ctx, req)
+	return svc.ListInbox(a.ctx, a.vaultMgr.InboxStore(), req)
 }
 
 // ProcessInboxItem moves an inbox item to the target vault.
@@ -473,7 +463,7 @@ func (a *App) HasDemoData() (bool, error) {
 		PageSize: 1,
 		Kind:     "todo",
 	}
-	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
+	results, err := svc.Search(a.ctx, a.vaultMgr.ActiveStore(), req)
 	if err != nil {
 		return false, err
 	}
@@ -561,39 +551,24 @@ func (a *App) SeedDemoData() error {
 
 	for _, demo := range demos {
 		p := parse.ParseLine(demo.line)
-		docJSON, err := ingest.MarkdownToDoc(demo.notes)
-		if err != nil {
-			return fmt.Errorf("seed demo: convert notes: %w", err)
+		input := items.CreateInput{
+			Title:      p.Title,
+			Priority:   p.Priority,
+			Projects:   p.Projects,
+			Contexts:   p.Contexts,
+			Tags:       append(p.Tags, demoDataTag),
+			DueAt:      p.Due,
+			Threshold:  p.Thresh,
+			SourceLine: demo.line,
+			Section:    demo.section,
+			NotesMD:    demo.notes,
 		}
-		htmlStr, err := ingest.DocToHTML(docJSON)
-		if err != nil {
-			return fmt.Errorf("seed demo: render html: %w", err)
-		}
-		todo := &store.Item{
-			Title:            p.Title,
-			Priority:         p.Priority,
-			Projects:         p.Projects,
-			Contexts:         p.Contexts,
-			Tags:             append(p.Tags, demoDataTag),
-			DueAt:            p.Due,
-			Threshold:        p.Thresh,
-			Source:           demo.line,
-			NotesDoc:         docJSON,
-			NotesHTML:        htmlStr,
-			NotesHTMLVersion: notesHTMLVersion,
-			Section:          demo.section,
-		}
-		if _, err := a.vaultMgr.ActiveStore().CreateItem(a.ctx, todo); err != nil {
+		if _, err := svc.Create(a.ctx, a.vaultMgr.ActiveStore(), input); err != nil {
 			return err
 		}
 	}
 	return nil
 }
-
-// notesHTMLVersion identifies the current notes_html renderer. Bump when the
-// renderer (TipTap extensions, ingest.DocToHTML mapping) changes in a way
-// that would produce different output for the same input.
-const notesHTMLVersion = 1
 
 // ListKinds returns all registered kinds for the kind switcher UI.
 func (a *App) ListKinds() ([]store.Kind, error) {
@@ -612,7 +587,7 @@ func (a *App) RemoveDemoData() error {
 		PageSize: 500,
 		Kind:     "todo",
 	}
-	results, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
+	results, err := svc.Search(a.ctx, a.vaultMgr.ActiveStore(), req)
 	if err != nil {
 		return err
 	}
@@ -633,7 +608,7 @@ func (a *App) ExportTodoTxt() (string, error) {
 		SortDir:  "asc",
 		Kind:     "todo",
 	}
-	todos, err := a.vaultMgr.ActiveStore().Search(a.ctx, req)
+	todos, err := svc.Search(a.ctx, a.vaultMgr.ActiveStore(), req)
 	if err != nil {
 		return "", err
 	}

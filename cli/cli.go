@@ -16,48 +16,13 @@ import (
 
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/contextcache"
-	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/service/items"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
 
-// cliNotesHTMLVersion stamps the renderer version on items created/updated
-// through the CLI. Mirrors notesHTMLVersion in the root package.
-const cliNotesHTMLVersion = 1
-
-// cliResolveNotesInput converts CLI body input (markdown by default; HTML or
-// pre-built JSON via --format) into the (doc, html, version) tuple for storage.
-func cliResolveNotesInput(body, format string) (string, string, int, error) {
-	if strings.TrimSpace(body) == "" {
-		return "", "", 0, nil
-	}
-	switch strings.ToLower(format) {
-	case "", "md", "markdown":
-		doc, err := ingest.MarkdownToDoc(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		htmlStr, err := ingest.DocToHTML(doc)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, htmlStr, cliNotesHTMLVersion, nil
-	case "html":
-		doc, err := ingest.HTMLToDoc(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, body, cliNotesHTMLVersion, nil
-	case "json", "doc":
-		htmlStr, err := ingest.DocToHTML(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return body, htmlStr, cliNotesHTMLVersion, nil
-	default:
-		return "", "", 0, fmt.Errorf("unknown --format %q (want md|html|json)", format)
-	}
-}
+// svc is the stateless items service shared by every CLI command.
+var svc = items.New()
 
 const cliVersion = "dev-snapshot"
 
@@ -260,38 +225,35 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	if title == "" {
 		die("add: title is required (pass as positional args or --title)")
 	}
-	doc, htmlStr, version, err := cliResolveNotesInput(body, *formatFlag)
-	if err != nil {
-		die("add: parse body: %v", err)
-	}
-	item := &store.Item{
-		Title:            title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Kind:             *kindFlag,
-		APISource:        *source,
-		Tags:             splitCSV(*tags),
-		Contexts:         splitCSV(*contexts),
-		Projects:         splitCSV(*projects),
-	}
-	if *priority != "" {
-		p := strings.ToUpper(*priority)
-		item.Priority = &p
-	}
-	if *due != "" {
-		d := *due
-		item.DueAt = &d
-	}
-	item.Tags = appendMetaTags(item.Tags, parseKeyValuePairs(metaPairs))
 	storeDest, toInbox, err := chooseCreateDestination(env.mgr, *vaultID, *inbox)
 	if err != nil {
 		die("add: %v", err)
 	}
-	if toInbox {
-		item.Inbox = true
+	input := items.CreateInput{
+		Title:     title,
+		Kind:      *kindFlag,
+		APISource: *source,
+		Tags:      appendMetaTags(splitCSV(*tags), parseKeyValuePairs(metaPairs)),
+		Contexts:  splitCSV(*contexts),
+		Projects:  splitCSV(*projects),
+		Inbox:     toInbox,
 	}
-	created, err := storeDest.CreateItem(ctx, item)
+	if *priority != "" {
+		p := strings.ToUpper(*priority)
+		input.Priority = &p
+	}
+	if *due != "" {
+		d := *due
+		input.DueAt = &d
+	}
+	doc, md, htmlBody, err := svc.NotesInputFromCLI(body, *formatFlag)
+	if err != nil {
+		die("add: parse body: %v", err)
+	}
+	input.NotesDoc = doc
+	input.NotesMD = md
+	input.NotesHTML = htmlBody
+	created, err := svc.Create(ctx, storeDest, input)
 	if err != nil {
 		die("add: %v", err)
 	}
@@ -535,30 +497,28 @@ func cmdImport(ctx context.Context, args []string, env *commandEnv) {
 		}
 		rel, _ := filepath.Rel(*dir, path)
 		title := strings.TrimSuffix(rel, filepath.Ext(rel))
-		doc, htmlStr, version, ierr := cliResolveNotesInput(body, *formatFlag)
+		doc, md, htmlBody, ierr := svc.NotesInputFromCLI(body, *formatFlag)
 		if ierr != nil {
 			failed = append(failed, map[string]string{"path": path, "error": ierr.Error()})
 			return nil
 		}
-		item := &store.Item{
-			Title:            title,
-			NotesDoc:         doc,
-			NotesHTML:        htmlStr,
-			NotesHTMLVersion: version,
-			Kind:             *kindFlag,
-			APISource:        "cli-import",
-			Tags:             append(append([]string{}, baseTags...), metaTags...),
-			Contexts:         append([]string{}, baseContexts...),
-			Projects:         append([]string{}, baseProjects...),
-		}
-		if toInbox {
-			item.Inbox = true
+		input := items.CreateInput{
+			Title:     title,
+			Kind:      *kindFlag,
+			APISource: "cli-import",
+			Tags:      append(append([]string{}, baseTags...), metaTags...),
+			Contexts:  append([]string{}, baseContexts...),
+			Projects:  append([]string{}, baseProjects...),
+			Inbox:     toInbox,
+			NotesDoc:  doc,
+			NotesMD:   md,
+			NotesHTML: htmlBody,
 		}
 		if *dryRun {
-			processed = append(processed, map[string]any{"path": path, "title": item.Title, "dryRun": true})
+			processed = append(processed, map[string]any{"path": path, "title": input.Title, "dryRun": true})
 			return nil
 		}
-		created, createErr := storeDest.CreateItem(ctx, item)
+		created, createErr := svc.Create(ctx, storeDest, input)
 		if createErr != nil {
 			failed = append(failed, map[string]string{"path": path, "error": createErr.Error()})
 			return nil
@@ -654,7 +614,7 @@ func cmdUpdate(ctx context.Context, args []string, env *commandEnv) {
 			item.Priority = &p
 		}
 		item.Tags = applyTagMutations(item.Tags, addTags, removeTags)
-		if err := loc.store.UpdateItem(ctx, item); err != nil {
+		if err := svc.Update(ctx, loc.store, item); err != nil {
 			failed = append(failed, map[string]any{"id": id, "error": err.Error()})
 			continue
 		}
@@ -895,50 +855,51 @@ func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	title := strings.Join(positional, " ")
 
-	doc, htmlStr, version, err := cliResolveNotesInput(*notes, *notesFmt)
+	doc, md, htmlBody, err := svc.NotesInputFromCLI(*notes, *notesFmt)
 	if err != nil {
 		die("push: parse notes: %v", err)
 	}
 
-	item := &store.Item{
-		Title:            title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Kind:             *kindFlag,
-		APISource:        *source,
-		Tags:             splitCSV(*tags),
-		Contexts:         splitCSV(*contexts),
-		Projects:         splitCSV(*projects),
+	input := items.CreateInput{
+		Title:     title,
+		Kind:      *kindFlag,
+		APISource: *source,
+		Tags:      splitCSV(*tags),
+		Contexts:  splitCSV(*contexts),
+		Projects:  splitCSV(*projects),
+		NotesDoc:  doc,
+		NotesMD:   md,
+		NotesHTML: htmlBody,
 	}
 	if *priority != "" {
 		p := strings.ToUpper(*priority)
-		item.Priority = &p
+		input.Priority = &p
 	}
 	if *due != "" {
 		d := *due
-		item.DueAt = &d
+		input.DueAt = &d
 	}
 
 	// Routing: --vault <id> sends to a specific vault; otherwise goes to inbox.
 	var (
-		result *store.Item
-		rerr   error
+		storeDest *store.Store
+		result    *store.Item
+		rerr      error
 	)
 	if *vaultID != "" && !*toInbox {
 		s, serr := mgr.StoreForID(*vaultID)
 		if serr != nil {
 			die("push: vault %q: %v", *vaultID, serr)
 		}
-		result, rerr = s.CreateItem(ctx, item)
+		storeDest = s
 	} else {
-		item.Inbox = true
-		inboxStore := mgr.InboxStore()
-		if inboxStore == nil {
+		input.Inbox = true
+		storeDest = mgr.InboxStore()
+		if storeDest == nil {
 			die("push: inbox store not available")
 		}
-		result, rerr = inboxStore.CreateItem(ctx, item)
 	}
+	result, rerr = svc.Create(ctx, storeDest, input)
 	if rerr != nil {
 		die("push: %v", rerr)
 	}
@@ -964,10 +925,6 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	query := strings.Join(positional, " ")
 
-	k := *kindFlag
-	if k == "all" {
-		k = ""
-	}
 	req := store.SearchRequest{
 		Query:    query,
 		Tags:     splitCSV(*tags),
@@ -975,7 +932,7 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 		Projects: splitCSV(*projects),
 		Page:     *page,
 		PageSize: *pageSize,
-		Kind:     k,
+		Kind:     *kindFlag,
 	}
 
 	var s *store.Store
@@ -992,7 +949,7 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 		die("search: no active store")
 	}
 
-	results, err := s.Search(ctx, req)
+	results, err := svc.Search(ctx, s, req)
 	if err != nil {
 		die("search: %v", err)
 	}
@@ -1017,11 +974,8 @@ func cmdInbox(ctx context.Context, args []string, mgr *vault.Manager) {
 		die("inbox: inbox store not available")
 	}
 
-	req := store.SearchRequest{
-		Query:    query,
-		PageSize: 200,
-	}
-	results, err := inboxStore.GetInboxItems(ctx, req)
+	req := store.SearchRequest{Query: query}
+	results, err := svc.ListInbox(ctx, inboxStore, req)
 	if err != nil {
 		die("inbox: %v", err)
 	}

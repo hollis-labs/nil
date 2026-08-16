@@ -11,52 +11,20 @@ import (
 	"time"
 
 	"github.com/hollis-labs/nil/config"
-	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/service/items"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
 
-// resolveNotesInput converts whichever notes input format the caller supplied
-// into the (doc JSON, html cache, renderer version) tuple needed for storage.
-// Precedence: notes_doc > notes_md > notes_html. Returns empty zero values
-// when none are provided.
-func resolveNotesInput(notesDoc, notesMD, notesHTML string) (string, string, int, error) {
-	if strings.TrimSpace(notesDoc) != "" {
-		htmlStr, err := ingest.DocToHTML(notesDoc)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return notesDoc, htmlStr, notesHTMLVersion, nil
-	}
-	if strings.TrimSpace(notesMD) != "" {
-		doc, err := ingest.MarkdownToDoc(notesMD)
-		if err != nil {
-			return "", "", 0, err
-		}
-		htmlStr, err := ingest.DocToHTML(doc)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, htmlStr, notesHTMLVersion, nil
-	}
-	if strings.TrimSpace(notesHTML) != "" {
-		doc, err := ingest.HTMLToDoc(notesHTML)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, notesHTML, notesHTMLVersion, nil
-	}
-	return "", "", 0, nil
-}
-
 type apiHandler struct {
 	cfg      *config.Config
 	vaultMgr *vault.Manager
+	svc      *items.Service
 }
 
 // NewAPIServer constructs an *http.Server bound to 127.0.0.1 only.
 func NewAPIServer(cfg *config.Config, vm *vault.Manager) *http.Server {
-	h := &apiHandler{cfg: cfg, vaultMgr: vm}
+	h := &apiHandler{cfg: cfg, vaultMgr: vm, svc: items.New()}
 
 	mux := http.NewServeMux()
 
@@ -254,35 +222,22 @@ func (h *apiHandler) handleCreateInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kind := req.Kind
-	if kind == "" {
-		kind = "todo"
-	}
-
-	doc, htmlStr, version, err := resolveNotesInput(req.NotesDoc, req.NotesMD, req.NotesHTML)
+	created, err := h.svc.Create(r.Context(), h.vaultMgr.InboxStore(), items.CreateInput{
+		Title:     req.Title,
+		Kind:      req.Kind,
+		Priority:  req.Priority,
+		DueAt:     req.DueAt,
+		Tags:      req.Tags,
+		Contexts:  req.Contexts,
+		Projects:  req.Projects,
+		Inbox:     true,
+		APISource: r.Header.Get("X-Agent-Source"),
+		NotesDoc:  req.NotesDoc,
+		NotesMD:   req.NotesMD,
+		NotesHTML: req.NotesHTML,
+	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
-		return
-	}
-
-	item := &store.Item{
-		Title:            req.Title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Priority:         req.Priority,
-		DueAt:            req.DueAt,
-		Kind:             kind,
-		Tags:             req.Tags,
-		Contexts:         req.Contexts,
-		Projects:         req.Projects,
-		Inbox:            true,
-		APISource:        r.Header.Get("X-Agent-Source"),
-	}
-
-	created, err := h.vaultMgr.InboxStore().CreateItem(r.Context(), item)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create item")
+		writeError(w, http.StatusInternalServerError, "failed to create item: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -301,12 +256,12 @@ func (h *apiHandler) handleListInbox(w http.ResponseWriter, r *http.Request) {
 		PageSize: pageSize,
 	}
 
-	items, err := h.vaultMgr.InboxStore().GetInboxItems(r.Context(), req)
+	listed, err := h.svc.ListInbox(r.Context(), h.vaultMgr.InboxStore(), req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list inbox items")
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, listed)
 }
 
 // POST /api/v1/inbox/{id}/process — mark an inbox item as processed.
@@ -353,41 +308,23 @@ func (h *apiHandler) handleCreateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kind := req.Kind
-	if kind == "" {
-		kind = "todo"
-	}
-	section := req.Section
-	if section == "" {
-		section = "anytime"
-	}
-
-	doc, htmlStr, version, err := resolveNotesInput(req.NotesDoc, req.NotesMD, req.NotesHTML)
+	created, err := h.svc.Create(r.Context(), s, items.CreateInput{
+		Title:     req.Title,
+		Kind:      req.Kind,
+		Section:   req.Section,
+		Priority:  req.Priority,
+		DueAt:     req.DueAt,
+		Pinned:    req.Pinned,
+		Tags:      req.Tags,
+		Contexts:  req.Contexts,
+		Projects:  req.Projects,
+		APISource: r.Header.Get("X-Agent-Source"),
+		NotesDoc:  req.NotesDoc,
+		NotesMD:   req.NotesMD,
+		NotesHTML: req.NotesHTML,
+	})
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
-		return
-	}
-
-	item := &store.Item{
-		Title:            req.Title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Priority:         req.Priority,
-		DueAt:            req.DueAt,
-		Kind:             kind,
-		Section:          section,
-		Pinned:           req.Pinned,
-		Tags:             req.Tags,
-		Contexts:         req.Contexts,
-		Projects:         req.Projects,
-		Inbox:            false,
-		APISource:        r.Header.Get("X-Agent-Source"),
-	}
-
-	created, err := s.CreateItem(r.Context(), item)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to create item")
+		writeError(w, http.StatusInternalServerError, "failed to create item: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -443,77 +380,28 @@ func (h *apiHandler) handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := s.GetItem(r.Context(), id)
+	patch := items.UpdatePatch{
+		Title:     req.Title,
+		Kind:      req.Kind,
+		Section:   req.Section,
+		Pinned:    req.Pinned,
+		Tags:      req.Tags,
+		Contexts:  req.Contexts,
+		Projects:  req.Projects,
+		Priority:  items.NullableString{Set: req.Priority.IsSet, Value: req.Priority.Value},
+		DueAt:     items.NullableString{Set: req.DueAt.IsSet, Value: req.DueAt.Value},
+		NotesDoc:  req.NotesDoc,
+		NotesMD:   req.NotesMD,
+		NotesHTML: req.NotesHTML,
+	}
+
+	updated, err := h.svc.UpdatePatch(r.Context(), s, id, patch)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "item not found")
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to get item")
-		return
-	}
-
-	// Apply only non-nil fields from the request
-	if req.Title != nil {
-		item.Title = *req.Title
-	}
-	// Notes: if any input format is set, resolve via ingest and overwrite both
-	// notes_doc and notes_html (cache stays in sync). If none are set, leave
-	// the existing notes alone.
-	if req.NotesDoc != nil || req.NotesMD != nil || req.NotesHTML != nil {
-		var inDoc, inMD, inHTML string
-		if req.NotesDoc != nil {
-			inDoc = *req.NotesDoc
-		}
-		if req.NotesMD != nil {
-			inMD = *req.NotesMD
-		}
-		if req.NotesHTML != nil {
-			inHTML = *req.NotesHTML
-		}
-		doc, htmlStr, version, err := resolveNotesInput(inDoc, inMD, inHTML)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "failed to parse notes: "+err.Error())
-			return
-		}
-		item.NotesDoc = doc
-		item.NotesHTML = htmlStr
-		item.NotesHTMLVersion = version
-	}
-	if req.Priority.IsSet {
-		item.Priority = req.Priority.Value
-	}
-	if req.DueAt.IsSet {
-		item.DueAt = req.DueAt.Value
-	}
-	if req.Kind != nil {
-		item.Kind = *req.Kind
-	}
-	if req.Section != nil {
-		item.Section = *req.Section
-	}
-	if req.Pinned != nil {
-		item.Pinned = *req.Pinned
-	}
-	// Slice fields: nil pointer = leave unchanged; non-nil pointer (even to empty slice) = overwrite
-	if req.Tags != nil {
-		item.Tags = *req.Tags
-	}
-	if req.Contexts != nil {
-		item.Contexts = *req.Contexts
-	}
-	if req.Projects != nil {
-		item.Projects = *req.Projects
-	}
-
-	if updateErr := s.UpdateItem(r.Context(), item); updateErr != nil {
-		writeError(w, http.StatusInternalServerError, "failed to update item")
-		return
-	}
-
-	updated, err := s.GetItem(r.Context(), id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to fetch updated item")
+		writeError(w, http.StatusInternalServerError, "failed to update item: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
@@ -652,9 +540,6 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if kindFilter == "" {
 		kindFilter = q.Get("type")
 	}
-	if kindFilter == "" {
-		kindFilter = "all"
-	}
 
 	req := store.SearchRequest{
 		Query:    q.Get("q"),
@@ -666,12 +551,12 @@ func (h *apiHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		PageSize: pageSize,
 	}
 
-	items, err := s.Search(r.Context(), req)
+	results, err := h.svc.Search(r.Context(), s, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to search items")
 		return
 	}
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, results)
 }
 
 // GET /api/v1/taxonomy — return projects, contexts, and tags with item counts.

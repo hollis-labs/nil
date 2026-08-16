@@ -2,6 +2,7 @@ import * as React from "react";
 import { ItemRow } from "./TerminalList";
 import CustomScrollbar from "./CustomScrollbar";
 import * as Backend from "../../wailsjs/go/main/App";
+import { getInboxItems } from "../lib/backend";
 import { config } from "../../wailsjs/go/models";
 import { Archive, Trash2, CheckCircle, CheckSquare, Square } from "lucide-react";
 
@@ -52,13 +53,7 @@ export default function InboxView({ onClose, onEdit, onProcessed }: Props) {
   const loadItems = React.useCallback(async (query: string) => {
     setLoading(true);
     try {
-      const results = await Backend.GetInboxItems({
-        query,
-        page: 0,
-        page_size: 200,
-        sort_by: "created_at",
-        sort_dir: "desc",
-      } as any);
+      const results = await getInboxItems({ query });
       setItems(Array.isArray(results) ? (results as ItemRow[]) : []);
     } catch (err) {
       console.error("Failed to load inbox items:", err);

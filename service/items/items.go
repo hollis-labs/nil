@@ -1,0 +1,343 @@
+// Package items is the business-logic layer for item create/update/search.
+//
+// Why this exists: GUI (app.go), HTTP API (api.go), CLI (cli/cli.go), and the
+// AI chat bridge (chat/bridge.go) each accept item payloads in different shapes
+// — Wails-encoded structs, JSON HTTP bodies, CLI flags, model-tool inputs —
+// but they all need the same pre-store work: convert markdown/HTML notes to
+// PM JSON via the ingest package, default the kind to "todo", default the
+// section to "anytime", and so on. Before this package, each consumer
+// duplicated those steps (three independent notes-input resolvers, four kind
+// defaulters), making behavior drift easy and bug fixes painful (see the
+// v1.3.0 silent-backfill incident in CHANGELOG).
+//
+// The Service is stateless and store-agnostic: each method takes the
+// *store.Store the caller has already chosen for the request. Vault routing
+// (HTTP's X-Vault-ID header, CLI's --vault flag, GUI's active-vs-inbox split)
+// is consumer-specific and stays in the consumer.
+package items
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/store"
+)
+
+// NotesHTMLVersion stamps the renderer version on every item the service
+// creates or updates. Bump when the ingest HTML renderer changes shape in a
+// way that should invalidate caches.
+const NotesHTMLVersion = 1
+
+// Service holds no state. A single zero-value Service is safe to reuse.
+type Service struct{}
+
+// New constructs a Service. Returning a pointer leaves room to add
+// dependencies later (renderer registry, metrics sink) without churn at the
+// call sites.
+func New() *Service { return &Service{} }
+
+// ErrInvalidNotesFormat is returned by ResolveNotesInputCLI when --format is
+// not one of md|html|json.
+var ErrInvalidNotesFormat = errors.New("unknown notes format (want md|html|json)")
+
+// CreateInput is the unified input for Service.Create. Callers fill the
+// fields their transport supplied; missing fields take service defaults.
+//
+// Notes precedence: NotesDoc > NotesMD > NotesHTML. Only one is consulted;
+// the others are ignored. All three empty means the item has no body.
+type CreateInput struct {
+	Title      string
+	Kind       string // "" → "todo"
+	Section    string // "" → "anytime"
+	Priority   *string
+	DueAt      *string
+	Threshold  *string
+	Recurrence *string
+	Projects   []string
+	Contexts   []string
+	Tags       []string
+	Pinned     bool
+	Inbox      bool
+	APISource  string
+	SourceLine string
+
+	NotesDoc  string
+	NotesMD   string
+	NotesHTML string
+}
+
+// NullableString lets UpdatePatch distinguish "field omitted" (Set=false)
+// from "clear the column to NULL" (Set=true, Value=nil) from "set to this
+// value" (Set=true, Value=&v). HTTP and CLI callers map their own
+// null-marker types into this shape before invoking the service.
+type NullableString struct {
+	Value *string
+	Set   bool
+}
+
+// UpdatePatch is the partial-update input for Service.UpdatePatch. Nil
+// pointer fields mean "leave unchanged"; non-nil means "replace with this".
+// For slice fields, a nil *[]string means "leave unchanged" while a non-nil
+// pointer (including to an empty slice) means "replace".
+//
+// Use NullableString fields for columns that can be NULL (Priority, DueAt,
+// Threshold, Recurrence) so callers can explicitly clear them.
+//
+// Notes precedence matches CreateInput. If any of NotesDoc/NotesMD/NotesHTML
+// is non-nil the notes are re-resolved and overwritten; otherwise notes are
+// left untouched.
+type UpdatePatch struct {
+	Title    *string
+	Kind     *string
+	Section  *string
+	Pinned   *bool
+	Projects *[]string
+	Contexts *[]string
+	Tags     *[]string
+
+	Priority   NullableString
+	DueAt      NullableString
+	Threshold  NullableString
+	Recurrence NullableString
+
+	NotesDoc  *string
+	NotesMD   *string
+	NotesHTML *string
+}
+
+// Create builds a *store.Item from the input, applies kind/section defaults,
+// resolves notes input via the ingest pipeline, and writes via st.CreateItem.
+// The store validates kind against the kinds registry.
+func (s *Service) Create(ctx context.Context, st *store.Store, input CreateInput) (*store.Item, error) {
+	kind := input.Kind
+	if kind == "" {
+		kind = "todo"
+	}
+	section := input.Section
+	if section == "" {
+		section = "anytime"
+	}
+	doc, htmlStr, version, err := s.ResolveNotesInput(input.NotesDoc, input.NotesMD, input.NotesHTML)
+	if err != nil {
+		return nil, fmt.Errorf("resolving notes input: %w", err)
+	}
+	item := &store.Item{
+		Title:            input.Title,
+		Kind:             kind,
+		Section:          section,
+		Priority:         input.Priority,
+		DueAt:            input.DueAt,
+		Threshold:        input.Threshold,
+		Recur:            input.Recurrence,
+		Projects:         input.Projects,
+		Contexts:         input.Contexts,
+		Tags:             input.Tags,
+		Pinned:           input.Pinned,
+		Inbox:            input.Inbox,
+		APISource:        input.APISource,
+		Source:           input.SourceLine,
+		NotesDoc:         doc,
+		NotesHTML:        htmlStr,
+		NotesHTMLVersion: version,
+	}
+	return st.CreateItem(ctx, item)
+}
+
+// Update replaces an item wholesale. Caller has already populated every field
+// (including NotesDoc / NotesHTML); the service does no notes-input resolution
+// here. Use this when the caller holds a full *store.Item — typically the GUI,
+// which round-trips Items through Wails-generated bindings.
+//
+// Kind is defaulted to "todo" if empty so wire formats that omit the field
+// don't accidentally fail registry validation.
+func (s *Service) Update(ctx context.Context, st *store.Store, item *store.Item) error {
+	if item.Kind == "" {
+		item.Kind = "todo"
+	}
+	return st.UpdateItem(ctx, item)
+}
+
+// UpdatePatch fetches the current item, applies non-nil patch fields, optionally
+// re-resolves notes input, and writes the result. Returns the updated item as
+// re-fetched from the store (so caller sees fresh updated_at, etc.).
+func (s *Service) UpdatePatch(ctx context.Context, st *store.Store, id int64, patch UpdatePatch) (*store.Item, error) {
+	existing, err := st.GetItem(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if patch.Title != nil {
+		existing.Title = *patch.Title
+	}
+	if patch.Kind != nil {
+		existing.Kind = *patch.Kind
+	}
+	if patch.Section != nil {
+		existing.Section = *patch.Section
+	}
+	if patch.Pinned != nil {
+		existing.Pinned = *patch.Pinned
+	}
+	if patch.Projects != nil {
+		existing.Projects = *patch.Projects
+	}
+	if patch.Contexts != nil {
+		existing.Contexts = *patch.Contexts
+	}
+	if patch.Tags != nil {
+		existing.Tags = *patch.Tags
+	}
+	if patch.Priority.Set {
+		existing.Priority = patch.Priority.Value
+	}
+	if patch.DueAt.Set {
+		existing.DueAt = patch.DueAt.Value
+	}
+	if patch.Threshold.Set {
+		existing.Threshold = patch.Threshold.Value
+	}
+	if patch.Recurrence.Set {
+		existing.Recur = patch.Recurrence.Value
+	}
+
+	if patch.NotesDoc != nil || patch.NotesMD != nil || patch.NotesHTML != nil {
+		var inDoc, inMD, inHTML string
+		if patch.NotesDoc != nil {
+			inDoc = *patch.NotesDoc
+		}
+		if patch.NotesMD != nil {
+			inMD = *patch.NotesMD
+		}
+		if patch.NotesHTML != nil {
+			inHTML = *patch.NotesHTML
+		}
+		doc, htmlStr, version, err := s.ResolveNotesInput(inDoc, inMD, inHTML)
+		if err != nil {
+			return nil, fmt.Errorf("resolving notes input: %w", err)
+		}
+		existing.NotesDoc = doc
+		existing.NotesHTML = htmlStr
+		existing.NotesHTMLVersion = version
+	}
+
+	if err := st.UpdateItem(ctx, existing); err != nil {
+		return nil, err
+	}
+	return st.GetItem(ctx, id)
+}
+
+// ResolveNotesInput converts whichever notes input format the caller supplied
+// into the (doc JSON, html cache, renderer version) tuple needed for storage.
+// Precedence: notes_doc > notes_md > notes_html. Returns empty zero values
+// when none are provided.
+//
+// This is the single source of truth for notes ingest across the GUI, HTTP
+// API, CLI, and chat bridge.
+func (s *Service) ResolveNotesInput(notesDoc, notesMD, notesHTML string) (string, string, int, error) {
+	if strings.TrimSpace(notesDoc) != "" {
+		htmlStr, err := ingest.DocToHTML(notesDoc)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return notesDoc, htmlStr, NotesHTMLVersion, nil
+	}
+	if strings.TrimSpace(notesMD) != "" {
+		doc, err := ingest.MarkdownToDoc(notesMD)
+		if err != nil {
+			return "", "", 0, err
+		}
+		htmlStr, err := ingest.DocToHTML(doc)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, htmlStr, NotesHTMLVersion, nil
+	}
+	if strings.TrimSpace(notesHTML) != "" {
+		doc, err := ingest.HTMLToDoc(notesHTML)
+		if err != nil {
+			return "", "", 0, err
+		}
+		return doc, notesHTML, NotesHTMLVersion, nil
+	}
+	return "", "", 0, nil
+}
+
+// NotesInputFromCLI maps the CLI's --body + --format flags onto the
+// notes-input triplet that CreateInput / UpdatePatch consume. Exactly one of
+// the returned strings is non-empty; the others are "". Empty body produces
+// all-empty output (no error). Unknown format returns ErrInvalidNotesFormat
+// wrapping the offending string.
+//
+// This is a transport-shape helper: it does NOT resolve to PM JSON itself —
+// the resolution happens inside Create / UpdatePatch via ResolveNotesInput,
+// so consumers don't pay for double conversion.
+func (s *Service) NotesInputFromCLI(body, format string) (doc, md, html string, err error) {
+	if strings.TrimSpace(body) == "" {
+		return "", "", "", nil
+	}
+	switch strings.ToLower(format) {
+	case "", "md", "markdown":
+		return "", body, "", nil
+	case "html":
+		return "", "", body, nil
+	case "json", "doc":
+		return body, "", "", nil
+	default:
+		return "", "", "", fmt.Errorf("%w: %q", ErrInvalidNotesFormat, format)
+	}
+}
+
+// Search applies the service's canonical defaults and delegates to st.Search.
+// Defaults:
+//   - Kind: "all" if empty (the store would default to "todo"; the service
+//     overrides because every real consumer treats "" as "no filter")
+//   - PageSize: 50 if zero or negative
+//   - SortBy: "created_at" if empty
+//   - SortDir: "desc" if empty
+//
+// All other fields pass through untouched.
+func (s *Service) Search(ctx context.Context, st *store.Store, req store.SearchRequest) ([]store.Item, error) {
+	return st.Search(ctx, s.applySearchDefaults(req))
+}
+
+// ListInbox lists inbox items with the canonical inbox default (PageSize=200
+// if unset). Other fields pass through to st.GetInboxItems, which enforces
+// inbox=1 and archived=0 regardless of the request.
+func (s *Service) ListInbox(ctx context.Context, st *store.Store, req store.SearchRequest) ([]store.Item, error) {
+	if req.PageSize <= 0 {
+		req.PageSize = 200
+	}
+	return st.GetInboxItems(ctx, req)
+}
+
+// InboxCount returns the count of unprocessed inbox items.
+func (s *Service) InboxCount(ctx context.Context, st *store.Store) (int, error) {
+	return st.GetInboxCount(ctx)
+}
+
+// ProcessInbox clears the inbox flag on an item without moving it between
+// vaults. Vault-to-vault relocation is consumer-specific (the GUI moves
+// inbox items into the active vault on triage; the HTTP API just clears the
+// flag); callers that need a move should do it themselves around this call.
+func (s *Service) ProcessInbox(ctx context.Context, st *store.Store, id int64) error {
+	return st.ProcessInboxItem(ctx, id)
+}
+
+func (s *Service) applySearchDefaults(req store.SearchRequest) store.SearchRequest {
+	if req.Kind == "" {
+		req.Kind = "all"
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 50
+	}
+	if req.SortBy == "" {
+		req.SortBy = "created_at"
+	}
+	if req.SortDir == "" {
+		req.SortDir = "desc"
+	}
+	return req
+}
