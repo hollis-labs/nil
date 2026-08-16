@@ -4,7 +4,7 @@ import TagsAutocomplete from "./TagsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import ContextsAutocomplete from "./ContextsAutocomplete";
 import ItemTitleInput from "./ItemTitleInput";
-import { useSettings } from "./SettingsModal";
+import { useSettings } from "./SettingsContext";
 import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
 import DeleteConfirmControl from "./DeleteConfirmControl";

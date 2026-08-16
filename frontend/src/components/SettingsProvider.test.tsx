@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import type * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SettingsProvider, useSettings } from "./SettingsModal";
+import { SettingsProvider, useSettings } from "./SettingsContext";
 
 // Settings persistence critical path — localStorage round-trip for
 // `nil.settings` (see CLAUDE.md's "localStorage Keys" list), including the

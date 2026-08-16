@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Backend from "../../wailsjs/go/main/App";
 import EditItemModal from "./EditItemModal";
-import { SettingsProvider } from "./SettingsModal";
+import { SettingsProvider } from "./SettingsContext";
 
 // Quick add critical path — item-creation-payload half.
 //
