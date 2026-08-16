@@ -1,7 +1,0 @@
----
-version: "0.2.0"
-project:
-  id: "nanite"
-  name: "Nanite"
-storage:
-  backend: files
