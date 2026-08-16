@@ -4,7 +4,7 @@ import { mergeAttributes } from "@tiptap/core";
 import tippy from "tippy.js";
 import type { Instance as TippyInstance } from "tippy.js";
 import WikilinkSuggestion from "../components/WikilinkSuggestion";
-import * as Backend from "../../wailsjs/go/main/App";
+import { search } from "./backend";
 
 export const WikilinkExtension = Mention.extend({
   name: "wikilink",
@@ -67,18 +67,10 @@ export const WikilinkExtension = Mention.extend({
     items: async ({ query }: { query: string }) => {
       if (!query) return [];
       try {
-        const results = await (Backend.Search as any)({
+        const results = await search({
           query,
-          kind: "all",
-          page: 0,
           page_size: 8,
           sort_by: "updated_at",
-          sort_dir: "desc",
-          statuses: [],
-          projects: [],
-          contexts: [],
-          tags: [],
-          priorities: [],
         });
         return (results || []).map((t: any) => ({
           id: t.id,

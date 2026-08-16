@@ -1,10 +1,9 @@
 # NIL
 
-## agentrc
-- If `.agentrc/boot-prompt.md` exists, read it first for session context.
-- If the user says "Boot <agent>", look up the agent in `.agentrc/config.yaml` under `agents:`. Load each role file from `~/.agentrc/roles/` (using the `file:` path from `~/.agentrc/config.yaml` role definitions), load the listed skills, and read the project context file from `.agentrc/` if specified.
-- If the user says "Boot <role>" and no agent matches, fall back to loading that single role from `~/.agentrc/roles/` by type directory (domain/, stack/, meta/).
-- After context compaction, re-read the active role and project context files.
+## Session bootstrap
+- `.agentrc/` and `.forge/` (the old planning-doc conventions this section used to point at) were retired 2026-08-16 — those files no longer exist. Do not look for them.
+- Per-project source of truth is now `.agent-ops/project.yaml` (machine-readable summary: purpose, build command, doc pointers, roadmap phase) plus `AGENTS.md` (narrative: entry points, domain concepts, "where to look" guidance). Read both when starting a session on this repo.
+- Live task/plan tracking is in Torque, project `PRJ-20260417-0005` ("Nil") — not in checklists in this file. See "Immediate Priorities" below for the pointer.
 - Do not guess when uncertain. Stop and ask.
 - Prefer focused, minimal output. No trailing summaries.
 - Sub-agent output stays in the sub-agent. Main context gets one-line confirmations.
@@ -34,20 +33,34 @@ NIL is a keyboard-driven personal task and note management desktop app. It is cu
 
 ```
 nil/
-├── main.go              # Wails entry point, window config
-├── app.go               # App struct, all Wails-bound Go methods
+├── main.go              # Wails entry point, window config; dispatches bare CLI args to cli.Run() before wails.Run()
+├── app.go               # App struct, all Wails-bound Go methods (embeds the same apiserver used standalone)
 ├── go.mod / go.sum      # module: github.com/hollis-labs/nil
 ├── wails.json           # App name (NIL), build config
+├── Makefile             # Canonical local verification path: build/test/lint/verify/codegen(-check)
 ├── build-local.sh       # Quick local macOS build
 ├── build-for-friends.sh # Cross-platform distribution build
+├── apiserver/
+│   └── apiserver.go     # HTTP API (routes/handlers/auth); used by both the embedded GUI server and standalone `nil serve-api`
+├── service/items/
+│   └── items.go         # Shared business-logic layer (create/update/search defaults, notes-input resolution, notes_text rendering) used by app.go, apiserver, cli, chat/bridge.go
+├── cli/
+│   └── cli.go            # `nil <command>` CLI registry; package cli; includes `nil serve-api` (headless API server)
+├── cmd/
+│   ├── nil-mcp/          # Standalone MCP stdio server (main.go + mcp.go) → `nil-mcp` binary; proxies tool calls to the HTTP API
+│   └── nil-recover/      # Offline recovery tool for a closed DB (break-glass utility)
+├── chat/
+│   └── bridge.go         # AI chat integration (direct Anthropic API, not a CLI subprocess — see historical ADR-001 rationale)
+├── ingest/                # Doc conversion: MarkdownToDoc, HTMLToDoc, DocToHTML, DocToPlainText, ExtractRefIDs
+├── vault/                 # Multi-vault manager: vault registry, active-vault switching, per-vault *store.Store
 ├── config/
-│   └── config.go        # OS-appropriate config/data paths, JSON config
+│   └── config.go         # OS-appropriate config/data paths, JSON config (incl. API port/key)
 ├── store/
-│   ├── models.go        # Item, SearchRequest structs
-│   ├── schema.sql       # Embedded SQL: tables, triggers, FTS5, refs
-│   └── store.go         # All DB logic: CRUD, search, migrations, refs
+│   ├── models.go         # Item, SearchRequest structs
+│   ├── schema.sql        # Embedded SQL: tables, triggers, FTS5, refs, kinds registry
+│   └── store.go          # All DB logic: CRUD, search, migrations, refs
 ├── parse/
-│   └── line.go          # todo.txt-inspired line parser
+│   └── line.go            # todo.txt-inspired line parser
 └── frontend/
     ├── package.json
     ├── vite.config.ts   # Path alias: @ → ./src
@@ -73,11 +86,13 @@ nil/
 
 - All Wails-exposed methods live in **`app.go`** as methods on `*App`.
 - All database logic lives in **`store/store.go`** as methods on `*Store`.
+- Shared create/update/search logic (notes-input resolution, defaulting, `notes_text` rendering) lives in **`service/items.Service`** (`service/items/items.go`) — `app.go`, `apiserver/apiserver.go`, `cli/cli.go`, and `chat/bridge.go` all route through it rather than duplicating logic. Add new cross-surface behavior here, not per-consumer.
+- The HTTP API (routes/handlers/auth) lives in **`apiserver/apiserver.go`**, used both by the GUI's embedded server (gated on `cfg.APIEnabled`) and the standalone `nil serve-api` CLI subcommand (headless, no Wails GUI required) — same `apiserver.New(cfg, mgr)` constructor either way.
 - Schema is defined in **`store/schema.sql`** (embedded at compile time). Add new tables here for fresh installs.
-- Schema changes for existing users use the **migration slice** in `store/store.go`. Increment `currentSchemaVersion` and add a new `migration` entry. Migrations are idempotent (use `IF NOT EXISTS` guards, or catch "already exists" errors).
-- Current schema version: **4** (inbox column).
-- Build/test the Go layer with `go build .` from the project root.
-- After adding or changing Go methods bound to Wails, regenerate TypeScript bindings: `wails generate module`.
+- Schema changes for existing users use the **migration slice** in `store/store.go`. Increment `currentSchemaVersion` and add a new `migration` entry. Migrations are idempotent (use `IF NOT EXISTS` guards, or catch "already exists" errors). If a migration adds a column that also needs an index, create the index in `Open()` **strictly after** `runMigrations` returns — `schema.sql`'s unconditional exec runs before migrations on every `Open()` call, so an index on a not-yet-migrated column fails outright (see the `external_ref` index for the pattern).
+- Current schema version: **12** — items live in the `todos` table with a `kind` column (`todo`/`note`/`scratch`/registered custom kinds, validated against a `kinds` registry table), not the legacy `type` column. Notes are stored as ProseMirror/TipTap document JSON in `notes_doc` (canonical), with `notes_html` as a write-time render cache. See `AGENTS.md` for the fuller schema-evolution narrative (JSON-at-rest migration, v7–v11).
+- Canonical build/verify path: **`make verify`** (lint + test + frontend-build + codegen-check + build). Individual targets: `make build`, `make test`, `make lint`, `make codegen`, `make codegen-check`. `go build ./...`/`go test ./...` alone do **not** catch stale generated Wails bindings — always run `make codegen-check` (or full `make build`) after changing a Go type used by a Wails-bound method signature (e.g. `store.SearchRequest`, `store.Item`), even if the change looks backend-only. This has silently broken `make build` before without `go build`/`go test` noticing.
+- After adding or changing Go methods bound to Wails, regenerate TypeScript bindings: `make codegen` (wraps `wails generate module`).
 
 ### Frontend (TypeScript/React)
 
@@ -91,16 +106,18 @@ nil/
 
 ### Data Model
 
-The core entity is `todos` (DB table name unchanged) — it holds both **items** (`type='todo'`) and **notes** (`type='note'`). The Go struct is `store.Item`. Fields:
+The core entity is `todos` (DB table name unchanged) — it holds **items**, **notes**, and any other registered **kind** (e.g. `scratch`). The Go struct is `store.Item`. Fields:
 
 - `id`, `title`, `priority`, `completed`, `archived`, `created_at`, `updated_at`
 - `due_at`, `threshold_at`, `recurrence_rule` (optional scheduling)
-- `notes_md` — HTML string (TipTap output); also full-text indexed via FTS5
+- `notes_doc` — TipTap/ProseMirror document JSON (canonical body storage); `notes_html` — write-time HTML render cache (`notes_html_version` for cache invalidation). External-facing surfaces (API/CLI/MCP) also expose a computed `notes_text` plaintext rendering (via `ingest.DocToPlainText`, `service/items.Service.PlainText`) — not a stored column, derived at response time. The legacy `notes_md` column is deadweight (retired in the v7–v11 JSON-at-rest migration).
 - `section` — `now` | `soon` | `anytime`
-- `pinned`, `type` (`todo` | `note`)
+- `pinned`, `kind` (`todo` | `note` | `scratch` | other registered kinds — renamed from `type` in schema v9, validated against the `kinds` registry table)
 - `inbox` — boolean (`INTEGER DEFAULT 0`); auto-set when title is blank on creation, or set explicitly via the "→ Inbox" button in the create modal; inbox items are excluded from normal search results
+- `api_source` — free-text label of which surface wrote the item (`cli`, `nil-mcp`, etc.)
+- `external_ref` — optional writer-supplied idempotency key for external push flows; re-creating with the same `external_ref` (within the same vault) overwrites the existing row's create-payload fields instead of duplicating it (preserves `completed`/`archived`/`created_at`)
 - Taxonomy via join tables: `todo_projects`, `todo_contexts`, `todo_tags`
-- Inter-item references via `refs (source_id, target_id)` — synced on every save
+- Inter-item references via `refs (source_id, target_id)` — synced on every save; readable back out via `GetBackrefs` (exposed on all three external surfaces, not just the GUI)
 
 ### localStorage Keys
 
@@ -124,17 +141,27 @@ The theme switcher is **hidden from the Settings UI** until the Tailwind/shadcn 
 ## Development Commands
 
 ```bash
+# Full local verification path (lint + test + frontend-build + codegen-check + build)
+make verify
+
+# Individual targets
+make build           # wails build
+make test            # go test ./...
+make lint            # format-check + go-lint + frontend-lint
+make codegen         # wails generate module
+make codegen-check   # regenerate bindings, fail if frontend/wailsjs drifted
+
 # Run in dev mode (hot reload)
 wails dev
+
+# Run the HTTP API headlessly, no Wails GUI required
+go run . serve-api [--port N]
 
 # Build macOS app locally
 ./build-local.sh
 
 # Cross-platform distribution build (macOS + Windows; Linux run on Linux)
 ./build-for-friends.sh
-
-# Regenerate Wails TypeScript bindings after Go changes
-wails generate module
 
 # Type-check frontend only
 cd frontend && npx tsc --noEmit
@@ -164,17 +191,15 @@ DEBUG=1 open build/bin/NIL.app
 
 ## Immediate Priorities
 
-- [x] **Dead file cleanup**: `app/app.go`, `store/store.go.bak`, debug scripts, stale `.md` files removed.
-- [x] **App rename**: PLANCK → NANITE → NIL throughout (wails.json, main.go, index.html, config paths, build scripts, docs, localStorage keys).
-- [x] **Item rename**: `Todo` struct → `Item`; Wails methods `CreateTodoFromLine` → `CreateItemFromLine`, `UpdateTodo` → `UpdateItem`, etc. DB `type` column values `'todo'`/`'note'` unchanged.
-- [x] **Hide theme switcher**: Theme tab hidden from Settings UI (`SettingsTab` type, tab button commented out, content gated with `false &&`).
-- [x] **Default tab migration**: `defaultSettings` now includes All tab for both todos and notes modes. `SettingsProvider` injects a notes-mode All tab on first load if missing.
-- [x] **Escape closes EditItemModal**: Dirty detection + inline prompt configurable via Settings → General → Close & Save Behavior.
-- [ ] **User-facing docs**: Keyboard shortcut reference, Quick Add syntax guide, Scope and Session documentation, cloud sync setup guide. See `docs/` for current state.
-- [ ] **Code standardization**: Audit components for inline styles vs. CSS variables; standardize prop patterns across modals.
-- [ ] **Stack evaluation**: Evaluate whether Wails v2 → v3, or an alternative framework, is the right long-term choice before the codebase grows further.
-- [ ] **Frontend layout migration (Tailwind/shadcn)**: Audit the existing component library, plan a migration to Tailwind v4 + shadcn/ui that preserves the terminal aesthetic and the `--term-*` CSS variable theme system.
-- [ ] **Fix wikilink click** (see Known Issues above).
+**Live task tracking moved to Torque** (project `PRJ-20260417-0005` / "Nil") as of 2026-08-16 — this checklist is historical and will not be kept current. Check Torque for what's actually outstanding rather than trusting this list. Notable active tracked work: the "Nil modernization baseline" portfolio (`CW-20260424-0026` and its phase tasks — verification workflow is done; backend/frontend test coverage, an architecture doc + ADRs, splitting `cli.go`/`store.go`/`app.go`/`App.tsx`, and a Wails-binding stale-check are still outstanding) and the completed "External Data Access API" epic (`EP-20260816-0003` — headless `serve-api`, bulk list w/ `updated_since`, `notes_text`, backlinks, deletion-signal ID-diff endpoint, batch create + `external_ref`).
+
+Historical, already-done items (kept for context, not action items):
+- App rename PLANCK → NANITE → NIL; `Todo` struct → `Item`; theme switcher hidden pending Tailwind/shadcn.
+- Default-tab migration; Escape-closes-EditItemModal dirty-detection flow.
+
+Still-relevant unresolved items not yet in Torque as of this writing:
+- **User-facing docs**: Keyboard shortcut reference, Quick Add syntax guide, Scope and Session documentation, cloud sync setup guide. See `docs/` for current state.
+- **Fix wikilink click** (see Known Issues above).
 
 ---
 
@@ -242,7 +267,7 @@ AI-assisted automation builder for creating recurring workflows: daily/weekly di
 ## Agent Notes
 
 - When modifying the schema, always update **both** `store/schema.sql` (for fresh installs) **and** add a migration in `store/store.go` (for existing users).
-- After any Go method signature change, run `wails generate module` to keep TypeScript bindings in sync.
+- After any Go method signature change — or any change to a type used as a Wails-bound method's parameter/return (e.g. `store.Item`, `store.SearchRequest`), even if the change looks backend-only — run `make codegen` (or `make codegen-check` to fail loudly on drift) to keep TypeScript bindings in sync. `go build`/`go test` do not catch this class of bug.
 - The `App.tsx` file is the single source of truth for app state. Read it fully before adding new state or handlers.
 - TipTap editors run inside WKWebView on macOS. Standard DOM event handling has quirks — test click/keyboard interactions in the actual app, not just in a browser.
 - Tailwind and shadcn/ui are **not yet installed**. Do not assume they are available until the migration priority has been completed. Until then, continue using the existing `var(--term-*)` CSS custom property system.

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	feotel "github.com/hollis-labs/go-otel"
 	"github.com/hollis-labs/nil/ingest"
@@ -50,7 +51,7 @@ func stripHTML(s string) string {
 	return strings.TrimSpace(s)
 }
 
-const currentSchemaVersion = 11
+const currentSchemaVersion = 12
 
 type migration struct {
 	version int
@@ -93,6 +94,19 @@ var migrations = []migration{
 	{version: 9, sql: ""},
 	{version: 10, sql: ""},
 	{version: 11, sql: ""},
+	{version: 12, sql: ""},
+}
+
+// dbtx is satisfied by both *sql.DB and *sql.Tx. Internal item-mutation
+// helpers (createItemTx, updateItemTx, setLinksTx, etc.) take a dbtx instead
+// of assuming *sql.DB directly, so the same logic can run either against the
+// store's pooled connection (the normal single-item path) or inside an
+// explicit transaction (Store.CreateItemsBatch's all-or-nothing batch
+// create) without duplicating the create/update logic for each case.
+type dbtx interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type Store struct {
@@ -110,13 +124,31 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, err
 	}
-	dbPath := filepath.Join(dataDir, "todo.db?_fk=1")
+	// busy_timeout is a per-connection setting (unlike journal_mode, it is
+	// NOT persisted in the database file), and Go's database/sql pool opens
+	// additional physical connections on demand as concurrent callers show
+	// up — a one-time `PRAGMA busy_timeout` exec after Open only reaches
+	// whichever single connection runs it, leaving every other pooled
+	// connection at the default (0, i.e. fail fast on contention instead of
+	// waiting). Passing it via the DSN's _pragma param instead makes the
+	// modernc.org/sqlite driver apply it to every connection it opens, which
+	// is what actually matters once the GUI, a standalone `nil serve-api`
+	// process, and CLI invocations can all have live connections to the same
+	// vault at once. See modernc.org/sqlite's Driver.Open doc comment for
+	// the supported _pragma DSN syntax.
+	dbPath := filepath.Join(dataDir, "todo.db?_fk=1&_pragma=busy_timeout(5000)")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Enable WAL mode for better cloud sync compatibility
+	// Enable WAL mode for better cloud sync compatibility and true
+	// multi-process concurrency: the GUI, a standalone `nil serve-api`
+	// process, and CLI invocations can all open the same vault at once.
+	// Unlike busy_timeout, journal_mode=WAL is persisted in the database
+	// file itself, so setting it once here (on whichever connection runs
+	// it first) is sufficient — it doesn't need to be a per-connection DSN
+	// param.
 	if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		return nil, err
 	}
@@ -128,6 +160,22 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	// Run migrations
 	if err := runMigrations(ctx, db); err != nil {
 		return nil, err
+	}
+
+	// Ensure the external_ref partial unique index exists. This must run
+	// AFTER migrations (not as part of the unconditional schemaSQL exec
+	// above): schemaSQL runs on every Open() call regardless of the
+	// database's existing schema_version, and for a pre-v12 database (no
+	// external_ref column yet) an index on that column would fail outright
+	// before migration v12 ever got a chance to add it via ALTER TABLE. By
+	// this point the column is guaranteed to exist on every path — a fresh
+	// install created it via schemaSQL's CREATE TABLE, an upgrading install
+	// created it via migrateV12's ALTER TABLE — so this is safe. Idempotent
+	// (IF NOT EXISTS), so running it on every Open() call is harmless.
+	if _, err := db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS todos_external_ref_idx
+		ON todos(external_ref)
+		WHERE external_ref IS NOT NULL AND external_ref != ''`); err != nil {
+		return nil, fmt.Errorf("ensure external_ref index: %w", err)
 	}
 
 	return &Store{DB: db}, nil
@@ -347,6 +395,15 @@ func runMigrations(ctx context.Context, db *sql.DB) error {
 			}
 			continue
 		}
+		if m.version == 12 {
+			if err = migrateV12(ctx, db); err != nil {
+				return err
+			}
+			if _, err = db.ExecContext(ctx, "INSERT INTO schema_version (version) VALUES (?)", m.version); err != nil {
+				return err
+			}
+			continue
+		}
 
 		// Run migration
 		_, err = db.ExecContext(ctx, m.sql)
@@ -562,6 +619,33 @@ WHERE id = ?`, doc, c.notesMD, c.id); uerr != nil {
 	return nil
 }
 
+// migrateV12 adds the external_ref column, following the exact same
+// ALTER-TABLE-plus-existence-check idempotency pattern as migration v5's
+// api_source column (see the `m.version == 5` branch above): add the column
+// only if it isn't already there.
+//
+// The partial unique index on this column is deliberately NOT created here.
+// It's created once in Open(), after runMigrations returns — see Open's doc
+// comment for why: schemaSQL (which also declares the index's rationale in
+// its comments) runs unconditionally before migrations on every Open() call,
+// so creating the index inside this migration would still leave a window
+// (this migration hasn't run yet on THIS call, but schemaSQL already tried
+// to reference the column) if it were duplicated there too. Centralizing it
+// in Open(), strictly after migrations complete, avoids that ordering
+// hazard entirely.
+func migrateV12(ctx context.Context, db *sql.DB) error {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('todos') WHERE name='external_ref'").Scan(&count); err != nil {
+		return fmt.Errorf("migration v12 check column: %w", err)
+	}
+	if count == 0 {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE todos ADD COLUMN external_ref TEXT DEFAULT NULL"); err != nil {
+			return fmt.Errorf("migration v12 add column: %w", err)
+		}
+	}
+	return nil
+}
+
 // migrateV10 creates the kinds registry table and seeds the three core kinds.
 // Idempotent: ensures the seed rows exist whether or not the table already did.
 func migrateV10(ctx context.Context, db *sql.DB) error {
@@ -591,11 +675,12 @@ func migrateV10(ctx context.Context, db *sql.DB) error {
 
 // -- Helpers to upsert taxonomy and links
 
-func (s *Store) upsertName(ctx context.Context, table string, name string) (int64, error) {
+func upsertNameTx(ctx context.Context, dbx dbtx, table string, name string) (int64, error) {
 	var id int64
-	err := s.DB.QueryRowContext(ctx, "SELECT id FROM "+table+" WHERE name = ?", name).Scan(&id)
+	err := dbx.QueryRowContext(ctx, "SELECT id FROM "+table+" WHERE name = ?", name).Scan(&id)
 	if err == sql.ErrNoRows {
-		res, err := s.DB.ExecContext(ctx, "INSERT INTO "+table+"(name) VALUES(?)", name)
+		var res sql.Result
+		res, err = dbx.ExecContext(ctx, "INSERT INTO "+table+"(name) VALUES(?)", name)
 		if err != nil {
 			return 0, err
 		}
@@ -604,9 +689,9 @@ func (s *Store) upsertName(ctx context.Context, table string, name string) (int6
 	return id, err
 }
 
-func (s *Store) setLinks(ctx context.Context, table string, linkCol string, todoID int64, names []string) error {
+func setLinksTx(ctx context.Context, dbx dbtx, table string, linkCol string, todoID int64, names []string) error {
 	// delete existing
-	if _, err := s.DB.ExecContext(ctx, "DELETE FROM "+table+" WHERE todo_id = ?", todoID); err != nil {
+	if _, err := dbx.ExecContext(ctx, "DELETE FROM "+table+" WHERE todo_id = ?", todoID); err != nil {
 		return err
 	}
 	// insert new
@@ -615,30 +700,30 @@ func (s *Store) setLinks(ctx context.Context, table string, linkCol string, todo
 		var err error
 		switch table {
 		case "todo_projects":
-			id, err = s.upsertName(ctx, "projects", n)
+			id, err = upsertNameTx(ctx, dbx, "projects", n)
 		case "todo_contexts":
-			id, err = s.upsertName(ctx, "contexts", n)
+			id, err = upsertNameTx(ctx, dbx, "contexts", n)
 		case "todo_tags":
-			id, err = s.upsertName(ctx, "tags", n)
+			id, err = upsertNameTx(ctx, dbx, "tags", n)
 		}
 		if err != nil {
 			return err
 		}
-		if _, err := s.DB.ExecContext(ctx, "INSERT OR IGNORE INTO "+table+"(todo_id, "+linkCol+") VALUES(?,?)", todoID, id); err != nil {
+		if _, err := dbx.ExecContext(ctx, "INSERT OR IGNORE INTO "+table+"(todo_id, "+linkCol+") VALUES(?,?)", todoID, id); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Store) hydrate(ctx context.Context, t *Item) error {
+func hydrateTx(ctx context.Context, dbx dbtx, t *Item) error {
 	// Initialize empty slices to avoid null in JSON
 	t.Projects = []string{}
 	t.Contexts = []string{}
 	t.Tags = []string{}
 
 	// projects
-	rows, _ := s.DB.QueryContext(ctx, `SELECT p.name FROM projects p JOIN todo_projects tp ON tp.project_id=p.id WHERE tp.todo_id=?`, t.ID)
+	rows, _ := dbx.QueryContext(ctx, `SELECT p.name FROM projects p JOIN todo_projects tp ON tp.project_id=p.id WHERE tp.todo_id=?`, t.ID)
 	defer func() {
 		if rows != nil {
 			rows.Close()
@@ -651,7 +736,7 @@ func (s *Store) hydrate(ctx context.Context, t *Item) error {
 		}
 	}
 	// contexts
-	rows2, _ := s.DB.QueryContext(ctx, `SELECT c.name FROM contexts c JOIN todo_contexts tc ON tc.context_id=c.id WHERE tc.todo_id=?`, t.ID)
+	rows2, _ := dbx.QueryContext(ctx, `SELECT c.name FROM contexts c JOIN todo_contexts tc ON tc.context_id=c.id WHERE tc.todo_id=?`, t.ID)
 	defer func() {
 		if rows2 != nil {
 			rows2.Close()
@@ -664,7 +749,7 @@ func (s *Store) hydrate(ctx context.Context, t *Item) error {
 		}
 	}
 	// tags
-	rows3, _ := s.DB.QueryContext(ctx, `SELECT t2.name FROM tags t2 JOIN todo_tags tt ON tt.tag_id=t2.id WHERE tt.todo_id=?`, t.ID)
+	rows3, _ := dbx.QueryContext(ctx, `SELECT t2.name FROM tags t2 JOIN todo_tags tt ON tt.tag_id=t2.id WHERE tt.todo_id=?`, t.ID)
 	defer func() {
 		if rows3 != nil {
 			rows3.Close()
@@ -679,17 +764,87 @@ func (s *Store) hydrate(ctx context.Context, t *Item) error {
 	return nil
 }
 
+func (s *Store) hydrate(ctx context.Context, t *Item) error {
+	return hydrateTx(ctx, s.DB, t)
+}
+
 // CreateItem inserts an item and writes its FTS5 entry. The caller supplies
 // notes_doc (PM JSON, source of truth) and optionally notes_html (write-time
 // render cache). FTS5 indexable text is derived from notes_doc.
+//
+// Idempotent-write dedup: if t.ExternalRef is non-empty and a row with the
+// same external_ref already exists in this vault, CreateItem overwrites that
+// row's create-payload fields (see overwriteByExternalRefTx) instead of
+// inserting a duplicate. See CW-20260816-0045.
 func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.create")
 	defer span.End()
+	return createItemTx(ctx, s.DB, t)
+}
 
+// CreateItemsBatch creates every item in items inside a single transaction:
+// all-or-nothing. If any item fails (invalid kind, a DB constraint, etc.)
+// the entire batch is rolled back and no item is created — nothing is
+// half-applied for the caller to reconcile. This is a deliberate design
+// choice over best-effort/partial-success: for a local, single-vault SQLite
+// store, a caller that gets an error back can simply fix the offending item
+// (the error names its index) and retry the whole batch, rather than having
+// to diff a per-item results list against what it originally sent to figure
+// out what still needs pushing. See CW-20260816-0045 for the full tradeoff.
+//
+// Each item goes through the same create-or-match-by-external_ref logic as
+// a single CreateItem call, so a batch that re-pushes previously-seen
+// external_ref values updates those rows in place rather than duplicating
+// them — the batch and single-item paths share identical semantics.
+//
+// Returns the created/updated items in the same order as the input. An
+// empty input returns an empty (non-nil) slice and no error, without
+// opening a transaction.
+func (s *Store) CreateItemsBatch(ctx context.Context, items []Item) ([]Item, error) {
+	ctx, span := feotel.StartSpan(ctx, "nil.item.create_batch")
+	defer span.End()
+
+	if len(items) == 0 {
+		return []Item{}, nil
+	}
+
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin batch create tx: %w", err)
+	}
+	commit := false
+	defer func() {
+		if !commit {
+			_ = tx.Rollback()
+		}
+	}()
+
+	out := make([]Item, 0, len(items))
+	for i := range items {
+		item := items[i] // local copy: createItemTx mutates fields (ID, Kind, Inbox, ...)
+		created, err := createItemTx(ctx, tx, &item)
+		if err != nil {
+			return nil, fmt.Errorf("item %d: %w", i, err)
+		}
+		out = append(out, *created)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit batch create: %w", err)
+	}
+	commit = true
+	return out, nil
+}
+
+// createItemTx is the shared implementation behind Store.CreateItem (dbx =
+// s.DB) and Store.CreateItemsBatch (dbx = the batch's *sql.Tx), so both
+// paths get identical validation, external_ref dedup, taxonomy linking, FTS
+// indexing, and ref-syncing behavior.
+func createItemTx(ctx context.Context, dbx dbtx, t *Item) (*Item, error) {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	kind, err := validateKindOrDefaultTx(ctx, dbx, t.Kind)
 	if err != nil {
 		return nil, err
 	}
@@ -697,12 +852,27 @@ func (s *Store) CreateItem(ctx context.Context, t *Item) (*Item, error) {
 	if strings.TrimSpace(t.Title) == "" {
 		t.Inbox = true
 	}
-	res, err := s.DB.ExecContext(ctx, `
-INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+
+	if strings.TrimSpace(t.ExternalRef) != "" {
+		var existingID int64
+		err = dbx.QueryRowContext(ctx, "SELECT id FROM todos WHERE external_ref = ?", t.ExternalRef).Scan(&existingID)
+		switch {
+		case err == nil:
+			return overwriteByExternalRefTx(ctx, dbx, existingID, t)
+		case errors.Is(err, sql.ErrNoRows):
+			// No existing row for this external_ref — fall through to a
+			// normal insert below.
+		default:
+			return nil, fmt.Errorf("checking external_ref: %w", err)
+		}
+	}
+
+	res, err := dbx.ExecContext(ctx, `
+INSERT INTO todos(title, priority, completed, archived, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source, external_ref)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur, t.Source,
 		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
-		t.Section, t.Pinned, t.Kind, t.Inbox, t.APISource,
+		t.Section, t.Pinned, t.Kind, t.Inbox, t.APISource, nullIfEmpty(t.ExternalRef),
 	)
 	if err != nil {
 		return nil, err
@@ -711,65 +881,136 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 	t.ID = id
 
 	// set links
-	if err := s.setLinks(ctx, "todo_projects", "project_id", id, t.Projects); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_projects", "project_id", id, t.Projects); err != nil {
 		return nil, err
 	}
-	if err := s.setLinks(ctx, "todo_contexts", "context_id", id, t.Contexts); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_contexts", "context_id", id, t.Contexts); err != nil {
 		return nil, err
 	}
-	if err := s.setLinks(ctx, "todo_tags", "tag_id", id, t.Tags); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_tags", "tag_id", id, t.Tags); err != nil {
 		return nil, err
 	}
 
-	if err := s.updateFTS(ctx, id, t.Title, derivePlainText(t.NotesDoc)); err != nil {
+	if err := updateFTSTx(ctx, dbx, id, t.Title, derivePlainText(t.NotesDoc)); err != nil {
 		return nil, err
 	}
 	// Sync refs for any wikilinks present in notes_doc.
 	if refIDs := ingest.ExtractRefIDs(t.NotesDoc); len(refIDs) > 0 {
-		if err := s.UpdateRefs(ctx, id, refIDs); err != nil {
+		if err := updateRefsTx(ctx, dbx, id, refIDs); err != nil {
 			return nil, err
 		}
 	}
 
-	_ = s.hydrate(ctx, t)
+	_ = hydrateTx(ctx, dbx, t)
 	return t, nil
+}
+
+// overwriteByExternalRefTx implements the "re-push updates the existing
+// row" half of external_ref idempotency. It performs a full overwrite of
+// every field a create payload can carry (title, priority, due/threshold/
+// recurrence, notes, section, pinned, kind, inbox, taxonomy) — matching the
+// "re-pushing the same logical item" acceptance criteria — but deliberately
+// does NOT touch completed, archived, api_source, external_ref, or
+// created_at:
+//
+//   - completed/archived have no representation in items.CreateInput (the
+//     type every create surface — HTTP, CLI, MCP — funnels through), so
+//     there is no "create payload value" for them to overwrite with. If this
+//     path blasted them to the create-call's zero value, every re-push would
+//     silently undo a user's local completion/archival of the item. They are
+//     left exactly as they were on the existing row.
+//   - api_source records who originally created the row; external_ref is the
+//     matching key itself (already correct — it's how we found this row).
+//   - created_at is preserved by simply never being part of this UPDATE;
+//     updated_at still advances via the todos_update_ts trigger, same as any
+//     other update.
+func overwriteByExternalRefTx(ctx context.Context, dbx dbtx, id int64, t *Item) (*Item, error) {
+	_, err := dbx.ExecContext(ctx, `
+UPDATE todos SET title=?, priority=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_doc=?, notes_html=?, notes_html_version=?, section=?, pinned=?, kind=?, inbox=? WHERE id=?`,
+		t.Title, t.Priority, t.DueAt, t.Threshold, t.Recur,
+		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
+		t.Section, t.Pinned, t.Kind, t.Inbox, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("overwrite by external_ref: %w", err)
+	}
+	t.ID = id
+
+	if err := setLinksTx(ctx, dbx, "todo_projects", "project_id", id, t.Projects); err != nil {
+		return nil, err
+	}
+	if err := setLinksTx(ctx, dbx, "todo_contexts", "context_id", id, t.Contexts); err != nil {
+		return nil, err
+	}
+	if err := setLinksTx(ctx, dbx, "todo_tags", "tag_id", id, t.Tags); err != nil {
+		return nil, err
+	}
+	if err := updateFTSTx(ctx, dbx, id, t.Title, derivePlainText(t.NotesDoc)); err != nil {
+		return nil, err
+	}
+	refIDs := ingest.ExtractRefIDs(t.NotesDoc)
+	if err := updateRefsTx(ctx, dbx, id, refIDs); err != nil {
+		return nil, err
+	}
+
+	// Re-fetch rather than trust the caller's t: completed/archived,
+	// created_at, api_source, and external_ref were deliberately not
+	// touched above, so the caller's in-memory copy (built fresh from a
+	// create payload) doesn't reflect their real, preserved values.
+	return getItemTx(ctx, dbx, id)
+}
+
+// nullIfEmpty maps the Go zero value ("") to a real SQL NULL for external_ref
+// inserts. Without this, every plain create (no external_ref supplied) would
+// store ” instead of NULL — harmless for the partial unique index (which
+// already excludes ” as well as NULL), but NULL is the more honest
+// "not set" representation for a column whose DDL default is NULL, and it's
+// what every pre-migration row already has.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (s *Store) UpdateItem(ctx context.Context, t *Item) error {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.update")
 	defer span.End()
+	return updateItemTx(ctx, s.DB, t)
+}
 
+func updateItemTx(ctx context.Context, dbx dbtx, t *Item) error {
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	kind, err := s.validateKindOrDefault(ctx, t.Kind)
+	kind, err := validateKindOrDefaultTx(ctx, dbx, t.Kind)
 	if err != nil {
 		return err
 	}
 	t.Kind = kind
-	_, err = s.DB.ExecContext(ctx, `
-UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_doc=?, notes_html=?, notes_html_version=?, section=?, pinned=?, kind=?, inbox=? WHERE id=?`,
+	_, err = dbx.ExecContext(ctx, `
+UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, threshold_at=?, recurrence_rule=?, notes_doc=?, notes_html=?, notes_html_version=?, section=?, pinned=?, kind=?, inbox=?, external_ref=? WHERE id=?`,
 		t.Title, t.Priority, t.Completed, t.Archived, t.DueAt, t.Threshold, t.Recur,
 		t.NotesDoc, t.NotesHTML, t.NotesHTMLVersion,
-		t.Section, t.Pinned, t.Kind, t.Inbox, t.ID,
+		t.Section, t.Pinned, t.Kind, t.Inbox, nullIfEmpty(t.ExternalRef), t.ID,
 	)
 	if err != nil {
 		return err
 	}
-	if err := s.setLinks(ctx, "todo_projects", "project_id", t.ID, t.Projects); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_projects", "project_id", t.ID, t.Projects); err != nil {
 		return err
 	}
-	if err := s.setLinks(ctx, "todo_contexts", "context_id", t.ID, t.Contexts); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_contexts", "context_id", t.ID, t.Contexts); err != nil {
 		return err
 	}
-	if err := s.setLinks(ctx, "todo_tags", "tag_id", t.ID, t.Tags); err != nil {
+	if err := setLinksTx(ctx, dbx, "todo_tags", "tag_id", t.ID, t.Tags); err != nil {
 		return err
 	}
-	if err := s.updateFTS(ctx, t.ID, t.Title, derivePlainText(t.NotesDoc)); err != nil {
+	if err := updateFTSTx(ctx, dbx, t.ID, t.Title, derivePlainText(t.NotesDoc)); err != nil {
 		return err
 	}
 	refIDs := ingest.ExtractRefIDs(t.NotesDoc)
-	if err := s.UpdateRefs(ctx, t.ID, refIDs); err != nil {
+	if err := updateRefsTx(ctx, dbx, t.ID, refIDs); err != nil {
 		return err
 	}
 	return nil
@@ -779,20 +1020,23 @@ UPDATE todos SET title=?, priority=?, completed=?, archived=?, due_at=?, thresho
 func (s *Store) GetItem(ctx context.Context, id int64) (*Item, error) {
 	ctx, span := feotel.StartSpan(ctx, "nil.item.get")
 	defer span.End()
+	return getItemTx(ctx, s.DB, id)
+}
 
+func getItemTx(ctx context.Context, dbx dbtx, id int64) (*Item, error) {
 	var t Item
 	var pri *string
 	var source sql.NullString
 	var notesDoc, notesHTML sql.NullString
 	var notesHTMLVersion sql.NullInt64
-	var apiSource sql.NullString
-	err := s.DB.QueryRowContext(ctx, `
-SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source
+	var apiSource, externalRef sql.NullString
+	err := dbx.QueryRowContext(ctx, `
+SELECT id, title, priority, completed, archived, created_at, updated_at, due_at, threshold_at, recurrence_rule, source_line, notes_doc, notes_html, notes_html_version, section, pinned, kind, inbox, api_source, external_ref
 FROM todos WHERE id=?`, id).Scan(
 		&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
 		&t.DueAt, &t.Threshold, &t.Recur, &source,
 		&notesDoc, &notesHTML, &notesHTMLVersion,
-		&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource,
+		&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource, &externalRef,
 	)
 	if err != nil {
 		return nil, err
@@ -803,10 +1047,11 @@ FROM todos WHERE id=?`, id).Scan(
 	t.NotesHTML = notesHTML.String
 	t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 	t.APISource = apiSource.String
+	t.ExternalRef = externalRef.String
 	if t.Section == "" {
 		t.Section = "anytime"
 	}
-	if err := s.hydrate(ctx, &t); err != nil {
+	if err := hydrateTx(ctx, dbx, &t); err != nil {
 		return nil, err
 	}
 	return &t, nil
@@ -814,14 +1059,18 @@ FROM todos WHERE id=?`, id).Scan(
 
 // UpdateRefs replaces all outgoing refs from sourceID with targetIDs.
 func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int64) error {
-	if _, err := s.DB.ExecContext(ctx, "DELETE FROM refs WHERE source_id = ?", sourceID); err != nil {
+	return updateRefsTx(ctx, s.DB, sourceID, targetIDs)
+}
+
+func updateRefsTx(ctx context.Context, dbx dbtx, sourceID int64, targetIDs []int64) error {
+	if _, err := dbx.ExecContext(ctx, "DELETE FROM refs WHERE source_id = ?", sourceID); err != nil {
 		return err
 	}
 	for _, targetID := range targetIDs {
 		if targetID == sourceID {
 			continue // skip self-references
 		}
-		if _, err := s.DB.ExecContext(ctx, "INSERT OR IGNORE INTO refs (source_id, target_id) VALUES (?, ?)", sourceID, targetID); err != nil {
+		if _, err := dbx.ExecContext(ctx, "INSERT OR IGNORE INTO refs (source_id, target_id) VALUES (?, ?)", sourceID, targetID); err != nil {
 			return err
 		}
 	}
@@ -832,7 +1081,7 @@ func (s *Store) UpdateRefs(ctx context.Context, sourceID int64, targetIDs []int6
 func (s *Store) GetBackrefs(ctx context.Context, targetID int64) ([]Item, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at,
-       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source
+       t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source, t.external_ref
 FROM todos t JOIN refs r ON r.source_id = t.id
 WHERE r.target_id = ?
 ORDER BY t.updated_at DESC`, targetID)
@@ -848,11 +1097,11 @@ ORDER BY t.updated_at DESC`, targetID)
 		var source sql.NullString
 		var notesDoc, notesHTML sql.NullString
 		var notesHTMLVersion sql.NullInt64
-		var apiSource sql.NullString
+		var apiSource, externalRef sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt,
 			&t.DueAt, &t.Threshold, &t.Recur, &source,
 			&notesDoc, &notesHTML, &notesHTMLVersion,
-			&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
+			&t.Section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource, &externalRef)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -862,6 +1111,7 @@ ORDER BY t.updated_at DESC`, targetID)
 		t.NotesHTML = notesHTML.String
 		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
+		t.ExternalRef = externalRef.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
@@ -935,6 +1185,21 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	if kindFilter != "all" {
 		q.where = append(q.where, "t.kind = ?")
 		q.args = append(q.args, kindFilter)
+	}
+
+	// updated_since: bulk/incremental-sync filter. Empty means no filter
+	// (existing default behavior is unchanged). Input is RFC3339; stored
+	// updated_at is naive UTC "YYYY-MM-DD HH:MM:SS" (see todos_update_ts
+	// trigger in schema.sql), so we normalize before the string comparison —
+	// SQLite's TEXT datetime format sorts/compares correctly lexicographically
+	// once both sides share the same shape.
+	if strings.TrimSpace(req.UpdatedSince) != "" {
+		since, err := time.Parse(time.RFC3339, strings.TrimSpace(req.UpdatedSince))
+		if err != nil {
+			return []Item{}, fmt.Errorf("%w: %q: %w", ErrInvalidUpdatedSince, req.UpdatedSince, err)
+		}
+		q.where = append(q.where, "t.updated_at >= ?")
+		q.args = append(q.args, since.UTC().Format("2006-01-02 15:04:05"))
 	}
 
 	// statuses
@@ -1029,7 +1294,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source, t.external_ref FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -1049,10 +1314,10 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		var source sql.NullString
 		var notesDoc, notesHTML sql.NullString
 		var notesHTMLVersion sql.NullInt64
-		var apiSource sql.NullString
+		var apiSource, externalRef sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source,
 			&notesDoc, &notesHTML, &notesHTMLVersion,
-			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
+			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource, &externalRef)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -1063,6 +1328,7 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 		t.NotesHTML = notesHTML.String
 		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
+		t.ExternalRef = externalRef.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
@@ -1073,6 +1339,65 @@ func (s *Store) Search(ctx context.Context, req SearchRequest) ([]Item, error) {
 	}
 	if out == nil {
 		return []Item{}, nil
+	}
+	return out, nil
+}
+
+// ListItemIDs returns the id + updated_at of every item currently in the
+// store — nothing else (no title, no notes_doc/notes_html, no taxonomy).
+// It exists for the deletion/change-signal use case (see the epic's Option B
+// decision, documented on the HTTP handler in apiserver.go): DeleteItem
+// performs a real, hard DELETE with no tombstone, so an external sync
+// consumer has no other way to learn an item is gone — it just silently
+// stops appearing. This endpoint gives that consumer a cheap way to fetch
+// the FULL current ID set and diff it against its own known-ID set: any ID
+// it previously saw that's absent here has been genuinely deleted.
+//
+// Deliberately unfiltered by inbox/archived/completed status: none of those
+// states mean "deleted" (the row still exists), so filtering on them here
+// would produce false-positive deletion signals for a consumer that synced
+// an item before it was archived, completed, or triaged into the inbox.
+// Only a row's absence from the todos table (a genuine DELETE) should read
+// as "deleted".
+//
+// kind: "" or "all" returns every kind (unlike Search's kind="" -> "todo"
+// backward-compat default — there's no legacy caller to preserve here, and
+// "does this ID exist" is naturally a whole-vault question). Any other
+// value filters to just that kind, for a consumer that only tracks one
+// kind's IDs. No validation against the kinds registry, matching Search's
+// existing behavior — an unknown kind simply yields an empty result, not an
+// error.
+func (s *Store) ListItemIDs(ctx context.Context, kind string) ([]ItemIDStamp, error) {
+	ctx, span := feotel.StartSpan(ctx, "nil.item.list_ids")
+	defer span.End()
+
+	q := "SELECT id, updated_at FROM todos"
+	var args []any
+	if kind != "" && kind != "all" {
+		q += " WHERE kind = ?"
+		args = append(args, kind)
+	}
+	q += " ORDER BY id"
+
+	rows, err := s.DB.QueryContext(ctx, q, args...)
+	if err != nil {
+		return []ItemIDStamp{}, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []ItemIDStamp
+	for rows.Next() {
+		var it ItemIDStamp
+		if err := rows.Scan(&it.ID, &it.UpdatedAt); err != nil {
+			return []ItemIDStamp{}, err
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return []ItemIDStamp{}, err
+	}
+	if out == nil {
+		return []ItemIDStamp{}, nil
 	}
 	return out, nil
 }
@@ -1115,7 +1440,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 	q.limit = " LIMIT ? OFFSET ?"
 	q.args = append(q.args, req.PageSize, offset)
 
-	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source FROM todos t "
+	sqlStr := "SELECT t.id, t.title, t.priority, t.completed, t.archived, t.created_at, t.updated_at, t.due_at, t.threshold_at, t.recurrence_rule, t.source_line, t.notes_doc, t.notes_html, t.notes_html_version, t.section, t.pinned, t.kind, t.inbox, t.api_source, t.external_ref FROM todos t "
 	if len(q.joins) > 0 {
 		sqlStr += strings.Join(q.joins, " ") + " "
 	}
@@ -1135,10 +1460,10 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		var source sql.NullString
 		var notesDoc, notesHTML sql.NullString
 		var notesHTMLVersion sql.NullInt64
-		var apiSource sql.NullString
+		var apiSource, externalRef sql.NullString
 		err := rows.Scan(&t.ID, &t.Title, &pri, &t.Completed, &t.Archived, &t.CreatedAt, &t.UpdatedAt, &t.DueAt, &t.Threshold, &t.Recur, &source,
 			&notesDoc, &notesHTML, &notesHTMLVersion,
-			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource)
+			&section, &t.Pinned, &t.Kind, &t.Inbox, &apiSource, &externalRef)
 		if err != nil {
 			return []Item{}, err
 		}
@@ -1149,6 +1474,7 @@ func (s *Store) GetInboxItems(ctx context.Context, req SearchRequest) ([]Item, e
 		t.NotesHTML = notesHTML.String
 		t.NotesHTMLVersion = int(notesHTMLVersion.Int64)
 		t.APISource = apiSource.String
+		t.ExternalRef = externalRef.String
 		if t.Section == "" {
 			t.Section = "anytime"
 		}
@@ -1277,14 +1603,14 @@ func (s *Store) GetFilterValues(ctx context.Context) (projects, contexts, tags [
 	return
 }
 
-// updateFTS writes (or replaces) the FTS5 row for an item. Called after
+// updateFTSTx writes (or replaces) the FTS5 row for an item. Called after
 // CreateItem and UpdateItem since v8 dropped the trigger-based sync in favor
 // of standalone FTS5 with app-layer writes.
-func (s *Store) updateFTS(ctx context.Context, id int64, title, text string) error {
-	if _, err := s.DB.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id); err != nil {
+func updateFTSTx(ctx context.Context, dbx dbtx, id int64, title, text string) error {
+	if _, err := dbx.ExecContext(ctx, "DELETE FROM todos_fts WHERE rowid = ?", id); err != nil {
 		return fmt.Errorf("updateFTS delete: %w", err)
 	}
-	if _, err := s.DB.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", id, title, text); err != nil {
+	if _, err := dbx.ExecContext(ctx, "INSERT INTO todos_fts(rowid, title, notes_text) VALUES (?,?,?)", id, title, text); err != nil {
 		return fmt.Errorf("updateFTS insert: %w", err)
 	}
 	return nil
@@ -1314,8 +1640,12 @@ func derivePlainText(notesDoc string) string {
 // Validation lives at the Go boundary; the SQL layer does not enforce a FK
 // against the registry in this release (deferred to follow-up).
 func (s *Store) IsValidKind(ctx context.Context, name string) (bool, error) {
+	return isValidKindTx(ctx, s.DB, name)
+}
+
+func isValidKindTx(ctx context.Context, dbx dbtx, name string) (bool, error) {
 	var count int
-	err := s.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM kinds WHERE name = ?", name).Scan(&count)
+	err := dbx.QueryRowContext(ctx, "SELECT COUNT(*) FROM kinds WHERE name = ?", name).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -1327,15 +1657,20 @@ func (s *Store) IsValidKind(ctx context.Context, name string) (bool, error) {
 // validation error rather than a 5xx.
 var ErrInvalidKind = errors.New("invalid kind: not in kinds registry")
 
+// ErrInvalidUpdatedSince is returned (wrapped, via fmt.Errorf's %w) by Search
+// when SearchRequest.UpdatedSince is non-empty and not valid RFC3339. Callers
+// (apiserver) use errors.Is to map this to a 400 rather than a 500.
+var ErrInvalidUpdatedSince = errors.New("invalid updated_since: want RFC3339 (e.g. 2026-08-01T00:00:00Z)")
+
 // validateKindOrDefault enforces that t.Kind matches a registered kind.
 // Empty kind is filled with "todo" as the canonical default. An unknown
 // non-empty kind is rejected outright — we'd rather block the write than
 // silently coerce, which would hide caller typos.
-func (s *Store) validateKindOrDefault(ctx context.Context, kind string) (string, error) {
+func validateKindOrDefaultTx(ctx context.Context, dbx dbtx, kind string) (string, error) {
 	if kind == "" {
 		kind = "todo"
 	}
-	ok, err := s.IsValidKind(ctx, kind)
+	ok, err := isValidKindTx(ctx, dbx, kind)
 	if err != nil {
 		return "", fmt.Errorf("validate kind: %w", err)
 	}
@@ -1372,4 +1707,3 @@ FROM kinds ORDER BY is_core DESC, name`)
 	}
 	return out, nil
 }
-

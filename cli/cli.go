@@ -4,60 +4,32 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	iofs "io/fs"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"syscall"
+	"time"
 	"unicode/utf8"
 
+	"github.com/hollis-labs/nil/apiserver"
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/contextcache"
-	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/service/items"
 	"github.com/hollis-labs/nil/store"
 	"github.com/hollis-labs/nil/vault"
 )
 
-// cliNotesHTMLVersion stamps the renderer version on items created/updated
-// through the CLI. Mirrors notesHTMLVersion in the root package.
-const cliNotesHTMLVersion = 1
-
-// cliResolveNotesInput converts CLI body input (markdown by default; HTML or
-// pre-built JSON via --format) into the (doc, html, version) tuple for storage.
-func cliResolveNotesInput(body, format string) (string, string, int, error) {
-	if strings.TrimSpace(body) == "" {
-		return "", "", 0, nil
-	}
-	switch strings.ToLower(format) {
-	case "", "md", "markdown":
-		doc, err := ingest.MarkdownToDoc(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		htmlStr, err := ingest.DocToHTML(doc)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, htmlStr, cliNotesHTMLVersion, nil
-	case "html":
-		doc, err := ingest.HTMLToDoc(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return doc, body, cliNotesHTMLVersion, nil
-	case "json", "doc":
-		htmlStr, err := ingest.DocToHTML(body)
-		if err != nil {
-			return "", "", 0, err
-		}
-		return body, htmlStr, cliNotesHTMLVersion, nil
-	default:
-		return "", "", 0, fmt.Errorf("unknown --format %q (want md|html|json)", format)
-	}
-}
+// svc is the stateless items service shared by every CLI command.
+var svc = items.New()
 
 const cliVersion = "dev-snapshot"
 
@@ -85,9 +57,15 @@ func init() {
 			run:   cmdAdd,
 		},
 		{
+			name:  "add-batch",
+			short: "Batch-create todos/notes from a JSON array (file or stdin)",
+			usage: "nil add-batch [--file path|-] [--vault id] [--inbox] [--source label]",
+			run:   cmdAddBatch,
+		},
+		{
 			name:  "list",
 			short: "List common views like latest, inbox, today",
-			usage: "nil list [view] [--vault id] [--limit N] [--query q]",
+			usage: "nil list [view] [--vault id] [--limit N] [--query q] [--updated-since RFC3339]",
 			run:   cmdList,
 		},
 		{
@@ -96,6 +74,18 @@ func init() {
 			short:   "Show a single item by ID",
 			usage:   "nil show <id> [--vault id] [--format json|detail]",
 			run:     cmdShow,
+		},
+		{
+			name:  "backrefs",
+			short: "List items that link to a given item (wikilink backlinks)",
+			usage: "nil backrefs <id> [--vault id|inbox]",
+			run:   cmdBackrefs,
+		},
+		{
+			name:  "ids",
+			short: "List every current item's id + updated_at (deletion/change signal for sync consumers)",
+			usage: "nil ids [--vault id|inbox] [--kind todo|note|scratch|all]",
+			run:   cmdIDs,
 		},
 		{
 			name:  "context",
@@ -162,6 +152,12 @@ func init() {
 			usage: "nil version",
 			run:   cmdVersion,
 		},
+		{
+			name:  "serve-api",
+			short: "Run the local HTTP API standalone, without the GUI",
+			usage: "nil serve-api [--port N]",
+			run:   cmdServeAPI,
+		},
 	}
 }
 
@@ -208,6 +204,63 @@ func cmdVersion(ctx context.Context, args []string, env *commandEnv) {
 	printJSON(envelope{OK: true, Data: data})
 }
 
+// cmdServeAPI starts the same HTTP API server the GUI embeds (see
+// apiserver.New), but as a standalone, long-running process with no Wails
+// dependency. It reads/writes the same config.json and vault registry as
+// the GUI and CLI, so it works whether or not the desktop app has ever been
+// launched on this machine — EnsureDefaults seeds an API port/key on first
+// run just like app.go's startup() does for the GUI.
+//
+// Blocks until SIGINT/SIGTERM, then shuts the HTTP server down gracefully
+// and closes all open vault stores before returning.
+func cmdServeAPI(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("serve-api", flag.ContinueOnError)
+	port := fs.Int("port", 0, "override the configured API port for this run only (not persisted)")
+	if _, err := parseInterspersed(args, fs); err != nil {
+		die("serve-api: %v", err)
+	}
+
+	// Work on a copy so a --port override never mutates env.cfg or gets
+	// persisted, but EnsureDefaults (port/key seeding) is saved for real —
+	// otherwise a machine that has only ever used the CLI would have no
+	// APIKey and every request would be rejected.
+	cfg := *env.cfg
+	if cfg.EnsureDefaults() {
+		if err := config.Save(&cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "nil: warning: failed to persist API defaults: %v\n", err)
+		}
+	}
+	if *port != 0 {
+		cfg.APIPort = *port
+	}
+
+	srv := apiserver.New(&cfg, env.mgr)
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+
+	fmt.Fprintf(os.Stderr, "nil: API server listening on %s (Ctrl+C to stop)\n", srv.Addr)
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			die("serve-api: %v (is NIL already running with the API enabled on this port?)", err)
+		}
+	case <-sigCh:
+		fmt.Fprintln(os.Stderr, "nil: shutting down API server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "nil: warning: API server shutdown error: %v\n", err)
+		}
+	}
+
+	env.mgr.CloseAll()
+}
+
 type stringSliceFlag []string
 
 func (s *stringSliceFlag) String() string {
@@ -234,6 +287,7 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	projects := fs.String("projects", "", "comma-separated projects")
 	priority := fs.String("priority", "", "priority letter A|B|C")
 	due := fs.String("due", "", "due date YYYY-MM-DD")
+	externalRef := fs.String("external-ref", "", "idempotency key for a corresponding record on an external system; re-running add with the same value (in the same vault) updates the existing item instead of creating a duplicate")
 	var metaPairs stringSliceFlag
 	fs.Var(&metaPairs, "meta", "metadata key=value (repeatable; stored as meta:<key>=<value> tags for now)")
 	positional, err := parseInterspersed(args, fs)
@@ -260,44 +314,145 @@ func cmdAdd(ctx context.Context, args []string, env *commandEnv) {
 	if title == "" {
 		die("add: title is required (pass as positional args or --title)")
 	}
-	doc, htmlStr, version, err := cliResolveNotesInput(body, *formatFlag)
-	if err != nil {
-		die("add: parse body: %v", err)
-	}
-	item := &store.Item{
-		Title:            title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Kind:             *kindFlag,
-		APISource:        *source,
-		Tags:             splitCSV(*tags),
-		Contexts:         splitCSV(*contexts),
-		Projects:         splitCSV(*projects),
-	}
-	if *priority != "" {
-		p := strings.ToUpper(*priority)
-		item.Priority = &p
-	}
-	if *due != "" {
-		d := *due
-		item.DueAt = &d
-	}
-	item.Tags = appendMetaTags(item.Tags, parseKeyValuePairs(metaPairs))
 	storeDest, toInbox, err := chooseCreateDestination(env.mgr, *vaultID, *inbox)
 	if err != nil {
 		die("add: %v", err)
 	}
-	if toInbox {
-		item.Inbox = true
+	input := items.CreateInput{
+		Title:       title,
+		Kind:        *kindFlag,
+		APISource:   *source,
+		Tags:        appendMetaTags(splitCSV(*tags), parseKeyValuePairs(metaPairs)),
+		Contexts:    splitCSV(*contexts),
+		Projects:    splitCSV(*projects),
+		Inbox:       toInbox,
+		ExternalRef: *externalRef,
 	}
-	created, err := storeDest.CreateItem(ctx, item)
+	if *priority != "" {
+		p := strings.ToUpper(*priority)
+		input.Priority = &p
+	}
+	if *due != "" {
+		d := *due
+		input.DueAt = &d
+	}
+	doc, md, htmlBody, err := svc.NotesInputFromCLI(body, *formatFlag)
+	if err != nil {
+		die("add: parse body: %v", err)
+	}
+	input.NotesDoc = doc
+	input.NotesMD = md
+	input.NotesHTML = htmlBody
+	created, err := svc.Create(ctx, storeDest, input)
 	if err != nil {
 		die("add: %v", err)
 	}
 	printJSON(envelope{OK: true, Data: map[string]any{
 		"command": "add",
 		"item":    created,
+	}})
+}
+
+// cliBatchItem is one entry of the JSON array cmdAddBatch reads from a file
+// or stdin. It mirrors the HTTP API's per-item batch-create shape
+// (apiserver.itemCreateRequest) field-for-field, so a payload built for one
+// surface works unmodified against the other. Unlike cmdAdd's flags (which
+// can only describe one item per invocation), a batch naturally needs each
+// item to carry its own title/kind/tags/etc., which flags can't express —
+// hence a JSON array input rather than repeatable flags.
+type cliBatchItem struct {
+	Title       string   `json:"title"`
+	Kind        string   `json:"kind"`
+	Section     string   `json:"section"`
+	Pinned      bool     `json:"pinned"`
+	Priority    *string  `json:"priority"`
+	DueAt       *string  `json:"due_at"`
+	Tags        []string `json:"tags"`
+	Contexts    []string `json:"contexts"`
+	Projects    []string `json:"projects"`
+	ExternalRef string   `json:"external_ref"`
+	NotesDoc    string   `json:"notes_doc"`
+	NotesMD     string   `json:"notes_md"`
+	NotesHTML   string   `json:"notes_html"`
+}
+
+// cmdAddBatch creates multiple items from a JSON array in one call,
+// all-or-nothing (see items.Service.CreateBatch / store.CreateItemsBatch):
+// if any item fails, nothing is created and the error names which item (by
+// index) and why. --file reads from a path; "-" (the default) reads from
+// stdin, so callers can pipe generated JSON straight in
+// (e.g. `some-generator | nil add-batch`) without a temp file. --vault /
+// --inbox route the whole batch to one destination the same way they do for
+// `nil add`; there's no per-item destination override — a caller that needs
+// items split across vaults should make one add-batch call per vault.
+func cmdAddBatch(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("add-batch", flag.ContinueOnError)
+	file := fs.String("file", "-", "path to a JSON file containing an array of items, or '-' to read from stdin (default)")
+	vaultID := fs.String("vault", "", "vault ID to store the items")
+	inbox := fs.Bool("inbox", false, "route all items to inbox")
+	source := fs.String("source", "cli", "source label stored in api_source for every item")
+	if _, err := parseInterspersed(args, fs); err != nil {
+		die("add-batch: %v", err)
+	}
+
+	var raw []byte
+	var err error
+	if *file == "-" || *file == "" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(*file)
+	}
+	if err != nil {
+		die("add-batch: reading input: %v", err)
+	}
+
+	var batchItems []cliBatchItem
+	if err = json.Unmarshal(raw, &batchItems); err != nil {
+		die("add-batch: parsing JSON array: %v", err)
+	}
+	if len(batchItems) == 0 {
+		die("add-batch: input must be a non-empty JSON array of items")
+	}
+	for i, it := range batchItems {
+		if strings.TrimSpace(it.Title) == "" {
+			die("add-batch: item %d: title is required", i)
+		}
+	}
+
+	storeDest, toInbox, err := chooseCreateDestination(env.mgr, *vaultID, *inbox)
+	if err != nil {
+		die("add-batch: %v", err)
+	}
+
+	inputs := make([]items.CreateInput, len(batchItems))
+	for i, it := range batchItems {
+		inputs[i] = items.CreateInput{
+			Title:       it.Title,
+			Kind:        it.Kind,
+			Section:     it.Section,
+			Pinned:      it.Pinned,
+			Priority:    it.Priority,
+			DueAt:       it.DueAt,
+			Tags:        it.Tags,
+			Contexts:    it.Contexts,
+			Projects:    it.Projects,
+			APISource:   *source,
+			ExternalRef: it.ExternalRef,
+			Inbox:       toInbox,
+			NotesDoc:    it.NotesDoc,
+			NotesMD:     it.NotesMD,
+			NotesHTML:   it.NotesHTML,
+		}
+	}
+
+	created, err := svc.CreateBatch(ctx, storeDest, inputs)
+	if err != nil {
+		die("add-batch: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: map[string]any{
+		"command": "add-batch",
+		"count":   len(created),
+		"items":   svc.WithTextSlice(created),
 	}})
 }
 
@@ -308,6 +463,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 	limit := fs.Int("limit", 50, "max results")
 	query := fs.String("query", "", "keyword query")
 	includeInbox := fs.Bool("include-inbox", false, "include inbox results in non-inbox views")
+	updatedSince := fs.String("updated-since", "", "only items updated on/after this RFC3339 timestamp (e.g. 2026-08-01T00:00:00Z); not honored by the inbox view")
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
 		die("list: %v", err)
@@ -338,6 +494,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 			PageSize:     *limit,
 			IncludeInbox: *includeInbox,
 			Kind:         "all",
+			UpdatedSince: *updatedSince,
 		}
 		switch view {
 		case "today":
@@ -357,7 +514,12 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 		if err != nil {
 			die("list: %v", err)
 		}
-		results, err := storeDest.Search(ctx, req)
+		// Route through the service layer (rather than calling storeDest.Search
+		// directly) so this surface gets the same defaulting/validation as
+		// search/nil_search — a consistency fix that predates this change but
+		// is a no-op for existing behavior here (every field below is already
+		// explicitly set to what the service would default to anyway).
+		results, err := svc.Search(ctx, storeDest, req)
 		if err != nil {
 			die("list: %v", err)
 		}
@@ -367,7 +529,7 @@ func cmdList(ctx context.Context, args []string, env *commandEnv) {
 		"command": "list",
 		"view":    view,
 		"count":   len(items),
-		"items":   items,
+		"items":   svc.WithTextSlice(items),
 	}})
 }
 
@@ -390,17 +552,101 @@ func cmdShow(ctx context.Context, args []string, env *commandEnv) {
 	if err != nil {
 		die("show: %v", err)
 	}
+	itemView := svc.WithText(loc.item)
 	data := map[string]any{
 		"command": "show",
 		"id":      id,
 		"vault":   loc.location,
-		"item":    loc.item,
+		"item":    itemView,
 	}
 	if strings.ToLower(*format) == "detail" {
 		printJSON(envelope{OK: true, Data: data})
 		return
 	}
-	printJSON(envelope{OK: true, Data: loc.item})
+	printJSON(envelope{OK: true, Data: itemView})
+}
+
+// cmdBackrefs lists items that link to <id> via a wikilink (backlinks /
+// "what links here"). It is a dedicated command rather than a flag on
+// show/get: backrefs returns a different shape (a list of items) than show's
+// single-item response, and the CLI already has a one-command-per-read-op
+// pattern (show, get, search, inbox, vaults) rather than overloading one
+// command's flags to change its output shape. Mirrors GetBackrefs' existing
+// GUI contract (app.go's App.GetBackrefs); notes_text is layered on top the
+// same way `show`/`get` already add it via svc.WithText.
+func cmdBackrefs(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("backrefs", flag.ContinueOnError)
+	vaultID := fs.String("vault", "", "vault id or 'inbox'")
+	positional, err := parseInterspersed(args, fs)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	if len(positional) == 0 {
+		die("backrefs: requires <id>")
+	}
+	var id int64
+	if _, err := fmt.Sscan(positional[0], &id); err != nil {
+		die("backrefs: invalid id %q", positional[0])
+	}
+	loc, err := findItem(ctx, env.mgr, id, *vaultID)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	backrefs, err := loc.store.GetBackrefs(ctx, id)
+	if err != nil {
+		die("backrefs: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: map[string]any{
+		"command":  "backrefs",
+		"id":       id,
+		"vault":    loc.location,
+		"backrefs": svc.WithTextSlice(backrefs),
+	}})
+}
+
+// cmdIDs lists every current item's id + updated_at in the resolved vault —
+// no title, no notes body, no taxonomy. This is the deletion/change-signal
+// primitive: Nil has no soft-delete/tombstone concept (DeleteItem is a real,
+// hard DELETE), so an external sync consumer has no other way to learn an
+// item was removed. It fetches this full current-ID set on each sync cycle
+// and diffs it against its own known-ID set; any previously-seen ID that's
+// missing here has been genuinely deleted. See Store.ListItemIDs and the
+// GET /api/v1/items/ids handler in apiserver.go for the full filter-support
+// reasoning (kind defaults to "all"; archived/completed/inbox items are
+// always included; updated_since is deliberately not supported — it would
+// hide currently-existing IDs and produce false deletion signals). A
+// dedicated command rather than a `show`/`search` flag, mirroring the
+// backrefs command's one-command-per-read-op pattern above.
+func cmdIDs(ctx context.Context, args []string, env *commandEnv) {
+	fs := flag.NewFlagSet("ids", flag.ContinueOnError)
+	vaultID := fs.String("vault", "", "vault id or 'inbox' (omit for active vault)")
+	kind := fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
+	if _, err := parseInterspersed(args, fs); err != nil {
+		die("ids: %v", err)
+	}
+
+	var s *store.Store
+	switch *vaultID {
+	case "inbox":
+		s = env.mgr.InboxStore()
+	case "":
+		s = env.mgr.ActiveStore()
+	default:
+		var err error
+		s, err = env.mgr.StoreForID(*vaultID)
+		if err != nil {
+			die("ids: vault %q: %v", *vaultID, err)
+		}
+	}
+	if s == nil {
+		die("ids: vault not available")
+	}
+
+	ids, err := s.ListItemIDs(ctx, *kind)
+	if err != nil {
+		die("ids: %v", err)
+	}
+	printJSON(envelope{OK: true, Data: ids})
 }
 
 func cmdContext(ctx context.Context, args []string, env *commandEnv) {
@@ -535,30 +781,28 @@ func cmdImport(ctx context.Context, args []string, env *commandEnv) {
 		}
 		rel, _ := filepath.Rel(*dir, path)
 		title := strings.TrimSuffix(rel, filepath.Ext(rel))
-		doc, htmlStr, version, ierr := cliResolveNotesInput(body, *formatFlag)
+		doc, md, htmlBody, ierr := svc.NotesInputFromCLI(body, *formatFlag)
 		if ierr != nil {
 			failed = append(failed, map[string]string{"path": path, "error": ierr.Error()})
 			return nil
 		}
-		item := &store.Item{
-			Title:            title,
-			NotesDoc:         doc,
-			NotesHTML:        htmlStr,
-			NotesHTMLVersion: version,
-			Kind:             *kindFlag,
-			APISource:        "cli-import",
-			Tags:             append(append([]string{}, baseTags...), metaTags...),
-			Contexts:         append([]string{}, baseContexts...),
-			Projects:         append([]string{}, baseProjects...),
-		}
-		if toInbox {
-			item.Inbox = true
+		input := items.CreateInput{
+			Title:     title,
+			Kind:      *kindFlag,
+			APISource: "cli-import",
+			Tags:      append(append([]string{}, baseTags...), metaTags...),
+			Contexts:  append([]string{}, baseContexts...),
+			Projects:  append([]string{}, baseProjects...),
+			Inbox:     toInbox,
+			NotesDoc:  doc,
+			NotesMD:   md,
+			NotesHTML: htmlBody,
 		}
 		if *dryRun {
-			processed = append(processed, map[string]any{"path": path, "title": item.Title, "dryRun": true})
+			processed = append(processed, map[string]any{"path": path, "title": input.Title, "dryRun": true})
 			return nil
 		}
-		created, createErr := storeDest.CreateItem(ctx, item)
+		created, createErr := svc.Create(ctx, storeDest, input)
 		if createErr != nil {
 			failed = append(failed, map[string]string{"path": path, "error": createErr.Error()})
 			return nil
@@ -654,7 +898,7 @@ func cmdUpdate(ctx context.Context, args []string, env *commandEnv) {
 			item.Priority = &p
 		}
 		item.Tags = applyTagMutations(item.Tags, addTags, removeTags)
-		if err := loc.store.UpdateItem(ctx, item); err != nil {
+		if err := svc.Update(ctx, loc.store, item); err != nil {
 			failed = append(failed, map[string]any{"id": id, "error": err.Error()})
 			continue
 		}
@@ -876,17 +1120,17 @@ func findCommand(name string) *command {
 func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	var (
-		source     = fs.String("source", "cli", "source label stored in api_source")
-		vaultID    = fs.String("vault", "", "vault ID to push to (omit for inbox)")
-		notes      = fs.String("notes", "", "notes body (markdown by default; use --notes-format)")
-		notesFmt   = fs.String("notes-format", "md", "notes body format: md|html|json")
-		kindFlag   = fs.String("kind", "todo", "item kind: todo|note|scratch")
-		priority   = fs.String("priority", "", "priority letter: A|B|C")
-		tags       = fs.String("tags", "", "comma-separated tags")
-		contexts   = fs.String("contexts", "", "comma-separated contexts")
-		projects   = fs.String("projects", "", "comma-separated projects")
-		due        = fs.String("due", "", "due date YYYY-MM-DD")
-		toInbox    = fs.Bool("inbox", false, "force route to inbox (default when no --vault)")
+		source   = fs.String("source", "cli", "source label stored in api_source")
+		vaultID  = fs.String("vault", "", "vault ID to push to (omit for inbox)")
+		notes    = fs.String("notes", "", "notes body (markdown by default; use --notes-format)")
+		notesFmt = fs.String("notes-format", "md", "notes body format: md|html|json")
+		kindFlag = fs.String("kind", "todo", "item kind: todo|note|scratch")
+		priority = fs.String("priority", "", "priority letter: A|B|C")
+		tags     = fs.String("tags", "", "comma-separated tags")
+		contexts = fs.String("contexts", "", "comma-separated contexts")
+		projects = fs.String("projects", "", "comma-separated projects")
+		due      = fs.String("due", "", "due date YYYY-MM-DD")
+		toInbox  = fs.Bool("inbox", false, "force route to inbox (default when no --vault)")
 	)
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
@@ -895,50 +1139,51 @@ func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	title := strings.Join(positional, " ")
 
-	doc, htmlStr, version, err := cliResolveNotesInput(*notes, *notesFmt)
+	doc, md, htmlBody, err := svc.NotesInputFromCLI(*notes, *notesFmt)
 	if err != nil {
 		die("push: parse notes: %v", err)
 	}
 
-	item := &store.Item{
-		Title:            title,
-		NotesDoc:         doc,
-		NotesHTML:        htmlStr,
-		NotesHTMLVersion: version,
-		Kind:             *kindFlag,
-		APISource:        *source,
-		Tags:             splitCSV(*tags),
-		Contexts:         splitCSV(*contexts),
-		Projects:         splitCSV(*projects),
+	input := items.CreateInput{
+		Title:     title,
+		Kind:      *kindFlag,
+		APISource: *source,
+		Tags:      splitCSV(*tags),
+		Contexts:  splitCSV(*contexts),
+		Projects:  splitCSV(*projects),
+		NotesDoc:  doc,
+		NotesMD:   md,
+		NotesHTML: htmlBody,
 	}
 	if *priority != "" {
 		p := strings.ToUpper(*priority)
-		item.Priority = &p
+		input.Priority = &p
 	}
 	if *due != "" {
 		d := *due
-		item.DueAt = &d
+		input.DueAt = &d
 	}
 
 	// Routing: --vault <id> sends to a specific vault; otherwise goes to inbox.
 	var (
-		result *store.Item
-		rerr   error
+		storeDest *store.Store
+		result    *store.Item
+		rerr      error
 	)
 	if *vaultID != "" && !*toInbox {
 		s, serr := mgr.StoreForID(*vaultID)
 		if serr != nil {
 			die("push: vault %q: %v", *vaultID, serr)
 		}
-		result, rerr = s.CreateItem(ctx, item)
+		storeDest = s
 	} else {
-		item.Inbox = true
-		inboxStore := mgr.InboxStore()
-		if inboxStore == nil {
+		input.Inbox = true
+		storeDest = mgr.InboxStore()
+		if storeDest == nil {
 			die("push: inbox store not available")
 		}
-		result, rerr = inboxStore.CreateItem(ctx, item)
 	}
+	result, rerr = svc.Create(ctx, storeDest, input)
 	if rerr != nil {
 		die("push: %v", rerr)
 	}
@@ -949,13 +1194,14 @@ func cmdPush(ctx context.Context, args []string, mgr *vault.Manager) {
 func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	var (
-		vaultID  = fs.String("vault", "", "vault ID to search (omit for active vault)")
-		kindFlag = fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
-		tags     = fs.String("tags", "", "comma-separated tags")
-		contexts = fs.String("contexts", "", "comma-separated contexts")
-		projects = fs.String("projects", "", "comma-separated projects")
-		page     = fs.Int("page", 0, "zero-based page index")
-		pageSize = fs.Int("page-size", 50, "results per page")
+		vaultID      = fs.String("vault", "", "vault ID to search (omit for active vault)")
+		kindFlag     = fs.String("kind", "all", "filter by kind: todo|note|scratch|all")
+		tags         = fs.String("tags", "", "comma-separated tags")
+		contexts     = fs.String("contexts", "", "comma-separated contexts")
+		projects     = fs.String("projects", "", "comma-separated projects")
+		page         = fs.Int("page", 0, "zero-based page index")
+		pageSize     = fs.Int("page-size", 50, "results per page")
+		updatedSince = fs.String("updated-since", "", "only items updated on/after this RFC3339 timestamp (e.g. 2026-08-01T00:00:00Z)")
 	)
 	positional, err := parseInterspersed(args, fs)
 	if err != nil {
@@ -964,18 +1210,15 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 
 	query := strings.Join(positional, " ")
 
-	k := *kindFlag
-	if k == "all" {
-		k = ""
-	}
 	req := store.SearchRequest{
-		Query:    query,
-		Tags:     splitCSV(*tags),
-		Contexts: splitCSV(*contexts),
-		Projects: splitCSV(*projects),
-		Page:     *page,
-		PageSize: *pageSize,
-		Kind:     k,
+		Query:        query,
+		Tags:         splitCSV(*tags),
+		Contexts:     splitCSV(*contexts),
+		Projects:     splitCSV(*projects),
+		Page:         *page,
+		PageSize:     *pageSize,
+		Kind:         *kindFlag,
+		UpdatedSince: *updatedSince,
 	}
 
 	var s *store.Store
@@ -992,14 +1235,14 @@ func cmdSearch(ctx context.Context, args []string, mgr *vault.Manager) {
 		die("search: no active store")
 	}
 
-	results, err := s.Search(ctx, req)
+	results, err := svc.Search(ctx, s, req)
 	if err != nil {
 		die("search: %v", err)
 	}
 	if results == nil {
 		results = []store.Item{}
 	}
-	printJSON(envelope{OK: true, Data: results})
+	printJSON(envelope{OK: true, Data: svc.WithTextSlice(results)})
 }
 
 // cmdInbox lists items in the shared inbox store.
@@ -1017,18 +1260,15 @@ func cmdInbox(ctx context.Context, args []string, mgr *vault.Manager) {
 		die("inbox: inbox store not available")
 	}
 
-	req := store.SearchRequest{
-		Query:    query,
-		PageSize: 200,
-	}
-	results, err := inboxStore.GetInboxItems(ctx, req)
+	req := store.SearchRequest{Query: query}
+	results, err := svc.ListInbox(ctx, inboxStore, req)
 	if err != nil {
 		die("inbox: %v", err)
 	}
 	if results == nil {
 		results = []store.Item{}
 	}
-	printJSON(envelope{OK: true, Data: results})
+	printJSON(envelope{OK: true, Data: svc.WithTextSlice(results)})
 }
 
 // cmdGet fetches a single item by ID.
@@ -1081,7 +1321,7 @@ func cmdGet(ctx context.Context, args []string, mgr *vault.Manager) {
 	if gerr != nil || item == nil {
 		die("get: item %d not found", id)
 	}
-	printJSON(envelope{OK: true, Data: item})
+	printJSON(envelope{OK: true, Data: svc.WithText(item)})
 }
 
 // vaultsData is the shape returned by the vaults command.

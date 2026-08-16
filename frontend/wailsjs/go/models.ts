@@ -367,6 +367,7 @@ export namespace store {
 	    kind: string;
 	    inbox: boolean;
 	    api_source?: string;
+	    external_ref?: string;
 	    projects: string[];
 	    contexts: string[];
 	    tags: string[];
@@ -396,6 +397,7 @@ export namespace store {
 	        this.kind = source["kind"];
 	        this.inbox = source["inbox"];
 	        this.api_source = source["api_source"];
+	        this.external_ref = source["external_ref"];
 	        this.projects = source["projects"];
 	        this.contexts = source["contexts"];
 	        this.tags = source["tags"];
@@ -444,6 +446,7 @@ export namespace store {
 	    sort_dir: string;
 	    kind: string;
 	    include_inbox: boolean;
+	    updated_since: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SearchRequest(source);
@@ -465,6 +468,7 @@ export namespace store {
 	        this.sort_dir = source["sort_dir"];
 	        this.kind = source["kind"];
 	        this.include_inbox = source["include_inbox"];
+	        this.updated_since = source["updated_since"];
 	    }
 	}
 

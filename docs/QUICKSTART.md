@@ -4,17 +4,26 @@
 
 ### Running the App
 
+**Canonical local verification path** (run from the repo root):
+```bash
+make verify
+```
+
 **Development Mode (recommended for testing):**
 ```bash
-cd /Users/chrispian/Projects-apps/nil
 wails dev
 ```
 
 **Production Build:**
 ```bash
-cd /Users/chrispian/Projects-apps/nil
-wails build
+make build
 open build/bin/NIL.app
+```
+
+**Frontend-only build check:**
+```bash
+cd /Users/chrispian/dev/hollis-labs/apps/nil
+make frontend-build
 ```
 
 ## About the "Private APIs" Warning

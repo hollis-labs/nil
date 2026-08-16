@@ -12,8 +12,13 @@ import (
 	"time"
 
 	"github.com/hollis-labs/nil/ingest"
+	"github.com/hollis-labs/nil/service/items"
 	"github.com/hollis-labs/nil/store"
 )
+
+// chatSvc is the package-level items service used by tool execution handlers.
+// Stateless; safe to share.
+var chatSvc = items.New()
 
 const claudeAPIURL = "https://api.anthropic.com/v1/messages"
 const claudeAPIVersion = "2023-06-01"
@@ -547,15 +552,9 @@ func (b *Bridge) executeSearchVault(ctx context.Context, inputJSON json.RawMessa
 		limit = 20
 	}
 
-	// When type is omitted, default to "all" so Claude sees both todos and notes.
-	itemType := input.Type
-	if itemType == "" {
-		itemType = "all"
-	}
-
 	req := store.SearchRequest{
 		Query:      input.Query,
-		Kind:       itemType,
+		Kind:       input.Type,
 		Statuses:   input.Statuses,
 		Priorities: input.Priorities,
 		Projects:   input.Projects,
@@ -566,7 +565,15 @@ func (b *Bridge) executeSearchVault(ctx context.Context, inputJSON json.RawMessa
 		PageSize:   limit,
 	}
 
-	results, err := st.Search(ctx, req)
+	var results []store.Item
+	var err error
+	if realStore, ok := st.(*store.Store); ok {
+		results, err = chatSvc.Search(ctx, realStore, req)
+	} else {
+		// Fallback for non-concrete BridgeStore implementations (none today,
+		// but keep the interface honoring path for testability).
+		results, err = st.Search(ctx, req)
+	}
 	if err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error())
 	}
@@ -726,41 +733,25 @@ func (b *Bridge) executeCreateItem(ctx context.Context, inputJSON json.RawMessag
 	if input.Title == "" {
 		return `{"error": "title is required"}`
 	}
-	itemType := input.Type
-	if itemType == "" {
-		itemType = "todo"
-	}
-	section := input.Section
-	if section == "" {
-		section = "anytime"
+	realStore, ok := st.(*store.Store)
+	if !ok {
+		return `{"error": "internal: create requires a concrete *store.Store"}`
 	}
 	var pri *string
 	if input.Priority != "" {
 		p := input.Priority
 		pri = &p
 	}
-	// AI passes markdown in the "notes" field; convert to PM JSON before storing.
-	notesDoc, err := ingest.MarkdownToDoc(input.Notes)
-	if err != nil {
-		return fmt.Sprintf(`{"error": "convert notes: %s"}`, err.Error())
-	}
-	notesHTML, err := ingest.DocToHTML(notesDoc)
-	if err != nil {
-		return fmt.Sprintf(`{"error": "render notes: %s"}`, err.Error())
-	}
-	item := &store.Item{
-		Title:            input.Title,
-		Kind:             itemType,
-		Section:          section,
-		Priority:         pri,
-		NotesDoc:         notesDoc,
-		NotesHTML:        notesHTML,
-		NotesHTMLVersion: 1,
-		Projects:         input.Projects,
-		Contexts:         input.Contexts,
-		Tags:             input.Tags,
-	}
-	created, err := st.CreateItem(ctx, item)
+	created, err := chatSvc.Create(ctx, realStore, items.CreateInput{
+		Title:    input.Title,
+		Kind:     input.Type,
+		Section:  input.Section,
+		Priority: pri,
+		Projects: input.Projects,
+		Contexts: input.Contexts,
+		Tags:     input.Tags,
+		NotesMD:  input.Notes,
+	})
 	if err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error())
 	}

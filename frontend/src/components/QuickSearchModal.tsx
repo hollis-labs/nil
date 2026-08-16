@@ -1,7 +1,7 @@
 import * as React from "react";
 import { ItemRow } from "./TerminalList";
 import CustomScrollbar from "./CustomScrollbar";
-import * as Backend from "../../wailsjs/go/main/App";
+import { search } from "../lib/backend";
 
 type Props = {
   open: boolean;
@@ -32,15 +32,11 @@ export default function QuickSearchModal({ open, onOpenChange, onOpenItem }: Pro
     }
     setLoading(true);
     try {
-      const res = await Backend.Search({
+      const res = await search({
         query: q.trim(),
-        page: 0,
         page_size: 20,
-        sort_by: "created_at",
-        sort_dir: "desc",
         kind: type === "" ? "all" : type,
-        include_inbox: false,
-      } as any);
+      });
       setResults(Array.isArray(res) ? (res as ItemRow[]) : []);
       setFocusedIndex(0);
     } catch (err) {

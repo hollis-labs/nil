@@ -24,7 +24,8 @@ import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession, clearActiveSession } from "@/lib/sessionContext";
 
 import * as Backend from "../../wailsjs/go/main/App";
-import { config } from "../../wailsjs/go/models";
+import { search, updateItem } from "@/lib/backend";
+import { config, store } from "../../wailsjs/go/models";
 import { Quit } from "../../wailsjs/runtime/runtime";
 
 type ViewMode = 'scope' | 'date';
@@ -312,14 +313,11 @@ function Inner() {
         ? []
         : (merged.statuses.length > 0 ? merged.statuses : ['open']);
 
-      const req: any = {
+      const req: Partial<store.SearchRequest> = {
         query: merged.keywords.join(" "),
-        page: 0,
         page_size: 500,
-        sort_by: "created_at",
-        sort_dir: "desc",
         statuses: statusesToSearch,
-        kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo')
+        kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo'),
       };
 
       // Only include filter arrays if they have values
@@ -329,13 +327,13 @@ function Inner() {
       if (merged.priorities.length > 0) req.priorities = merged.priorities;
 
       console.log('[Search] Request being sent:', req);
-      const res = await Backend.Search(req);
+      const res = await search(req);
       let allResults = Array.isArray(res) ? res : [];
 
       // If showCompleted is enabled and no explicit status filter, also fetch completed items (not for notes)
       if (!isNotesMode && settings.showCompleted && merged.statuses.length === 0) {
         const completedReq = { ...req, statuses: ['completed'] };
-        const completedRes = await Backend.Search(completedReq);
+        const completedRes = await search(completedReq);
         const completedResults = Array.isArray(completedRes) ? completedRes : [];
         // Merge and deduplicate by id
         const idsInResults = new Set(allResults.map(r => r.id));
@@ -453,7 +451,7 @@ function Inner() {
     if (!todo) return;
     const sectionName = section === 'now' ? 'Now' : section === 'soon' ? 'Soon' : 'Anytime';
     animateAction(id, `Moved to ${sectionName}!`, async () => {
-      await Backend.UpdateItem({ ...todo, section } as any);
+      await updateItem({ ...todo, section });
       runSearch();
     }, true); // Expand in new section
   }
@@ -473,27 +471,15 @@ function Inner() {
   function handleOpenNotes(row: ItemRow) { setNotesItem(row); setNotesOpen(true); }
   async function handleRefClick(id: number, _refType: string) {
     try {
-      const todo = await Backend.GetItem(id) as any;
+      const todo = await Backend.GetItem(id);
       if (!todo) return;
-      const row: ItemRow = {
-        id: todo.id,
-        title: todo.title,
-        priority: todo.priority,
-        due_at: todo.due_at,
-        created_at: todo.created_at,
-        threshold_at: todo.threshold_at,
-        completed: todo.completed,
-        archived: todo.archived,
+      const row = {
+        ...todo,
         projects: todo.projects || [],
         contexts: todo.contexts || [],
         tags: todo.tags || [],
-        notes_doc: todo.notes_doc,
-        notes_html: todo.notes_html,
-        notes_html_version: todo.notes_html_version,
         section: todo.section || "anytime",
-        pinned: todo.pinned,
-        kind: todo.kind,
-      };
+      } as ItemRow;
       setNotesOpen(false);
       setNotesItem(null);
       setEditItem(row);
@@ -504,12 +490,12 @@ function Inner() {
   }
   async function handleSaveNotes(notesDoc: string, notesHTML: string) {
     if (!notesItem) return;
-    await Backend.UpdateItem({
+    await updateItem({
       ...notesItem,
       notes_doc: notesDoc,
       notes_html: notesHTML,
       notes_html_version: 1,
-    } as any);
+    });
     setNotesOpen(false); setNotesItem(null); runSearch();
   }
   async function handleQuickAdd(line: string, extras: any) {
@@ -527,7 +513,7 @@ function Inner() {
       notes_html_version: extras.notes_html_version ?? created.notes_html_version,
       inbox: extras.inbox ? true : created.inbox,
     };
-    await Backend.UpdateItem(merged as any);
+    await updateItem(merged);
     setQuickOpen(false);
     runSearch();
   }
@@ -544,7 +530,7 @@ function Inner() {
       notes_html_version: extras.notes_html_version ?? created.notes_html_version,
       inbox: extras.inbox ? true : created.inbox,
     };
-    await Backend.UpdateItem(merged as any);
+    await updateItem(merged);
     setQuickOpen(false);
     runSearch();
   }
@@ -556,7 +542,7 @@ function Inner() {
 
   async function handleUpdateItem(todo: ItemRow) {
     // Just update the existing todo - don't create a new one!
-    await Backend.UpdateItem(todo as any);
+    await updateItem(todo);
     setQuickOpen(false);
     setEditItem(null);
     runSearch();
@@ -566,7 +552,7 @@ function Inner() {
   // refreshes the list, but leaves the modal open. The modal itself
   // re-baselines its dirty-check snapshot after we return.
   async function handleUpdateItemStay(todo: ItemRow) {
-    await Backend.UpdateItem(todo as any);
+    await updateItem(todo);
     setEditItem(todo);
     runSearch();
   }
@@ -589,18 +575,14 @@ function Inner() {
       notes_html_version: todo.notes_html_version,
       section: todo.section,
     };
-    await Backend.UpdateItem(cloned as any);
+    await updateItem(cloned);
     await runSearch();
 
     // Find the newly created todo and open it in edit modal
-    const allTodos = await Backend.Search({
-      query: '',
-      page: 0,
+    const allTodos = await search({
       page_size: 500,
-      sort_by: 'created_at',
-      sort_dir: 'desc',
-      statuses: ['open']
-    } as any);
+      statuses: ['open'],
+    });
     const newTodo = allTodos.find((t: any) => t.id === created.id);
     if (newTodo) {
       setEditItem(newTodo);
@@ -612,7 +594,7 @@ function Inner() {
     const newKind = todo.kind === 'note' ? 'todo' : 'note';
     const label = newKind === 'note' ? 'Converted to Note!' : 'Converted to Todo!';
     animateAction(todo.id, label, async () => {
-      await Backend.UpdateItem({ ...todo, kind: newKind } as any);
+      await updateItem({ ...todo, kind: newKind });
       runSearch();
     }, false);
   }
@@ -620,7 +602,7 @@ function Inner() {
   async function handleMetaSave(id: number, updates: Partial<ItemRow>) {
     const todo = allRows.find(r => r.id === id);
     if (!todo) return;
-    await Backend.UpdateItem({ ...todo, ...updates } as any);
+    await updateItem({ ...todo, ...updates });
     setMetaModalItem(null);
     runSearch();
   }
@@ -631,7 +613,7 @@ function Inner() {
     const itemName = appMode === 'notes' ? 'Note' : 'Todo';
     const message = pinned ? `${itemName} Pinned!` : `${itemName} Unpinned!`;
     animateAction(id, message, async () => {
-      await Backend.UpdateItem({ ...todo, pinned } as any);
+      await updateItem({ ...todo, pinned });
       runSearch();
     }, true); // Expand at new position (top if pinned, original if unpinned)
   }
@@ -662,25 +644,21 @@ function Inner() {
         contexts: session?.contexts?.length ? session.contexts : created.contexts,
         tags: session?.tags?.length ? session.tags : created.tags,
       };
-      await Backend.UpdateItem(merged as any);
+      await updateItem(merged);
       setQuery('');
       // Force refresh the entire list
       try {
         const isNotesMode = appMode === 'notes';
         const isAllMode = appMode === 'all';
-        const req: any = {
-          query: '',
-          page: 0,
+        const req: Partial<store.SearchRequest> = {
           page_size: 500,
-          sort_by: 'created_at',
-          sort_dir: 'desc',
           statuses: (isNotesMode || isAllMode) ? [] : ['open'],
-          kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo')
+          kind: isAllMode ? 'all' : (isNotesMode ? 'note' : 'todo'),
         };
-        let allResults = await Backend.Search(req);
+        let allResults = await search(req);
         if (!isNotesMode && settings.showCompleted) {
           const completedReq = { ...req, statuses: ['completed'] };
-          const completedRes = await Backend.Search(completedReq);
+          const completedRes = await search(completedReq);
           allResults = [...allResults, ...completedRes];
         }
         setAllRows(Array.isArray(allResults) ? allResults : []);
@@ -1216,20 +1194,10 @@ function Inner() {
             setShowWelcome(false);
             // Check if database is empty (no todos)
             try {
-              const req: any = {
-                query: '',
-                page: 0,
+              const result = await search({
                 page_size: 1,
-                sort_by: 'created_at',
-                sort_dir: 'desc',
-                keywords: [],
-                projects: [],
-                contexts: [],
-                tags: [],
                 statuses: ['open'],
-                priorities: []
-              };
-              const result = await Backend.Search(req);
+              });
               if (result && Array.isArray(result) && result.length === 0) {
                 // Database is empty, show demo prompt
                 setShowDemoPrompt(true);

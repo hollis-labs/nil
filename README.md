@@ -53,26 +53,37 @@ See [INSTALL.md](INSTALL.md) for platform-specific instructions (macOS, Windows,
 ## Development
 
 ```bash
+# Show the canonical local workflow surface
+make help
+
+# Run the full local verification path
+make verify
+
+# Individual checks
+make lint
+make test
+make frontend-build
+make codegen-check
+
 # Run in dev mode (hot reload)
 wails dev
 
-# Build macOS app locally
-./build-local.sh
+# Build the desktop app locally
+make build
 
 # Cross-platform distribution build
 ./build-for-friends.sh
 
 # Regenerate Wails TypeScript bindings after Go changes
-wails generate module
-
-# Type-check frontend only
-cd frontend && npx tsc --noEmit
+make codegen
 ```
 
 **Debug mode** (opens WebKit inspector on startup):
 ```bash
 DEBUG=1 open build/bin/NIL.app
 ```
+
+`make verify` is the canonical local verification path for Nil. It runs Go format and lint checks, frontend lint, the Go test suite, a standalone frontend production build, a Wails binding drift check, and a full `wails build`.
 
 ## Contributing
 
