@@ -90,7 +90,7 @@ nil/
 - The HTTP API (routes/handlers/auth) lives in **`apiserver/apiserver.go`**, used both by the GUI's embedded server (gated on `cfg.APIEnabled`) and the standalone `nil serve-api` CLI subcommand (headless, no Wails GUI required) — same `apiserver.New(cfg, mgr)` constructor either way.
 - Schema is defined in **`store/schema.sql`** (embedded at compile time). Add new tables here for fresh installs.
 - Schema changes for existing users use the **migration slice** in `store/store.go`. Increment `currentSchemaVersion` and add a new `migration` entry. Migrations are idempotent (use `IF NOT EXISTS` guards, or catch "already exists" errors). If a migration adds a column that also needs an index, create the index in `Open()` **strictly after** `runMigrations` returns — `schema.sql`'s unconditional exec runs before migrations on every `Open()` call, so an index on a not-yet-migrated column fails outright (see the `external_ref` index for the pattern).
-- Current schema version: **12** — items live in the `todos` table with a `kind` column (`todo`/`note`/`scratch`/registered custom kinds, validated against a `kinds` registry table), not the legacy `type` column. Notes are stored as ProseMirror/TipTap document JSON in `notes_doc` (canonical), with `notes_html` as a write-time render cache. See `AGENTS.md` for the fuller schema-evolution narrative (JSON-at-rest migration, v7–v11).
+- Current schema version: **13** — items live in the `todos` table with a `kind` column (`todo`/`note`/`scratch`/registered custom kinds, validated against a `kinds` registry table), not the legacy `type` column. Notes are stored as ProseMirror/TipTap document JSON in `notes_doc` (canonical), with `notes_html` as a write-time render cache. See `AGENTS.md` for the fuller schema-evolution narrative (JSON-at-rest migration, v7–v11). v13 is a data-only cleanup (no shape change): a DSN bug (`?_fk=1`, not a real `modernc.org/sqlite` param) meant foreign-key enforcement was silently never active, so `refs`' `ON DELETE CASCADE` never fired on item delete; v13 one-time-deletes the resulting orphaned `refs` rows (confirmed against a real vault: 11 of 15 `refs` rows were orphaned). See `Open()`'s DSN construction in `store/store.go` for the fix (`_pragma=foreign_keys(1)`).
 - Canonical build/verify path: **`make verify`** (lint + test + frontend-build + codegen-check + build). Individual targets: `make build`, `make test`, `make lint`, `make codegen`, `make codegen-check`. `go build ./...`/`go test ./...` alone do **not** catch stale generated Wails bindings — always run `make codegen-check` (or full `make build`) after changing a Go type used by a Wails-bound method signature (e.g. `store.SearchRequest`, `store.Item`), even if the change looks backend-only. This has silently broken `make build` before without `go build`/`go test` noticing.
 - After adding or changing Go methods bound to Wails, regenerate TypeScript bindings: `make codegen` (wraps `wails generate module`).
 
@@ -171,6 +171,12 @@ cd frontend && npx tsc --noEmit
 ```bash
 DEBUG=1 open build/bin/NIL.app
 ```
+
+**Git hooks**: `lefthook.yml` defines pre-commit (Go format/lint/vet + frontend
+lint) and pre-push (`go test` + `make codegen-check`) hooks so Wails binding
+drift is caught automatically, not just when a human remembers `make verify`.
+One-time setup: `lefthook install`. See "Git hooks (lefthook)" in AGENTS.md
+for the stale-`core.hooksPath` gotcha if hooks silently don't fire.
 
 ---
 

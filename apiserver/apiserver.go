@@ -712,8 +712,8 @@ func (h *apiHandler) handleGetBackrefs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.GetItem(r.Context(), id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+	if _, getErr := s.GetItem(r.Context(), id); getErr != nil {
+		if errors.Is(getErr, sql.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "item not found")
 			return
 		}

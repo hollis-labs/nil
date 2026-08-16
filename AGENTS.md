@@ -29,7 +29,7 @@ Entry points:
 
 - `main.go` — Wails entry point, window configuration.
 - `app.go` — the `App` struct; every Wails-bound Go method lives here.
-- `api.go` — HTTP API surface.
+- `apiserver/apiserver.go` — HTTP API surface (routes/handlers/auth); used both by the GUI's embedded server and the standalone `nil serve-api` CLI subcommand.
 - `cli/cli.go` — CLI command registry (`nil <command>`); package `cli`.
 - `cmd/nil-mcp/` — standalone MCP stdio server (`main.go` + `mcp.go`),
   builds to the `nil-mcp` binary.
@@ -88,11 +88,11 @@ Docs:
 - **Wikilinks** — `@reference` chips link items, with backlinks. Built on
   TipTap's Mention extension.
 - **Search** — FTS5 full-text search shipped. Semantic/embedding search is
-  proposed (ADR-004) but not yet built.
+  proposed but not yet built (no ADR yet — see `docs/adr/`).
 - **Terminal aesthetic** — the custom CSS theme system (`--term-*` variables) is
   intentional product design, not tech debt. A Tailwind v4 + shadcn/ui migration
   is planned that must preserve it.
-- **MCP server** — `cmd/nil-mcp` exposes vault content to other agents via 12
+- **MCP server** — `cmd/nil-mcp` exposes vault content to other agents via 15
   JSON-RPC tools (`nil_search`, `nil_create_item`, `nil_list_inbox`, etc.).
 
 ## (d) Common operations
@@ -113,6 +113,18 @@ wails dev            # run in dev mode with hot reload
 
 DEBUG=1 open build/bin/NIL.app   # launch with WebKit inspector
 ```
+
+**Git hooks (lefthook)** — one-time setup: run `lefthook install` from the repo
+root. This activates `lefthook.yml`'s pre-commit (Go format/lint/vet +
+frontend lint on staged files) and pre-push (`go test` + `make codegen-check`
+— the Wails binding drift check) hooks. `make verify`/`make codegen-check`
+already catch drift locally when a human remembers to run them; the pre-push
+hook is what enforces it automatically. If hooks silently never fire, check
+`git config core.hooksPath` — it should be unset or point at `.git/hooks`
+(the default). A leftover absolute path from a previous clone location (e.g.
+after moving/renaming the repo directory) silently disables all hooks with no
+error; fix with `git config --unset core.hooksPath` then re-run
+`lefthook install`.
 
 Examples of agent intents:
 

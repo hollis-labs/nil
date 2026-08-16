@@ -55,3 +55,13 @@ pre-push:
       glob: "*.go"
       skip_empty: true
       run: go test ./...
+
+    wails-codegen-check:
+      # Nil-specific: frontend/wailsjs/ is generated from Wails-bound Go types
+      # (e.g. store.Item, store.SearchRequest). `wails generate module` silently
+      # drifts from the Go surface if a signature changes and codegen isn't
+      # re-run. No glob restriction — cheap (~1-2s) and the safest gate is
+      # unconditional rather than trying to enumerate every Go path that feeds
+      # a Wails-bound method. Mirrors `make codegen-check`, also run in
+      # `make verify`; do not reimplement the check here, just call it.
+      run: make codegen-check

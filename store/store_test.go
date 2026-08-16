@@ -268,6 +268,75 @@ func TestGetBackrefsUnknownTargetReturnsEmpty(t *testing.T) {
 	}
 }
 
+// TestForeignKeysPragmaEnabled locks in the fix for the DSN bug where
+// Open's dbPath used the nonexistent "_fk=1" query param instead of the
+// driver-recognized "_pragma=foreign_keys(1)" syntax. modernc.org/sqlite's
+// applyQueryParams silently ignores unrecognized params rather than
+// erroring, so "_fk=1" was a no-op and foreign key enforcement (which the
+// refs table's ON DELETE CASCADE depends on) was never actually turned on.
+// This queries PRAGMA foreign_keys directly rather than trusting that the
+// DSN was merely accepted without error.
+func TestForeignKeysPragmaEnabled(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	var enabled int
+	if err := st.DB.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&enabled); err != nil {
+		t.Fatalf("querying PRAGMA foreign_keys: %v", err)
+	}
+	if enabled != 1 {
+		t.Fatalf("PRAGMA foreign_keys reported %d, want 1 (foreign key enforcement not active)", enabled)
+	}
+}
+
+// TestDeleteItemCascadesRefs confirms that, with foreign key enforcement
+// actually active (see TestForeignKeysPragmaEnabled), deleting a todos row
+// that's the target of a refs row cascades per schema.sql's
+// "ON DELETE CASCADE" instead of leaving an orphaned refs row behind. Before
+// the "_fk=1" DSN fix, DeleteItem's plain `DELETE FROM todos` never
+// triggered SQLite's cascade (foreign keys were off), so the refs row would
+// have survived pointing at a now-nonexistent todos.id.
+func TestDeleteItemCascadesRefs(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	target, err := st.CreateItem(ctx, &Item{Title: "Target note", Kind: "note"})
+	if err != nil {
+		t.Fatalf("CreateItem target: %v", err)
+	}
+	linker, err := st.CreateItem(ctx, &Item{
+		Title:    "Linking note",
+		Kind:     "note",
+		NotesDoc: wikilinkDoc(t, target.ID, "Target note"),
+	})
+	if err != nil {
+		t.Fatalf("CreateItem linker: %v", err)
+	}
+
+	// Confirm the refs row exists before the delete, so the post-delete
+	// assertion actually proves a cascade happened (not just that there was
+	// never a row to begin with).
+	var preCount int
+	if err := st.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM refs WHERE source_id = ? AND target_id = ?", linker.ID, target.ID).Scan(&preCount); err != nil {
+		t.Fatalf("checking pre-delete refs row: %v", err)
+	}
+	if preCount != 1 {
+		t.Fatalf("refs row not created by wikilink sync; preCount=%d", preCount)
+	}
+
+	if err := st.DeleteItem(ctx, target.ID); err != nil {
+		t.Fatalf("DeleteItem(target): %v", err)
+	}
+
+	var postCount int
+	if err := st.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM refs WHERE source_id = ? AND target_id = ?", linker.ID, target.ID).Scan(&postCount); err != nil {
+		t.Fatalf("checking post-delete refs row: %v", err)
+	}
+	if postCount != 0 {
+		t.Fatalf("refs row survived target deletion (ON DELETE CASCADE did not fire); postCount=%d", postCount)
+	}
+}
+
 // idSet builds a set of the IDs present in an []ItemIDStamp for convenient
 // membership checks.
 func idSet(items []ItemIDStamp) map[int64]bool {
@@ -900,5 +969,101 @@ func TestMigrationV11ToV12IsIdempotent(t *testing.T) {
 	}
 	if idxCount != 1 {
 		t.Fatalf("todos_external_ref_idx count=%d after re-open, want exactly 1 (no duplicate)", idxCount)
+	}
+}
+
+// TestMigrationV13CleanupOrphanedRefs covers the one-time data cleanup added
+// for CW-20260816-0059: before the "_fk=1" -> "_pragma=foreign_keys(1)" DSN
+// fix, foreign key enforcement was silently never active, so refs' ON
+// DELETE CASCADE never fired and DeleteItem could leave orphaned refs rows
+// (a real user vault inspected during the fix had 11 of 15 refs rows
+// orphaned). This builds a raw pre-v13 database seeded with both a valid
+// refs row and orphaned ones (source missing, target missing, and both
+// missing), opens it through the real migration path, and confirms only the
+// valid row survives while schema_version advances to the current version.
+func TestMigrationV13CleanupOrphanedRefs(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "todo.db")
+
+	// Build a raw v12-shaped database directly (bypassing store.Open, and
+	// deliberately not enabling the foreign_keys pragma on this raw
+	// connection) so orphaned refs rows can be inserted without SQLite
+	// rejecting them.
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open (raw v12 db): %v", err)
+	}
+	if _, err = raw.Exec(schemaSQL); err != nil {
+		t.Fatalf("creating v12 schema: %v", err)
+	}
+	// schema_version isn't part of schemaSQL — runMigrations creates it on
+	// demand (see runMigrations' own "CREATE TABLE IF NOT EXISTS
+	// schema_version" at the top of that function) — so this raw fixture
+	// must create it itself before stamping a version into it.
+	if _, err = raw.Exec(`CREATE TABLE IF NOT EXISTS schema_version (
+		version INTEGER NOT NULL,
+		applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`); err != nil {
+		t.Fatalf("creating schema_version table: %v", err)
+	}
+	if _, err = raw.Exec(`INSERT INTO schema_version (version) VALUES (12)`); err != nil {
+		t.Fatalf("stamping schema_version=12: %v", err)
+	}
+	if _, err = raw.Exec(`INSERT INTO todos (id, title, kind, section) VALUES
+		(1, 'Alive source', 'note', 'anytime'),
+		(2, 'Alive target', 'note', 'anytime')`); err != nil {
+		t.Fatalf("seeding todos: %v", err)
+	}
+	if _, err = raw.Exec(`INSERT INTO refs (source_id, target_id) VALUES
+		(1, 2),   -- valid: both endpoints exist
+		(1, 999), -- orphaned: target missing
+		(998, 2), -- orphaned: source missing
+		(997, 996) -- orphaned: both missing
+	`); err != nil {
+		t.Fatalf("seeding refs (incl. orphans): %v", err)
+	}
+	var preCount int
+	if err = raw.QueryRow(`SELECT COUNT(*) FROM refs`).Scan(&preCount); err != nil {
+		t.Fatalf("checking pre-migration refs count: %v", err)
+	}
+	if preCount != 4 {
+		t.Fatalf("test fixture bug: seeded refs count=%d, want 4", preCount)
+	}
+	if err = raw.Close(); err != nil {
+		t.Fatalf("closing raw v12 db: %v", err)
+	}
+
+	// Now open it through the real code path, exercising migrateV13CleanupOrphanedRefs.
+	ctx := context.Background()
+	st, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatalf("Open (migrating v12 -> v13): %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	var version int
+	if err = st.DB.QueryRowContext(ctx, `SELECT MAX(version) FROM schema_version`).Scan(&version); err != nil {
+		t.Fatalf("checking schema_version: %v", err)
+	}
+	if version != currentSchemaVersion {
+		t.Fatalf("schema_version=%d after migration, want %d", version, currentSchemaVersion)
+	}
+
+	rows, err := st.DB.QueryContext(ctx, `SELECT source_id, target_id FROM refs`)
+	if err != nil {
+		t.Fatalf("querying refs post-migration: %v", err)
+	}
+	defer rows.Close()
+	type pair struct{ source, target int64 }
+	var remaining []pair
+	for rows.Next() {
+		var p pair
+		if err := rows.Scan(&p.source, &p.target); err != nil {
+			t.Fatalf("scanning refs row: %v", err)
+		}
+		remaining = append(remaining, p)
+	}
+	if len(remaining) != 1 || remaining[0] != (pair{1, 2}) {
+		t.Fatalf("refs after cleanup = %+v, want exactly [{source:1 target:2}]", remaining)
 	}
 }

@@ -5,16 +5,17 @@ WAILSJS_DIR := $(FRONTEND_DIR)/wailsjs
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build test lint frontend-build verify codegen codegen-check format-check go-lint frontend-lint
+.PHONY: help build test lint frontend-build frontend-test verify codegen codegen-check format-check go-lint frontend-lint
 
 help:
 	@printf '%s\n' \
 		'Nil local workflows' \
 		'' \
 		'  make build           Build the desktop app with Wails' \
-		'  make test            Run the Go test suite' \
+		'  make test            Run the Go test suite and frontend tests' \
 		'  make lint            Run Go format checks, hook-equivalent Go lint, and frontend lint' \
 		'  make frontend-build  Run the standalone frontend production build' \
+		'  make frontend-test   Run the frontend test suite (Vitest)' \
 		'  make codegen         Regenerate Wails TypeScript bindings' \
 		'  make codegen-check   Regenerate bindings and fail if tracked files changed' \
 		'  make verify          Run the full local verification path'
@@ -22,13 +23,16 @@ help:
 build:
 	wails build
 
-test:
+test: frontend-test
 	go test ./...
 
 lint: format-check go-lint frontend-lint
 
 frontend-build:
 	npm --prefix $(FRONTEND_DIR) run build
+
+frontend-test:
+	npm --prefix $(FRONTEND_DIR) run test
 
 verify: lint test frontend-build codegen-check build
 
@@ -69,9 +73,9 @@ go-lint:
 	golangci-lint run --new --timeout 2m
 
 frontend-lint:
-	@files="$$(git diff --name-only --diff-filter=ACMR HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx')"; \
+	@files="$$(git diff --name-only --diff-filter=ACMR HEAD -- '*.ts' '*.tsx' '*.js' '*.jsx' | sed "s#^$(FRONTEND_DIR)/##")"; \
 	if [ -z "$$files" ]; then \
 		printf '%s\n' 'No changed frontend files to lint.'; \
 		exit 0; \
 	fi; \
-	npm --prefix $(FRONTEND_DIR) exec biome check --no-errors-on-unmatched $$files
+	(cd $(FRONTEND_DIR) && npx biome check --no-errors-on-unmatched $$files)

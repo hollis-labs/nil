@@ -1,21 +1,22 @@
 import * as React from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Markdown } from 'tiptap-markdown';
 import { ItemRow } from "./TerminalList";
 import TagsAutocomplete from "./TagsAutocomplete";
 import ProjectsAutocomplete from "./ProjectsAutocomplete";
 import ContextsAutocomplete from "./ContextsAutocomplete";
 import ItemTitleInput from "./ItemTitleInput";
-import CustomScrollbar from "./CustomScrollbar";
-import { useSettings } from "./SettingsModal";
+import { useSettings } from "./SettingsContext";
 import TemplatePickerCombobox from "./TemplatePickerCombobox";
 import TemplateSaveDialog from "./TemplateSaveDialog";
+import DeleteConfirmControl from "./DeleteConfirmControl";
+import ClosePromptDialog from "./ClosePromptDialog";
+import NotesEditorField from "./NotesEditorField";
+import ExpandedNotesEditorModal from "./ExpandedNotesEditorModal";
 import { TaskTemplate } from "@/lib/templates";
 import { getActiveSession, getSessionProfiles, SessionProfile } from "@/lib/sessionContext";
-import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, Bold, Italic, Code, List, ListOrdered, Heading1, Heading2, Heading3, FileText, CheckSquare } from "lucide-react";
+import { useNotesEditor } from "@/lib/useNotesEditor";
+import { useDirtyClose, EditItemFieldsSnapshot } from "@/lib/useDirtyClose";
+import { Save, ToggleLeft, ToggleRight, Maximize2, Minimize2, FileText, CheckSquare } from "lucide-react";
 import * as Backend from "../../wailsjs/go/main/App";
-import { WikilinkExtension } from "@/lib/WikilinkExtension";
 
 type Props = {
   open: boolean;
@@ -55,8 +56,6 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
   const [mergeContext, setMergeContext] = React.useState(true);
   const [sessionProfiles, setSessionProfiles] = React.useState<SessionProfile[]>([]);
   const [descriptionExpanded, setDescriptionExpanded] = React.useState(false);
-  const [showClosePrompt, setShowClosePrompt] = React.useState(false);
-  const [pendingBehavior, setPendingBehavior] = React.useState<'never' | 'always' | 'ask'>('ask');
   // Fullscreen toggle: when true the modal expands to fill the viewport.
   // Persists per session in component state only — intentionally not in
   // localStorage so each editor opening starts in the default size.
@@ -66,14 +65,6 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
   // extensions, ingest.DocToHTML mapping) changes in a way that would
   // produce different output for the same input.
   const NOTES_HTML_VERSION = 1;
-
-  const initialValuesRef = React.useRef<{
-    line: string; priority: string; due: string;
-    tags: string[]; contexts: string[]; projects: string[];
-    // Stringified PM JSON; comparison is by JSON equality, which is stable
-    // for TipTap output because the editor normalizes its own doc shape.
-    notes_doc: string;
-  } | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -108,52 +99,26 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     }
   }, [open]);
 
-  const onRefClickRef = React.useRef(onRefClick);
-  onRefClickRef.current = onRefClick;
+  // TipTap editor instance + wikilink-click plumbing — extracted since it
+  // doesn't depend on any of this modal's other state (see useNotesEditor).
+  const { editor, editorContainerRef } = useNotesEditor(onRefClick);
 
-  const editorContainerRef = React.useRef<HTMLDivElement>(null);
-
-  // Capture-phase mousedown on the editor wrapper — fires before ProseMirror's
-  // bubble-phase handlers so stopPropagation() fully prevents cursor movement.
-  React.useEffect(() => {
-    const container = editorContainerRef.current;
-    if (!container) return;
-    const handleMouseDown = (e: MouseEvent) => {
-      const target = (e.target as Element).closest('[data-type="wikilink"]');
-      if (!target) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const id = parseInt(target.getAttribute("data-id") || "0", 10);
-      const refType = target.getAttribute("data-ref-type") || "todo";
-      if (id) onRefClickRef.current?.(id, refType);
-    };
-    container.addEventListener("mousedown", handleMouseDown, { capture: true });
-    return () => container.removeEventListener("mousedown", handleMouseDown, { capture: true });
-  }, []);
-
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Markdown.configure({
-        html: true,
-        transformPastedText: true,
-        transformCopiedText: false,
-      }),
-      WikilinkExtension,
-    ],
-    content: "",
-    parseOptions: {
-      preserveWhitespace: 'full',
-    },
-    editorProps: {
-      attributes: {
-        class: "tiptap-editor prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
-        style: "min-height: 120px; background: var(--term-bg); color: var(--term-fg); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; overflow-x: hidden;",
-      },
-      // No custom handlePaste — tiptap-markdown's transformPastedText handles
-      // markdown paste uniformly (headings, lists, inline emphasis, links,
-      // code), avoiding the first-line-only heuristic of the old custom code.
-    },
+  // Dirty-detection + close-behavior (Escape / Close / Cancel all route
+  // through dirtyClose.requestClose()) — extracted into useDirtyClose().
+  // onSaveAndClose is wired to the same doSave() used by the "Save & Close"
+  // footer button, matching the original inline requestClose()'s 'always'
+  // branch exactly. doSave is a hoisted function declaration further down in
+  // this component, so referencing it here (before its textual declaration)
+  // is safe.
+  const dirtyClose = useDirtyClose({
+    getCurrentSnapshot: (): EditItemFieldsSnapshot => ({
+      line, priority, due, tags, contexts, projects,
+      notes_doc: editor ? JSON.stringify(editor.getJSON()) : "",
+    }),
+    closeBehavior: settings.closeBehavior ?? 'ask',
+    onOpenChange,
+    onSaveAndClose: () => doSave(),
+    onRememberBehavior: (behavior) => setSettings({ ...settings, closeBehavior: behavior }),
   });
 
   const prevOpenRef = React.useRef(open);
@@ -163,7 +128,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     if (open && !prevOpenRef.current) {
       setShowDeleteConfirm(false);
       setDescriptionExpanded(false);
-      setShowClosePrompt(false);
+      dirtyClose.cancelClosePrompt();
       if (isEditMode && editItem) {
         setLine(editItem.title);
         setPriority(editItem.priority || "");
@@ -190,7 +155,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         // produces, so isDirty() compares apples-to-apples and won't false-fire
         // on round-trip drift (the bug this whole migration fixes).
         const initialDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
-        initialValuesRef.current = {
+        dirtyClose.captureInitial({
           line: editItem.title,
           priority: editItem.priority || "",
           due: editItem.due_at ? editItem.due_at.slice(0, 10) : "",
@@ -198,7 +163,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           contexts: [...(editItem.contexts || [])],
           projects: [...(editItem.projects || [])],
           notes_doc: initialDocJSON,
-        };
+        });
       } else {
         // Priority order: session context > search filters > default tags
         const activeSession = getActiveSession();
@@ -224,7 +189,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           editor.commands.setContent("");
         }
         const initialDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
-        initialValuesRef.current = {
+        dirtyClose.captureInitial({
           line: "",
           priority: activeSession?.priority || "",
           due: "",
@@ -232,17 +197,20 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           contexts: [...mergedContexts],
           projects: [...mergedProjects],
           notes_doc: initialDocJSON,
-        };
+        });
       }
     }
     prevOpenRef.current = open;
-  }, [open, isEditMode, editItem, editor, defaultContexts, defaultProjects, defaultTags]);
+    // dirtyClose.cancelClosePrompt / captureInitial are useCallback-stabilized
+    // in useDirtyClose (identity never changes), so listing them here doesn't
+    // add re-runs beyond what this effect already does.
+  }, [open, isEditMode, editItem, editor, defaultContexts, defaultProjects, defaultTags, dirtyClose.cancelClosePrompt, dirtyClose.captureInitial]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) {
         e.preventDefault();
-        if (showClosePrompt) { setShowClosePrompt(false); return; }
+        if (dirtyClose.showClosePrompt) { dirtyClose.cancelClosePrompt(); return; }
         requestClose();
         return;
       }
@@ -266,29 +234,9 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, showClosePrompt, line, priority, due, tags, contexts, projects, editItem, onUpdate, onSaveStay, onSubmit, settings, isEditMode]);
+  }, [open, dirtyClose.showClosePrompt, dirtyClose.cancelClosePrompt, line, priority, due, tags, contexts, projects, editItem, onUpdate, onSaveStay, onSubmit, settings, isEditMode]);
 
   if (!open) return null;
-
-  function isDirty(): boolean {
-    const initial = initialValuesRef.current;
-    if (!initial) return false;
-    // JSON-at-rest: compare PM doc trees as their canonical JSON. TipTap
-    // normalizes its own doc shape on setContent(), so getJSON() round-trips
-    // are byte-stable — no normalization layer needed here.
-    const currentDocJSON = editor ? JSON.stringify(editor.getJSON()) : "";
-    const arrSame = (a: string[], b: string[]) =>
-      JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-    return (
-      line !== initial.line ||
-      priority !== initial.priority ||
-      due !== initial.due ||
-      !arrSame(tags, initial.tags) ||
-      !arrSame(contexts, initial.contexts) ||
-      !arrSame(projects, initial.projects) ||
-      currentDocJSON !== initial.notes_doc
-    );
-  }
 
   function doSave(forceInbox?: boolean) {
     // Send both: JSON is the source of truth, HTML is the write-time cache.
@@ -347,7 +295,7 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     try {
       await onSaveStay(updated);
       // Re-baseline so the just-saved state reads as clean for isDirty().
-      initialValuesRef.current = {
+      dirtyClose.captureInitial({
         line,
         priority,
         due,
@@ -355,19 +303,17 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         contexts: [...cleanContexts],
         projects: [...cleanProjects],
         notes_doc,
-      };
+      });
     } catch (err) {
       console.error('Save (stay) failed:', err);
     }
   }
 
+  // Thin wrapper so JSX call sites (Escape key, header "Close", footer
+  // "Cancel") keep calling requestClose() exactly as before; the actual
+  // isDirty/closeBehavior branching lives in useDirtyClose().
   function requestClose() {
-    const closeBehavior = settings.closeBehavior ?? 'ask';
-    if (!isDirty()) { onOpenChange(false); return; }
-    if (closeBehavior === 'always') { doSave(); return; }
-    if (closeBehavior === 'never') { onOpenChange(false); return; }
-    setPendingBehavior(settings.closeBehavior ?? 'ask');
-    setShowClosePrompt(true);
+    dirtyClose.requestClose();
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -445,41 +391,14 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
     zIndex: 50
   };
 
-
-  const ToolbarButton = ({ onClick, isActive, icon: Icon, title }: { onClick: () => void; isActive?: boolean; icon: any; title: string }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      title={title}
-      style={{
-        padding: '6px 8px',
-        background: isActive ? 'var(--term-accent)' : 'transparent',
-        border: 'none',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: isActive ? '#000' : 'var(--term-fg)',
-        transition: 'all 0.15s ease',
-        opacity: isActive ? 1 : 0.7
-      }}
-      onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'var(--term-panel)';
-          e.currentTarget.style.opacity = '1';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.opacity = '0.7';
-        }
-      }}
-    >
-      <Icon size={16} />
-    </button>
-  );
+  // Create-mode only: routes the new item straight to Inbox (via doSave's
+  // forceInbox flag, which sets extras.inbox = true) instead of wherever it
+  // would otherwise land. The button rendering itself below is still gated
+  // on `!isEditMode`; this handler just names the intent clearly.
+  function handleSendToInbox(e: React.MouseEvent) {
+    e.preventDefault();
+    doSave(true);
+  }
 
   return (
     <>
@@ -1062,57 +981,12 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
 
           {!descriptionExpanded && (
-            <div>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '4px' }}>
-                <label style={{
-                  fontSize: '12px',
-                  opacity: 0.8 }}>
-                  Description
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setDescriptionExpanded(!descriptionExpanded)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    color: 'var(--term-dim)',
-                    transition: 'color 0.15s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = 'var(--term-accent)'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = 'var(--term-dim)'}
-                >
-                  <Maximize2 size={16} />
-                </button>
-              </div>
-              <div style={{
-                border: '1px solid var(--term-border)',
-                borderRadius: '6px',
-                background: 'var(--term-bg)',
-                overflow: 'hidden',
-                // Grow with the viewport in fullscreen; capped in default mode.
-                minHeight: isFullscreen ? '60vh' : '300px',
-                maxHeight: isFullscreen ? '70vh' : '300px',
-              }}>
-                <CustomScrollbar style={{
-                  height: isFullscreen ? '70vh' : '296px',
-                  minHeight: isFullscreen ? '60vh' : '296px',
-                  maxHeight: isFullscreen ? '70vh' : '296px',
-                  background: 'var(--term-bg)'
-                }}>
-                  <div ref={editorContainerRef}>
-                    <EditorContent editor={editor} />
-                  </div>
-                </CustomScrollbar>
-              </div>
-            </div>
+            <NotesEditorField
+              editor={editor}
+              editorContainerRef={editorContainerRef}
+              isFullscreen={isFullscreen}
+              onExpand={() => setDescriptionExpanded(true)}
+            />
           )}
         </form>
           </div>
@@ -1129,21 +1003,18 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           flexShrink: 0,
         }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            {isEditMode && onDelete && !showDeleteConfirm && (
-              <button type="button" className="badge warn" onClick={() => setShowDeleteConfirm(true)} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Delete</button>
-            )}
-            {isEditMode && onDelete && showDeleteConfirm && (
-              <>
-                <span style={{ fontSize: '12px', color: 'var(--term-dim)', marginRight: '4px' }}>Confirm delete?</span>
-                <button type="button" className="badge warn" onClick={() => { onDelete(editItem!.id); onOpenChange(false); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }}>Yes, Delete</button>
-              </>
-            )}
+            <DeleteConfirmControl
+              show={isEditMode && !!onDelete}
+              confirming={showDeleteConfirm}
+              onRequestConfirm={() => setShowDeleteConfirm(true)}
+              onConfirmDelete={() => { onDelete!(editItem!.id); onOpenChange(false); }}
+            />
             <button type="button" className="badge" onClick={(e) => { e.preventDefault(); handleClear(); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Clear</button>
             <button type="button" className="badge" onClick={() => requestClose()} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px', background: 'var(--term-bg)', border: '1px solid var(--term-border)' }}>Cancel</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {!isEditMode && (
-              <button type="button" className="badge" onClick={(e) => { e.preventDefault(); doSave(true); }} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }} title="Create and send to Inbox for later review">→ Inbox</button>
+              <button type="button" className="badge" onClick={handleSendToInbox} style={{ padding: '8px 12px', fontSize: '13px', borderRadius: '6px' }} title="Create and send to Inbox for later review">→ Inbox</button>
             )}
             {isEditMode && onSaveStay && (
               <button
@@ -1168,46 +1039,14 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
           </div>
         </div>
 
-        {showClosePrompt && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.65)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-            <div className="terminal-card" style={{ padding: '24px', maxWidth: '360px', width: '90%' }}>
-              <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>Unsaved changes</div>
-              <div style={{ fontSize: '12px', color: 'var(--term-dim)', marginBottom: '20px' }}>
-                You have unsaved changes. What would you like to do?
-              </div>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-                <button className="badge warn" onClick={() => {
-                  if (pendingBehavior !== (settings.closeBehavior ?? 'ask'))
-                    setSettings({ ...settings, closeBehavior: pendingBehavior });
-                  setShowClosePrompt(false); onOpenChange(false);
-                }}>Discard</button>
-                <button className="badge success" onClick={() => {
-                  if (pendingBehavior !== (settings.closeBehavior ?? 'ask'))
-                    setSettings({ ...settings, closeBehavior: pendingBehavior });
-                  setShowClosePrompt(false); doSave();
-                }}>Save &amp; Close</button>
-                <button className="badge" onClick={() => setShowClosePrompt(false)}>Stay</button>
-              </div>
-              <div style={{ borderTop: '1px solid var(--term-border)', paddingTop: '16px' }}>
-                <div style={{ fontSize: '11px', color: 'var(--term-dim)', marginBottom: '8px' }}>
-                  Remember this choice:
-                </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(['ask', 'always', 'never'] as const).map(opt => (
-                    <button key={opt}
-                      className={`badge ${pendingBehavior === opt ? 'info' : ''}`}
-                      onClick={() => setPendingBehavior(opt)}
-                      style={{ fontSize: '11px', padding: '4px 8px', border: 'none',
-                        opacity: pendingBehavior === opt ? 1 : 0.6 }}>
-                      {opt === 'ask' ? 'Ask each time' : opt === 'always' ? 'Always save' : 'Never save'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        <ClosePromptDialog
+          open={dirtyClose.showClosePrompt}
+          pendingBehavior={dirtyClose.pendingBehavior}
+          onSelectBehavior={dirtyClose.setPendingBehavior}
+          onDiscard={dirtyClose.confirmDiscard}
+          onSaveAndClose={dirtyClose.confirmSaveAndClose}
+          onStay={dirtyClose.cancelClosePrompt}
+        />
       </div>
 
       <TemplateSaveDialog
@@ -1221,147 +1060,16 @@ export default function EditItemModal({ open, onOpenChange, onSubmit, onUpdate, 
         }}
       />
 
-      {/* Expanded Description Modal */}
-      {descriptionExpanded && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0, 0, 0, 0.15)',
-          backdropFilter: 'blur(1px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <div className="terminal-card" style={{
-            width: '90%',
-            height: '90%',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden'
-          }}>
-            {/* Header */}
-            <div style={{
-              padding: '16px 20px',
-              borderBottom: '1px solid var(--term-border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}>
-              <label style={{ fontSize: '14px', fontWeight: 600 }}>Description</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setDescriptionExpanded(false)}
-                  className="badge"
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'var(--term-bg)',
-                    border: '1px solid var(--term-border)'
-                  }}
-                >
-                  <Minimize2 size={14} />
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    setDescriptionExpanded(false);
-                    handleSubmit(e as any);
-                  }}
-                  className="badge success"
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <Save size={14} />
-                  Save & Close
-                </button>
-              </div>
-            </div>
-
-            {/* Toolbar */}
-            {editor && (
-              <div style={{
-                padding: '12px 20px',
-                borderBottom: '1px solid var(--term-border)',
-                display: 'flex',
-                gap: '4px',
-                flexWrap: 'wrap',
-                background: 'var(--term-panel)'
-              }}>
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleBold().run()}
-                  isActive={editor.isActive('bold')}
-                  icon={Bold}
-                  title="Bold"
-                />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleItalic().run()}
-                  isActive={editor.isActive('italic')}
-                  icon={Italic}
-                  title="Italic"
-                />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleCode().run()}
-                  isActive={editor.isActive('code')}
-                  icon={Code}
-                  title="Inline Code"
-                />
-                <div style={{ width: '1px', height: '28px', background: 'var(--term-border)', margin: '0 4px' }} />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                  isActive={editor.isActive('heading', { level: 1 })}
-                  icon={Heading1}
-                  title="Heading 1"
-                />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                  isActive={editor.isActive('heading', { level: 2 })}
-                  icon={Heading2}
-                  title="Heading 2"
-                />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                  isActive={editor.isActive('heading', { level: 3 })}
-                  icon={Heading3}
-                  title="Heading 3"
-                />
-                <div style={{ width: '1px', height: '28px', background: 'var(--term-border)', margin: '0 4px' }} />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  isActive={editor.isActive('bulletList')}
-                  icon={List}
-                  title="Bullet List"
-                />
-                <ToolbarButton
-                  onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  isActive={editor.isActive('orderedList')}
-                  icon={ListOrdered}
-                  title="Numbered List"
-                />
-              </div>
-            )}
-
-            {/* Editor */}
-            <CustomScrollbar style={{ flex: 1, background: 'var(--term-bg)' }}>
-              <div style={{ padding: '20px' }} ref={editorContainerRef}>
-                <EditorContent editor={editor} />
-              </div>
-            </CustomScrollbar>
-          </div>
-        </div>
-      )}
+      <ExpandedNotesEditorModal
+        open={descriptionExpanded}
+        editor={editor}
+        editorContainerRef={editorContainerRef}
+        onClose={() => setDescriptionExpanded(false)}
+        onSaveAndClose={(e) => {
+          setDescriptionExpanded(false);
+          handleSubmit(e as any);
+        }}
+      />
     </div>
     </>
   );
