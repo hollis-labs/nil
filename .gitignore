@@ -12,8 +12,9 @@ test-build
 dist/
 # build temp files
 build/windows/installer/tmp/
-# Local Claude Code settings (personal, not shared)
+# Claude Code client runtime state (personal, not shared)
 .claude/settings.local.json
+.claude/worktrees/
 # Generated package integrity checksum
 frontend/package.json.md5
 # Worktrees (managed by Forge)
