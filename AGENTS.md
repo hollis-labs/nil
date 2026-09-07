@@ -64,8 +64,7 @@ The SQLite table is `todos` and holds every kind, notes included; the Go struct
 is `store.Item`. The mismatch is deliberate. Renaming needs a migration plan.
 
 Tailwind and shadcn/ui are not installed. Color and chrome come from the
-`--term-*` custom properties under `frontend/src/theme/`; never hardcode them. A
-migration that preserves that system is planned but has not landed.
+`--term-*` custom properties under `frontend/src/theme/`; never hardcode them.
 
 Commit `6a9ef34` deleted `.forge/` and `.agentrc/`, and a later pass removed the
 last config that still named them. A path cited in a comment, a config file or a
