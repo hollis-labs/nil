@@ -1,0 +1,26 @@
+kind: cerberus-project/v1
+owner: nil
+namespace: local
+project:
+  id: nil
+  name: Nil
+resources:
+  - id: nil-dev
+    name: Nil Dev
+    type: process
+    project: nil
+    connector: local
+    config:
+      command:
+        - wails
+        - dev
+      dir: /Users/chrispian/dev/hollis-labs/apps/nil
+      mode: dev_session
+      port: 7765
+      run_from: workspace
+    tags:
+      - gui
+      - desktop
+      - wails
+      - v2
+registry_urn: msg://agent/agent-mux/prj_vap8p9sa0q
