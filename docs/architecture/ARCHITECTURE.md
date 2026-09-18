@@ -178,31 +178,49 @@ worth flagging for the split since it pulls in `apiserver` as a CLI-package depe
 
 ### 2.4 MCP stdio server — `cmd/nil-mcp`
 
-`cmd/nil-mcp/main.go` (33 lines) is a tiny bootstrap: loads config, does a best-effort
-health-check GET against the local API, constructs `NewServer(apiBase, apiKey)`, and
-runs it over stdin/stdout (`main.go:31-32`). It builds to a separate `nil-mcp` binary
-(own `package main`), distinct from the `nil` binary.
+As of CW-20260918-0016 (2026-09-18), `cmd/nil-mcp` speaks MCP via
+[`github.com/hollis-labs/go-mcp`](https://github.com/hollis-labs/go-mcp) — a thin
+wrapper the portfolio shares around the official `modelcontextprotocol/go-sdk`,
+targeting the 2026-07-28 spec — rather than a hand-rolled JSON-RPC 2.0
+implementation. This is a wire-transport change only; ADR-0005's actual decision
+("thin HTTP-proxying stdio server, zero direct DB dependency") is unchanged. The file
+split is now:
 
-`cmd/nil-mcp/mcp.go` (1159 lines) implements a JSON-RPC 2.0 stdio MCP server from
-scratch (no MCP SDK dependency) — `rpcRequest`/`rpcResponse`/`rpcError` wire types
-(`mcp.go:21-40`), a `Run(in, out)` read/dispatch loop, and a JSON-RPC `handle` that
-routes `tools/list` and `tools/call`. **Every tool is a thin proxy that calls the local
-HTTP API** via `apiDo(method, path, body, vaultID)` (`mcp.go:393-448`), which sets
-`X-API-Key` and `X-Agent-Source: nil-mcp` on every request (`mcp.go:408-409`) — `nil-mcp`
-has zero direct dependency on `store`/`vault`/`service/items`; it only knows HTTP and
-JSON. `toolList()` (`mcp.go:922-1158`) currently registers **15** tools:
-`nil_list_vaults`, `nil_search`, `nil_get_item`, `nil_get_backrefs`,
-`nil_list_item_ids`, `nil_create_item`, `nil_create_items`, `nil_update_item`,
-`nil_delete_item`, `nil_toggle_complete`, `nil_archive`, `nil_list_inbox`,
-`nil_create_inbox`, `nil_process_inbox`, `nil_get_taxonomy`. (AGENTS.md and
-`.agent-ops/project.yaml` both currently say "12" — see §11, this is stale.)
+- `cmd/nil-mcp/main.go` (50 lines) — bootstrap: loads config, does a best-effort
+  health-check GET against the local API, builds an `apiClient` and a
+  `gomcp.NewServer("nil-mcp", ...)` (`main.go:38`), registers all tools
+  (`main.go:44`), and serves stdio via `srv.Run(context.Background())` (`main.go:46`).
+  Builds to a separate `nil-mcp` binary (own `package main`), distinct from the `nil`
+  binary.
+- `cmd/nil-mcp/client.go` (122 lines) — `apiClient`, the HTTP client every tool proxies
+  through: `do(ctx, method, path, body, vaultID)` (`client.go:37`) sets `X-API-Key` and
+  `X-Agent-Source: nil-mcp` on every request (`client.go:52-53`). `nil-mcp` has zero
+  direct dependency on `store`/`vault`/`service/items`; it only knows HTTP and JSON.
+  Also holds `decodeArgs`/`decodeResult`, the untyped-map ↔ typed-struct bridge between
+  go-mcp's `ToolHandler` signature and this file's argument/result shapes.
+- `cmd/nil-mcp/tools.go` (605 lines) — per-tool argument structs and handler
+  implementations (`toolXxx` methods on `*apiClient`), each independent, all going
+  through `apiClient.do`. A handler returns the decoded API response value directly
+  (not a pre-formatted string); go-mcp JSON-marshals it into both
+  `CallToolResult.StructuredContent` (SEP-2106) and mirrored text content.
+- `cmd/nil-mcp/tool_schemas.go` (264 lines) — pure data and registration: JSON-Schema
+  property-builder helpers, the `toolAnnotations` hint table (go-mcp requires
+  `ReadOnlyHint`/`DestructiveHint`/`IdempotentHint`/`OpenWorldHint` explicit on every
+  tool — never inferred from a name), and `registerTools(s, c)`, which wires all 15
+  tools into the `*gomcp.Server`.
 
-Because every tool is a pure HTTP passthrough, `mcp.go`'s natural split seam is
-"JSON-RPC framing/dispatch machinery" (top ~345 lines: wire types, `NewServer`, `Run`,
-`handle`, `dispatchToolCall`, `callTool`, `apiDo`, `prettyJSON`) versus "tool
-implementations" (`toolXxx` methods, `mcp.go:463-919`) versus "tool schema
-definitions" (`toolList()`, `mcp.go:922-1158`, which is pure data — no logic). Those
-three chunks have almost no interdependency beyond `callTool`'s name→method switch.
+**Every tool is still a thin proxy that calls the local HTTP API** — that hasn't
+changed. Currently registered **15** tools: `nil_list_vaults`, `nil_search`,
+`nil_get_item`, `nil_get_backrefs`, `nil_list_item_ids`, `nil_create_item`,
+`nil_create_items`, `nil_update_item`, `nil_delete_item`, `nil_toggle_complete`,
+`nil_archive`, `nil_list_inbox`, `nil_create_inbox`, `nil_process_inbox`,
+`nil_get_taxonomy`. (AGENTS.md and `.agent-ops/project.yaml` both currently say "12" —
+see §11, this is stale.)
+
+The three-way seam this section used to recommend splitting toward — transport
+framing / tool implementations / tool schema data — is now the actual file layout
+above, since adopting go-mcp removed the hand-rolled framing code entirely rather than
+just relocating it.
 
 ### 2.5 AI chat bridge — `chat/`
 
@@ -393,12 +411,12 @@ so a machine that has only ever used the CLI still gets a working API key.
 
 Already detailed in §2.4/§2.5; summarized here for the "surfaces" mental model:
 
-- **`cmd/nil-mcp`**: a stdio MCP server, separate binary, zero direct DB/store
-  dependency — purely an HTTP client of the local API (§2.2), translating MCP
-  `tools/call` JSON-RPC into `apiDo` HTTP requests and formatting responses as
-  human-readable text for the calling model. It **trusts the local API endpoint and API
-  key it read from `config.json` unconditionally** — no independent authentication of
-  its own (see §7).
+- **`cmd/nil-mcp`**: a stdio MCP server (via `github.com/hollis-labs/go-mcp`, §2.4),
+  separate binary, zero direct DB/store dependency — purely an HTTP client of the local
+  API (§2.2), translating each `tools/call` into an `apiClient.do` HTTP request and
+  returning the decoded response as structured tool content. It **trusts the local API
+  endpoint and API key it read from `config.json` unconditionally** — no independent
+  authentication of its own (see §7).
 - **`chat/bridge.go`**: GUI-only, no CLI/MCP exposure. Talks directly to Anthropic's
   Messages API over HTTPS, executes a bounded (5-iteration) local tool-use loop against
   the active vault's `*store.Store`, and gates mutating actions behind a
@@ -426,7 +444,7 @@ checked via `X-API-Key` header equality in `apiHandler.auth`
   would need local code execution already, but worth naming since a future "expose
   this beyond loopback" change would need to fix this first.
 - The same key for every caller — there is no per-agent/per-consumer credential.
-  `X-Agent-Source` (set by `nil-mcp` to `"nil-mcp"`, `mcp.go:409`) is an
+  `X-Agent-Source` (set by `nil-mcp` to `"nil-mcp"`, `cmd/nil-mcp/client.go:53`) is an
   attribution/audit label recorded on created items (`api_source` column) — it is
   **not** an authorization mechanism. Anything holding the one API key can act as any
   "agent source" it likes by setting this header to anything.
@@ -444,7 +462,7 @@ checked via `X-API-Key` header equality in `apiHandler.auth`
 
 **What trusts what**:
 - `nil-mcp` trusts `config.json` (reads the API key straight off local disk,
-  `cmd/nil-mcp/main.go:13-17`) and, transitively, trusts the API endpoint it connects
+  `cmd/nil-mcp/main.go:18-22`) and, transitively, trusts the API endpoint it connects
   to completely — it does not verify it's talking to the genuine NIL API (e.g. no TLS,
   no pinned identity beyond "whatever is listening on 127.0.0.1:<configured port>").
   Whoever can run `nil-mcp` (i.e., has local filesystem + process-spawn access) can
@@ -580,7 +598,7 @@ build` (`Makefile:33`). Individual targets and what each actually covers:
 migration-v13 fix from §8), `service/items/items_test.go` (498), plus the frontend's
 first test, `frontend/src/components/CopyrightFooter.test.tsx`. **No test files exist**
 for `app.go` (package `main`, Wails-bound methods), `cli/cli.go`, any file in `chat/`,
-`cmd/nil-mcp/mcp.go`, or `parse/line.go` — these are exactly the surfaces with the most
+`cmd/nil-mcp/` (any of its four files — §2.4), or `parse/line.go` — these are exactly the surfaces with the most
 branching/business logic outside the well-tested `store`/`apiserver`/`service/items`
 core, and on the frontend, coverage of the three hotspot components (`App.tsx`,
 `SettingsModal.tsx`, `EditItemModal.tsx`) remains at zero. This gap is itself one of the
@@ -600,7 +618,7 @@ elsewhere (including in a prompt or an older doc) as unverified.
 | `store/store.go` | 1757 (grew from 1709 to 1757 lines *during this same investigation*, via a concurrent migration-v13 commit — see §8; re-run `wc -l` before trusting this number) | **Seams exist but are entangled by the `dbtx` shared-transaction pattern.** Public API surface (`CreateItem`, `UpdateItem`, `GetItem`, `Search`, `GetBackrefs`, inbox methods, stats, taxonomy, kinds) is one clear group (`store.go:827` onward); migrations (`migrateV7`–`migrateV13...`, `runMigrations`) are a second, self-contained group (`store.go:196-` through the mid-700s) that only needs `*sql.DB` and could move to `store/migrations.go` with minimal churn. The tricky part: many `*Tx` helper functions (`createItemTx`, `updateItemTx`, `hydrateTx`, `setLinksTx`, `updateRefsTx`, `updateFTSTx`) are shared between the single-item path (via `*sql.DB` satisfying `dbtx`) and `CreateItemsBatch`'s explicit `*sql.Tx` — splitting "CRUD" from "batch" would either duplicate these helpers or require a shared internal file both import from. `stripHTML`/`derivePlainText`/FTS helpers are a third, genuinely standalone group. |
 | `cli/cli.go` | 1399 | **Seam already exists, just not yet split**: the two command-dispatch idioms described in §2.3 (registry-native `commandEnv` commands vs. legacy `mgr`-only commands wired via closures) are almost mechanically separable into two files, provided the shared helpers (`parseInterspersed`, `die`, `printJSON`, `findCommand`, `parseIDsArg`, `chooseCreateDestination`/`selectVaultStore`/`findItem`) land in a third shared file or stay in whichever file `init()`/`Run` end up in. `cmdServeAPI` (§2.3) is arguably better relocated near `apiserver` usage than kept in the CLI's item-command file. |
 | `chat/bridge.go` | 914 | **Reasonable internal seams, currently one file.** `buildTools()` (schema declarations, ~170 lines, pure data) vs. `Send`/`callAPI` (the agentic loop + HTTP transport to Anthropic, ~100 lines) vs. the `executeXxx` tool-implementation methods (~230 lines) vs. `buildSystemPrompt`/`extractAction` (prompt templating + action-proposal extraction from model output, ~120 lines) are four fairly distinct concerns with narrow interfaces between them (`BridgeRequest` in, `ChatResponse` out). `chat/` as a package already has `actions.go`/`models.go`/`profile.go`/`store.go` alongside `bridge.go`, so this would be more "further split bridge.go along its existing internal boundaries" than "restructure the package." |
-| `cmd/nil-mcp/mcp.go` | 1159 | **Clean three-way seam, minimal coupling** (§2.4): JSON-RPC framing/dispatch (~345 lines) / tool implementations (~460 lines, `toolXxx` methods, each independent, all going through the same `apiDo` helper) / tool schema definitions (`toolList()`, ~240 lines, pure data with zero logic). This is likely the easiest of the eight files to split cleanly — the tool-schema data block in particular has no behavior to preserve, just data to relocate. |
+| ~~`cmd/nil-mcp/mcp.go`~~ | — | **Resolved, not a current hotspot.** This row previously tracked a single 1159-line file with a clean three-way seam (framing / tool implementations / schema data). CW-20260918-0016 (2026-09-18) adopted `github.com/hollis-labs/go-mcp` for the transport, which removed the hand-rolled JSON-RPC framing entirely (not relocated — deleted) and left the remaining tool logic split across `client.go` (122 lines), `tools.go` (605 lines), and `tool_schemas.go` (264 lines) — see §2.4. |
 | `frontend/src/pages/App.tsx` | 1406 | **Weak seams — this is the hardest split.** Almost the entire file is one function, `Inner()` (`App.tsx:34` through just before `App.tsx:1398`), holding ~30 `useState` hooks (`App.tsx:35-63`) and a dozen-plus `useEffect`s, wrapping a large `Inner`-local set of `async function handleXxx` handlers (`handleToggle`, `handleMoveSection`, `handleArchive`, `handleRefClick`, `handleSaveNotes`, `handleQuickAdd`, `handleQuickAddNote`, `handleUpdateItem`, `handleUpdateItemStay`, `handleCloneItem`, `handleConvertType`, `handleMetaSave`, `handlePin`, `handleInputSubmit`, `handleDeleteTodo` — `App.tsx:437-690+`) that close over most of that state directly. `AppPage` (`App.tsx:1398`) is just a thin wrapper providing context/providers around `Inner`. Any split has to either (a) introduce a reducer/context to break the closure coupling first, or (b) extract along handler *groups* that touch disjoint state slices (e.g. modal-open-state handlers vs. item-mutation handlers vs. session/vault-switch handlers) and accept prop-drilling the touched state back in. There is no cheap, behavior-preserving seam here the way there is in the Go files — CLAUDE.md's own warning ("This file is large; look before adding new state or handlers") is accurate and this file needs a real design pass, not a mechanical split. |
 | `frontend/src/components/SettingsModal.tsx` | 1644 | **Good seam: already tab-partitioned.** `activeTab` (`type SettingsTab = 'general' \| 'tabs' \| 'data' \| 'vaults' \| 'chat'`, `SettingsModal.tsx:27`) gates five large, largely-disjoint JSX blocks: `general` (~405–692), `tabs` (~692–803), `vaults` (~803–997), `chat` (~997–1433), `data` (~1433–end). Each block is a strong candidate for its own component (`GeneralTab`, `TabsTab`, `VaultsTab`, `ChatTab`, `DataTab`), taking `local`/`setLocal` (settings draft state) and tab-specific state slices as props. The file also exports a `SettingsProvider`/`useSettings` context (`SettingsModal.tsx:56-107`) that is logically a separate concern (global settings context) from the modal UI itself and could move to its own module independent of the tab split. |
 | `frontend/src/components/EditItemModal.tsx` | 1368 | **Moderate seam, but tightly closure-coupled like App.tsx.** ~20 `useState` hooks (`EditItemModal.tsx:43-63`) plus named handlers (`isDirty`, `doSave`, `doSaveStay`, `requestClose`, `handleSubmit`, `handleClear`, `handleTemplateSelect`, `handleContextProfileSelect`, `EditItemModal.tsx:273-430`) occupy the first third of the file; the remaining ~900 lines (`EditItemModal.tsx:484` to EOF) are a single `return (...)` JSX tree with inline conditional sections (fullscreen toggle header, title/priority/due inputs, taxonomy autocompletes, session-profile picker, TipTap `EditorContent`, inline delete-confirm bar, inline close-prompt dialog, and the external `<TemplateSaveDialog>`). The inline delete-confirm and close-prompt blocks are the cleanest extraction candidates (self-contained conditionals with narrow prop needs); the taxonomy/editor core is more entangled with `line`/`priority`/`tags`/`contexts`/`projects` state and the TipTap `editor` instance, so extracting it means threading that state through props rather than a free lift. |
@@ -621,8 +639,8 @@ files.
    `apiserver/apiserver.go` — only `AGENTS.md`'s "Where to start" section has the stale
    `api.go` reference.
 2. **`AGENTS.md`'s "(c) Key domain concepts"** and **`.agent-ops/project.yaml`'s**
-   `usage_examples` both state `cmd/nil-mcp` exposes **12** JSON-RPC tools. The actual
-   count, per `toolList()` in `cmd/nil-mcp/mcp.go` (§2.4), is **15**:
+   `usage_examples` both state `cmd/nil-mcp` exposes **12** tools. The actual count, per
+   `registerTools` in `cmd/nil-mcp/tool_schemas.go` (§2.4), is **15**:
    `nil_list_vaults`, `nil_search`, `nil_get_item`, `nil_get_backrefs`,
    `nil_list_item_ids`, `nil_create_item`, `nil_create_items`, `nil_update_item`,
    `nil_delete_item`, `nil_toggle_complete`, `nil_archive`, `nil_list_inbox`,

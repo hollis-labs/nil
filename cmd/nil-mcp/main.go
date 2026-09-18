@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
 
+	gomcp "github.com/hollis-labs/go-mcp/server"
+
 	"github.com/hollis-labs/nil/config"
 )
+
+const serverVersion = "1.0.0"
 
 func main() {
 	cfg := config.LoadOrDefault()
@@ -28,6 +33,18 @@ func main() {
 		_ = resp.Body.Close()
 	}
 
-	srv := NewServer(base, apiKey)
-	srv.Run(os.Stdin, os.Stdout)
+	client := newAPIClient(base, apiKey)
+
+	srv := gomcp.NewServer("nil-mcp", serverVersion, gomcp.WithInstructions(
+		"NIL personal task and note manager. Use nil_list_vaults to discover available vaults. "+
+			"Pass vault_id in tool calls to target a specific vault; omit to use the active vault. "+
+			"The inbox is a fast-capture area — use nil_create_inbox to add items without taxonomy friction, "+
+			"then nil_process_inbox when ready to promote them.",
+	))
+	registerTools(srv, client)
+
+	if err := srv.Run(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "nil-mcp: server error: %v\n", err)
+		os.Exit(1)
+	}
 }
