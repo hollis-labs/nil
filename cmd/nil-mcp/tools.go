@@ -1,19 +1,19 @@
 package main
 
 // Per-tool argument structs and handler implementations. Each handler is
-// independent and routes through Server.apiDo (rpc.go) to the NIL HTTP API.
-// The JSON-RPC transport that calls into these lives in rpc.go; the schema
-// data describing these tools to MCP clients lives in tool_schemas.go.
+// independent and routes through apiClient.do (client.go) to the NIL HTTP
+// API. Tool registration and schema data describing these tools to MCP
+// clients live in tool_schemas.go.
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net/url"
 	"strconv"
 )
 
 // ---------------------------------------------------------------------------
-// Tool argument structs (decoded from JSON)
+// Tool argument structs (decoded from the untyped args map via decodeArgs)
 // ---------------------------------------------------------------------------
 
 type argsSearch struct {
@@ -150,18 +150,18 @@ type argsGetTaxonomy struct {
 // Tool handlers
 // ---------------------------------------------------------------------------
 
-func (s *Server) toolListVaults() (string, error) {
-	data, err := s.apiDo("GET", "/api/v1/vaults", nil, "")
+func (c *apiClient) toolListVaults(ctx context.Context, _ map[string]any) (any, error) {
+	data, err := c.do(ctx, "GET", "/api/v1/vaults", nil, "")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolSearch(args json.RawMessage) (string, error) {
+func (c *apiClient) toolSearch(ctx context.Context, args map[string]any) (any, error) {
 	var a argsSearch
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 
 	q := url.Values{}
@@ -174,8 +174,8 @@ func (s *Server) toolSearch(args json.RawMessage) (string, error) {
 	for _, t := range a.Tags {
 		q.Add("tags", t)
 	}
-	for _, c := range a.Contexts {
-		q.Add("contexts", c)
+	for _, cx := range a.Contexts {
+		q.Add("contexts", cx)
 	}
 	for _, p := range a.Projects {
 		q.Add("projects", p)
@@ -195,27 +195,27 @@ func (s *Server) toolSearch(args json.RawMessage) (string, error) {
 		path += "?" + q.Encode()
 	}
 
-	data, err := s.apiDo("GET", path, nil, a.VaultID)
+	data, err := c.do(ctx, "GET", path, nil, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolGetItem(args json.RawMessage) (string, error) {
+func (c *apiClient) toolGetItem(ctx context.Context, args map[string]any) (any, error) {
 	var a argsGetItem
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
-	data, err := s.apiDo("GET", fmt.Sprintf("/api/v1/items/%d", a.ID), nil, a.VaultID)
+	data, err := c.do(ctx, "GET", fmt.Sprintf("/api/v1/items/%d", a.ID), nil, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
 // toolGetBackrefs is a separate tool rather than a `backrefs` field folded
@@ -225,20 +225,20 @@ func (s *Server) toolGetItem(args json.RawMessage) (string, error) {
 // nil_get_item, so this follows the dominant existing pattern. It also keeps
 // nil_get_item cheap — a plain fetch doesn't pay for the refs JOIN unless the
 // caller actually wants backlinks.
-func (s *Server) toolGetBackrefs(args json.RawMessage) (string, error) {
+func (c *apiClient) toolGetBackrefs(ctx context.Context, args map[string]any) (any, error) {
 	var a argsGetBackrefs
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
-	data, err := s.apiDo("GET", fmt.Sprintf("/api/v1/items/%d/backrefs", a.ID), nil, a.VaultID)
+	data, err := c.do(ctx, "GET", fmt.Sprintf("/api/v1/items/%d/backrefs", a.ID), nil, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
 // toolListItemIDs is a separate tool rather than a flag on nil_search: it
@@ -250,10 +250,10 @@ func (s *Server) toolGetBackrefs(args json.RawMessage) (string, error) {
 // NOT accept updated_since (unlike nil_search): this call always needs the
 // FULL current-ID set to diff against, not an incremental slice, or
 // currently-existing IDs outside the window would read as false deletions.
-func (s *Server) toolListItemIDs(args json.RawMessage) (string, error) {
+func (c *apiClient) toolListItemIDs(ctx context.Context, args map[string]any) (any, error) {
 	var a argsListItemIDs
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 
 	q := url.Values{}
@@ -266,20 +266,20 @@ func (s *Server) toolListItemIDs(args json.RawMessage) (string, error) {
 		path += "?" + q.Encode()
 	}
 
-	data, err := s.apiDo("GET", path, nil, a.VaultID)
+	data, err := c.do(ctx, "GET", path, nil, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolCreateItem(args json.RawMessage) (string, error) {
+func (c *apiClient) toolCreateItem(ctx context.Context, args map[string]any) (any, error) {
 	var a argsCreateItem
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.Title == "" {
-		return "", fmt.Errorf("title is required")
+		return nil, fmt.Errorf("title is required")
 	}
 
 	body := map[string]any{
@@ -319,11 +319,11 @@ func (s *Server) toolCreateItem(args json.RawMessage) (string, error) {
 		body["external_ref"] = a.ExternalRef
 	}
 
-	data, err := s.apiDo("POST", "/api/v1/items", body, a.VaultID)
+	data, err := c.do(ctx, "POST", "/api/v1/items", body, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
 // toolCreateItemsBatch is a separate tool rather than an "items" array
@@ -335,17 +335,17 @@ func (s *Server) toolCreateItem(args json.RawMessage) (string, error) {
 // failure semantics across every entry, not just one. Proxies straight to
 // POST /api/v1/items/batch, which is itself a dedicated route for the same
 // reasons (see apiserver.go's handleCreateItemsBatch doc comment).
-func (s *Server) toolCreateItemsBatch(args json.RawMessage) (string, error) {
+func (c *apiClient) toolCreateItemsBatch(ctx context.Context, args map[string]any) (any, error) {
 	var a argsCreateItemsBatch
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if len(a.Items) == 0 {
-		return "", fmt.Errorf("items must be a non-empty array")
+		return nil, fmt.Errorf("items must be a non-empty array")
 	}
 	for i, it := range a.Items {
 		if it.Title == "" {
-			return "", fmt.Errorf("items[%d]: title is required", i)
+			return nil, fmt.Errorf("items[%d]: title is required", i)
 		}
 	}
 
@@ -388,125 +388,124 @@ func (s *Server) toolCreateItemsBatch(args json.RawMessage) (string, error) {
 		bodyItems[i] = item
 	}
 
-	data, err := s.apiDo("POST", "/api/v1/items/batch", map[string]any{"items": bodyItems}, a.VaultID)
+	data, err := c.do(ctx, "POST", "/api/v1/items/batch", map[string]any{"items": bodyItems}, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolUpdateItem(args json.RawMessage) (string, error) {
+func (c *apiClient) toolUpdateItem(ctx context.Context, args map[string]any) (any, error) {
 	var a argsUpdateItem
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
-	// Build a map with only the fields explicitly provided.
-	// We decode again into a raw map to detect which keys were present.
-	var raw map[string]json.RawMessage
-	_ = json.Unmarshal(args, &raw)
-
+	// Build a map with only the fields explicitly provided. args is the raw
+	// (already-decoded) tool-call arguments, so presence is a plain key check
+	// against it — no need to re-marshal/re-unmarshal to detect which keys
+	// were present, unlike the old json.RawMessage-based transport.
 	body := map[string]any{}
-	if _, ok := raw["title"]; ok {
+	if _, ok := args["title"]; ok {
 		body["title"] = a.Title
 	}
-	if _, ok := raw["kind"]; ok {
+	if _, ok := args["kind"]; ok {
 		body["kind"] = a.Kind
 	}
-	if _, ok := raw["notes_doc"]; ok {
+	if _, ok := args["notes_doc"]; ok {
 		body["notes_doc"] = a.NotesDoc
 	}
-	if _, ok := raw["notes_md"]; ok {
+	if _, ok := args["notes_md"]; ok {
 		body["notes_md"] = a.NotesMD
 	}
-	if _, ok := raw["notes_html"]; ok {
+	if _, ok := args["notes_html"]; ok {
 		body["notes_html"] = a.NotesHTML
 	}
-	if _, ok := raw["priority"]; ok {
+	if _, ok := args["priority"]; ok {
 		body["priority"] = a.Priority
 	}
-	if _, ok := raw["due_at"]; ok {
+	if _, ok := args["due_at"]; ok {
 		body["due_at"] = a.DueAt
 	}
-	if _, ok := raw["section"]; ok {
+	if _, ok := args["section"]; ok {
 		body["section"] = a.Section
 	}
-	if _, ok := raw["tags"]; ok {
+	if _, ok := args["tags"]; ok {
 		body["tags"] = a.Tags
 	}
-	if _, ok := raw["contexts"]; ok {
+	if _, ok := args["contexts"]; ok {
 		body["contexts"] = a.Contexts
 	}
-	if _, ok := raw["projects"]; ok {
+	if _, ok := args["projects"]; ok {
 		body["projects"] = a.Projects
 	}
-	if _, ok := raw["external_ref"]; ok {
+	if _, ok := args["external_ref"]; ok {
 		body["external_ref"] = a.ExternalRef
 	}
 
-	data, err := s.apiDo("PUT", fmt.Sprintf("/api/v1/items/%d", a.ID), body, a.VaultID)
+	data, err := c.do(ctx, "PUT", fmt.Sprintf("/api/v1/items/%d", a.ID), body, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolDeleteItem(args json.RawMessage) (string, error) {
+func (c *apiClient) toolDeleteItem(ctx context.Context, args map[string]any) (any, error) {
 	var a argsDeleteItem
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
-	if _, err := s.apiDo("DELETE", fmt.Sprintf("/api/v1/items/%d", a.ID), nil, a.VaultID); err != nil {
-		return "", err
+	if _, err := c.do(ctx, "DELETE", fmt.Sprintf("/api/v1/items/%d", a.ID), nil, a.VaultID); err != nil {
+		return nil, err
 	}
 	return fmt.Sprintf("Item %d deleted successfully", a.ID), nil
 }
 
-func (s *Server) toolToggleComplete(args json.RawMessage) (string, error) {
+func (c *apiClient) toolToggleComplete(ctx context.Context, args map[string]any) (any, error) {
 	var a argsToggleComplete
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
 	body := map[string]any{"completed": a.Completed}
-	data, err := s.apiDo("POST", fmt.Sprintf("/api/v1/items/%d/complete", a.ID), body, a.VaultID)
+	data, err := c.do(ctx, "POST", fmt.Sprintf("/api/v1/items/%d/complete", a.ID), body, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolArchive(args json.RawMessage) (string, error) {
+func (c *apiClient) toolArchive(ctx context.Context, args map[string]any) (any, error) {
 	var a argsArchive
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
 	body := map[string]any{"archived": a.Archived}
-	data, err := s.apiDo("POST", fmt.Sprintf("/api/v1/items/%d/archive", a.ID), body, a.VaultID)
+	data, err := c.do(ctx, "POST", fmt.Sprintf("/api/v1/items/%d/archive", a.ID), body, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolListInbox(args json.RawMessage) (string, error) {
+func (c *apiClient) toolListInbox(ctx context.Context, args map[string]any) (any, error) {
 	var a argsListInbox
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 
 	q := url.Values{}
@@ -525,17 +524,17 @@ func (s *Server) toolListInbox(args json.RawMessage) (string, error) {
 		path += "?" + q.Encode()
 	}
 
-	data, err := s.apiDo("GET", path, nil, "")
+	data, err := c.do(ctx, "GET", path, nil, "")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolCreateInbox(args json.RawMessage) (string, error) {
+func (c *apiClient) toolCreateInbox(ctx context.Context, args map[string]any) (any, error) {
 	var a argsCreateInbox
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 
 	body := map[string]any{}
@@ -570,37 +569,37 @@ func (s *Server) toolCreateInbox(args json.RawMessage) (string, error) {
 		body["projects"] = a.Projects
 	}
 
-	data, err := s.apiDo("POST", "/api/v1/inbox", body, "")
+	data, err := c.do(ctx, "POST", "/api/v1/inbox", body, "")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }
 
-func (s *Server) toolProcessInbox(args json.RawMessage) (string, error) {
+func (c *apiClient) toolProcessInbox(ctx context.Context, args map[string]any) (any, error) {
 	var a argsProcessInbox
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 	if a.ID == 0 {
-		return "", fmt.Errorf("id is required")
+		return nil, fmt.Errorf("id is required")
 	}
 
-	if _, err := s.apiDo("POST", fmt.Sprintf("/api/v1/inbox/%d/process", a.ID), map[string]any{}, ""); err != nil {
-		return "", err
+	if _, err := c.do(ctx, "POST", fmt.Sprintf("/api/v1/inbox/%d/process", a.ID), map[string]any{}, ""); err != nil {
+		return nil, err
 	}
 	return fmt.Sprintf("Inbox item %d processed successfully", a.ID), nil
 }
 
-func (s *Server) toolGetTaxonomy(args json.RawMessage) (string, error) {
+func (c *apiClient) toolGetTaxonomy(ctx context.Context, args map[string]any) (any, error) {
 	var a argsGetTaxonomy
-	if err := json.Unmarshal(args, &a); err != nil {
-		return "", fmt.Errorf("invalid arguments: %w", err)
+	if err := decodeArgs(args, &a); err != nil {
+		return nil, err
 	}
 
-	data, err := s.apiDo("GET", "/api/v1/taxonomy", nil, a.VaultID)
+	data, err := c.do(ctx, "GET", "/api/v1/taxonomy", nil, a.VaultID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return prettyJSON(data), nil
+	return decodeResult(data)
 }

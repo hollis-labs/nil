@@ -78,6 +78,18 @@ production bug — see `service/items/items.go`'s doc comment and the
 architecture doc §2.6), applied naturally to `nil-mcp` once the HTTP API
 existed as a stable target to proxy through.
 
+## Update (2026-09-18)
+
+`nil-mcp`'s wire transport moved from the hand-rolled JSON-RPC 2.0 implementation
+described above (`main.go` + `mcp.go`) onto `github.com/hollis-labs/go-mcp`, the
+portfolio's shared MCP library, per the portfolio-wide `go-mcp`/official-SDK
+consolidation (Torque `CW-20260917-0011`, tracked here as `CW-20260918-0016`). This
+decision's actual content — thin HTTP-proxying stdio server, zero direct DB
+dependency, `apiDo`/`X-API-Key`/`X-Agent-Source` on every request — is unchanged; only
+the file layout (`main.go`/`client.go`/`tools.go`/`tool_schemas.go`, no `mcp.go`) and
+how the MCP protocol itself is spoken changed. See the architecture doc's
+[§2.4](../architecture/ARCHITECTURE.md) for the current file split.
+
 ## References
 
 - [Architecture doc](../architecture/ARCHITECTURE.md) §2.4 "MCP stdio server", §2.6 "The shared layer — service/items.Service", §6 "MCP/chat surfaces", §7 "Security / trust boundaries"
