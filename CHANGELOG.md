@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Open-source project documents: `CONTRIBUTING.md` and `SECURITY.md`.
+
+### Changed
+- `cmd/nil-mcp` adopts the shared `go-mcp` library.
+- README rewritten as a pre-release identity and stack-fit document.
+- LICENSE copyright line standardized to `Chrispian Burks / Hollis Labs`.
+
+### Removed
+- `CLAUDE.md` (agent guidance lives in `AGENTS.md`).
+
 ## [1.3.0] — 2026-04
 
 ### Changed
