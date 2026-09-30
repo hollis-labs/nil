@@ -15,9 +15,9 @@ current commit; they will drift as the code changes — treat them as "look here
 not as permanently pinned coordinates.
 
 For narrative orientation ("why does this exist," domain vocabulary) see
-[`AGENTS.md`](../../AGENTS.md). For code-level conventions (how to add a Wails method,
-how to add a migration) see [`CLAUDE.md`](../../CLAUDE.md). This document is the system
-model those two lean on.
+[`AGENTS.md`](../../AGENTS.md), which also carries the code-level conventions (how to
+add a Wails method, how to add a migration). This document is the system model it
+leans on.
 
 ---
 

@@ -73,7 +73,7 @@ together.
   DB level — that's left to application logic.
 - The table name itself (`todos`) is now permanently misleading, since it
   holds notes and other kinds too. Renaming it is explicitly deferred
-  (AGENTS.md, CLAUDE.md) — it would require a data migration with no
+  (AGENTS.md) — it would require a data migration with no
   user-visible benefit.
 
 ## Alternatives Considered

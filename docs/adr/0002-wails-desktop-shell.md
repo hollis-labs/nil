@@ -62,7 +62,7 @@ same-process IPC for its own calls. See
   not a build failure (architecture doc §3; `make codegen-check` exists
   specifically to close this gap).
 - The app inherits whatever WebView quirks the host OS ships. The
-  known wikilink-click-navigation bug (CLAUDE.md's Known Issues) is a
+  known wikilink-click-navigation bug (the Known Issues in docs/CONVENTIONS.md) is a
   direct consequence: WKWebView suppresses `click` events after
   ProseMirror's `mousedown` handling in a way that has resisted every
   attempted fix so far.
