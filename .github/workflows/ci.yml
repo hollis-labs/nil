@@ -1,0 +1,35 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 25
+    env:
+      GOWORK: 'off'
+      GOMAXPROCS: '4'
+      GOFLAGS: '-p=2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install pinned verification tools
+        run: |
+          python3 -c 'import subprocess; subprocess.run(["go", "install", "github.com/wailsapp/wails/v2/cmd/wails@v2.10.2"], timeout=360, check=True)'
+          python3 -c 'import subprocess; subprocess.run(["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"], timeout=360, check=True)'
+      - run: npm --prefix frontend ci
+      - name: Verify desktop, tests and binding drift
+        run: python3 -c 'import subprocess; subprocess.run(["make", "verify"], timeout=900, check=True)'
+      - name: Check backend races
+        run: go test -race -timeout 240s ./...
