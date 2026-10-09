@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hollis-labs/nil/cli"
 	"github.com/hollis-labs/nil/config"
@@ -24,13 +25,9 @@ var assets embed.FS
 
 func main() {
 	// Initialise OpenTelemetry (best-effort; non-fatal on failure).
-	otelCtx := context.Background()
-	otelShutdown, otelErr := feotel.Init(otelCtx, feotel.WithServiceName("nil"))
-	if otelErr != nil {
-		log.Printf("warning: OTel init failed: %v", otelErr)
-	} else {
-		defer otelShutdown(otelCtx)
-	}
+	defer feotel.InitOrWarn(context.Background(), log.Printf, 5*time.Second,
+		feotel.WithServiceName("nil"),
+	)()
 
 	// Intercept CLI subcommands before launching the Wails GUI.
 	// A bare word first argument (no leading "-") is treated as a subcommand.
