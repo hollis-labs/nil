@@ -29,6 +29,8 @@ jobs:
           python3 -c 'import subprocess; subprocess.run(["go", "install", "github.com/wailsapp/wails/v2/cmd/wails@v2.10.2"], timeout=360, check=True)'
           python3 -c 'import subprocess; subprocess.run(["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0"], timeout=360, check=True)'
       - run: npm --prefix frontend ci
+      - name: Bootstrap embedded frontend for fresh clones
+        run: python3 -c 'import subprocess; subprocess.run(["make", "frontend-build"], timeout=300, check=True)'
       - name: Verify desktop, tests and binding drift
         run: python3 -c 'import subprocess; subprocess.run(["make", "verify"], timeout=900, check=True)'
       - name: Check backend races
