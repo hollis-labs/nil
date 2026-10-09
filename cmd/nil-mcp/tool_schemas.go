@@ -6,7 +6,7 @@ package main
 // live in tools.go, and the HTTP client they call through lives in client.go.
 
 import (
-	gomcp "github.com/hollis-labs/go-mcp/server"
+	gomcp "github.com/hollis-labs/libs/plugin-mcp/go-mcp/server"
 )
 
 // toolHints is the explicit, hand-reviewed MCP tool-annotation set for every
