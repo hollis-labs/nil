@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	feotel "github.com/hollis-labs/libs/util/otel"
+	feotel "github.com/hollis-labs/libs/core/util/otel"
 )
 
 // ErrInvalidUpdatedSince is returned (wrapped, via fmt.Errorf's %w) by Search
