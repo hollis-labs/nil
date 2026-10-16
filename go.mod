@@ -5,8 +5,8 @@ go 1.26.8
 toolchain go1.26.9
 
 require (
-	github.com/hollis-labs/libs/plugin-mcp v0.1.1
-	github.com/hollis-labs/libs/util v0.2.1
+	github.com/hollis-labs/libs/core/util v0.4.0
+	github.com/hollis-labs/libs/mcp/plugin-mcp v0.3.0
 	github.com/wailsapp/wails/v2 v2.10.2
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/net v0.60.0

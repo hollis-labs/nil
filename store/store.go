@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	feotel "github.com/hollis-labs/libs/util/otel"
+	feotel "github.com/hollis-labs/libs/core/util/otel"
 	"github.com/hollis-labs/nil/ingest"
 	_ "modernc.org/sqlite"
 )
