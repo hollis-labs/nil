@@ -59,6 +59,7 @@ func main() {
 		},
 		// BackgroundColour: &options.RGBA{R: 31, G: 41, B: 55, A: 255},
 		BackgroundColour: &options.RGBA{R: 0, G: 0, B: 0, A: 255},
+		Menu:             app.captureMenu(),
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{

@@ -10,6 +10,10 @@ export function Archive(arg1, arg2) {
   return window['go']['main']['App']['Archive'](arg1, arg2);
 }
 
+export function CaptureEntryReady() {
+  return window['go']['main']['App']['CaptureEntryReady']();
+}
+
 export function CreateCaptureDraft() {
   return window['go']['main']['App']['CreateCaptureDraft']();
 }
@@ -76,6 +80,10 @@ export function GetCaptureAccounts() {
 
 export function GetCaptureContextEvidence(arg1) {
   return window['go']['main']['App']['GetCaptureContextEvidence'](arg1);
+}
+
+export function GetCaptureEntryStatus() {
+  return window['go']['main']['App']['GetCaptureEntryStatus']();
 }
 
 export function GetCaptureEvidence(arg1) {
@@ -228,6 +236,10 @@ export function SendChatMessage(arg1, arg2) {
 
 export function SetAPIEnabled(arg1) {
   return window['go']['main']['App']['SetAPIEnabled'](arg1);
+}
+
+export function SetCaptureShortcut(arg1) {
+  return window['go']['main']['App']['SetCaptureShortcut'](arg1);
 }
 
 export function SetChatConfig(arg1) {

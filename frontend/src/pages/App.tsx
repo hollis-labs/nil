@@ -26,6 +26,7 @@ import { ThemeProvider } from "@/theme/ThemeProvider";
 import { Plus, Search, Target } from "lucide-react";
 import { parseQuery } from "@/lib/query";
 import { getActiveSession, setActiveSession } from "@/lib/sessionContext";
+import { useCaptureEntry } from "@/hooks/useCaptureEntry";
 import { useInboxCount } from "@/hooks/useInboxCount";
 import { useVaultState } from "@/hooks/useVaultState";
 import { useSessionFilterState } from "@/hooks/useSessionFilterState";
@@ -43,7 +44,7 @@ function Inner() {
   const [query, setQuery] = React.useState("");
   const [notesOpen, setNotesOpen] = React.useState(false);
   const [notesItem, setNotesItem] = React.useState<any>(null);
-  const [captureOpen, setCaptureOpen] = React.useState(false);
+  const { open: captureOpen, setOpen: setCaptureOpen, focusRequest: captureFocus, error: captureEntryError } = useCaptureEntry();
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = React.useState<'general' | 'tabs' | 'data' | undefined>(undefined);
@@ -672,7 +673,8 @@ function Inner() {
             WebkitAppRegion: 'no-drag'
           } as any}>
         <button type="button" className="badge" onClick={() => setCaptureOpen(true)}>Capture Markdown</button>
-        <CapturePanel open={captureOpen} onClose={() => setCaptureOpen(false)} />
+        {captureEntryError && <p role="alert">{captureEntryError}</p>}
+        <CapturePanel open={captureOpen} focusRequest={captureFocus} onClose={() => setCaptureOpen(false)} />
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <SearchAutocomplete
