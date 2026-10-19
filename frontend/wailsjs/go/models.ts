@@ -1,3 +1,36 @@
+export namespace capture {
+	
+	export class Draft {
+	    captureID: string;
+	    schemaVersion: number;
+	    revision: number;
+	    markdown: string;
+	    contentHash: string;
+	    html: string;
+	    rendererVersion: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Draft(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.captureID = source["captureID"];
+	        this.schemaVersion = source["schemaVersion"];
+	        this.revision = source["revision"];
+	        this.markdown = source["markdown"];
+	        this.contentHash = source["contentHash"];
+	        this.html = source["html"];
+	        this.rendererVersion = source["rendererVersion"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+
+}
+
 export namespace chat {
 	
 	export class ActionProposal {
