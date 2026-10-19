@@ -124,6 +124,17 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       ref={panel}
       onKeyDown={(e) => {
         e.stopPropagation();
+        if (
+          e.key === "Escape" &&
+          !e.defaultPrevented &&
+          !e.nativeEvent.isComposing &&
+          e.keyCode !== 229 &&
+          !busy &&
+          !error
+        ) {
+          e.preventDefault();
+          onClose();
+        }
         if (e.key === "Tab") {
           const elements = panel.current?.querySelectorAll<HTMLElement>(
             "button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)",

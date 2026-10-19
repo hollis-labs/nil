@@ -20,12 +20,16 @@ const candidate = capture.Suggestion.createFrom({
 function setup(source = "") {
   const search = vi.fn().mockResolvedValue([candidate]);
   const submit = vi.fn();
+  const changes = vi.fn();
   function Controlled() {
     const [value, setValue] = useState(source);
     return (
       <MarkdownComposer
         value={value}
-        onChange={setValue}
+        onChange={(next) => {
+          changes(next);
+          setValue(next);
+        }}
         disabled={false}
         searchReferences={search}
         onSubmit={submit}
@@ -33,7 +37,12 @@ function setup(source = "") {
     );
   }
   render(<Controlled />);
-  return { editor: screen.getByLabelText<HTMLTextAreaElement>("Markdown"), search, submit };
+  return {
+    editor: screen.getByLabelText<HTMLTextAreaElement>("Markdown"),
+    search,
+    submit,
+    changes,
+  };
 }
 
 describe("Markdown source composer", () => {
@@ -53,6 +62,16 @@ describe("Markdown source composer", () => {
     expect(editor.value).toBe(
       "---\nunknown: yes\n---\n\n**hello** world\n<script>raw</script>\n| x | y |",
     );
+  });
+
+  it("preserves CRLF and unsupported source outside the edited selection", () => {
+    const { editor, changes } = setup("---\r\nunknown: yes\r\n---\r\n\r\nhello world");
+    const from = editor.value.indexOf("hello");
+    editor.setSelectionRange(from, from + 5);
+    fireEvent.click(screen.getByText("Bold"));
+    expect(changes).toHaveBeenLastCalledWith("---\r\nunknown: yes\r\n---\r\n\r\n**hello** world");
+    fireEvent.change(editor, { target: { value: editor.value + "!" } });
+    expect(changes).toHaveBeenLastCalledWith("---\r\nunknown: yes\r\n---\r\n\r\n**hello** world!");
   });
 
   it("keeps Enter/newline and IME input separate from submit", () => {
@@ -82,6 +101,53 @@ describe("Markdown source composer", () => {
     expect(editor.value).toBe("[Plan](nil://vault/vault-a/item/42?revision=r1) ");
     expect(submit).not.toHaveBeenCalled();
     await waitFor(() => expect(document.activeElement).toBe(editor));
+  });
+
+  it("locks conflicting source edits during link editing and restores focus on cancel", async () => {
+    const original = "before [plan](https://old.test) after";
+    const { editor, changes } = setup(original);
+    editor.setSelectionRange(12, 12);
+    fireEvent.click(screen.getByText("Edit link"));
+    expect(editor).toBeDisabled();
+    expect(screen.getByText("Bold")).toBeDisabled();
+    fireEvent.change(editor, { target: { value: `PREFIX ${original}` } });
+    fireEvent.paste(editor, { clipboardData: { getData: () => "PREFIX " } });
+    expect(changes).not.toHaveBeenCalled();
+    expect(editor.value).toBe(original);
+    fireEvent.click(screen.getByText("Cancel link"));
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    expect(editor).not.toBeDisabled();
+    expect(editor.value).toBe(original);
+  });
+
+  it.each([
+    "PREFIX before [plan](https://old.test) after",
+    "different draft content",
+  ])("refuses stale link offsets after external source change to %s", async (next) => {
+    const original = "before [plan](https://old.test) after";
+    const onChange = vi.fn(),
+      search = vi.fn().mockResolvedValue([]),
+      onSubmit = vi.fn();
+    const props = {
+      value: original,
+      onChange,
+      searchReferences: search,
+      onSubmit,
+      disabled: false,
+    };
+    const view = render(<MarkdownComposer {...props} />);
+    const editor = screen.getByLabelText<HTMLTextAreaElement>("Markdown");
+    editor.setSelectionRange(12, 12);
+    fireEvent.click(screen.getByText("Edit link"));
+    view.rerender(<MarkdownComposer {...props} value={next} />);
+    fireEvent.change(screen.getByLabelText("Link URL"), { target: { value: "https://new.test" } });
+    fireEvent.click(screen.getByText("Apply link"));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(editor.value).toBe(next);
+    expect(screen.getByRole("alert")).toHaveTextContent("Draft changed");
+    fireEvent.keyDown(screen.getByLabelText("Link URL"), { key: "Escape" });
+    await waitFor(() => expect(document.activeElement).toBe(editor));
+    expect(editor.value).toBe(next);
   });
 
   it("edits a supported inline link in place and rejects active URL schemes", () => {

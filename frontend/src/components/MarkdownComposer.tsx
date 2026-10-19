@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { capture } from "../../wailsjs/go/models";
+import { displaySource, reconcileInput, sourceOffset } from "../lib/markdownSource";
 
 type Props = {
   value: string;
@@ -30,11 +31,14 @@ export default function MarkdownComposer({
   const [suggestions, setSuggestions] = useState<capture.Suggestion[]>([]);
   const [active, setActive] = useState(0);
   const [searchError, setSearchError] = useState("");
+  const [searching, setSearching] = useState(false);
+  const editGeneration = useRef(0);
   const [link, setLink] = useState<{
     start: number;
     end: number;
     label: string;
     url: string;
+    source: string;
   } | null>(null);
   const [linkError, setLinkError] = useState("");
   const match = /(?:^|\s)@([^\s@]*)$/.exec(value.slice(0, cursor));
@@ -47,15 +51,25 @@ export default function MarkdownComposer({
     setSuggestions([]);
     setActive(0);
     setSearchError("");
-    if (!menuOpen || query === null) return;
+    if (!menuOpen || query === null) {
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
     let cancelled = false;
     const timer = setTimeout(() => {
       searchReferences(query)
         .then((items) => {
-          if (!cancelled) setSuggestions(items.slice(0, 8));
+          if (!cancelled) {
+            setSuggestions(items.slice(0, 8));
+            setSearching(false);
+          }
         })
         .catch(() => {
-          if (!cancelled) setSearchError("Suggestions unavailable; plain text is kept.");
+          if (!cancelled) {
+            setSearchError("Suggestions unavailable; plain text is kept.");
+            setSearching(false);
+          }
         });
     }, 120);
     return () => {
@@ -75,19 +89,25 @@ export default function MarkdownComposer({
     selectionStart = from + text.length,
     selectionEnd = selectionStart,
   ) {
-    onChange(value.slice(0, from) + text + value.slice(to));
+    const generation = ++editGeneration.current;
+    const nextSource = value.slice(0, from) + text + value.slice(to);
+    onChange(nextSource);
     setCursor(selectionEnd);
     requestAnimationFrame(() => {
+      if (generation !== editGeneration.current) return;
       input.current?.focus();
-      input.current?.setSelectionRange(selectionStart, selectionEnd);
+      input.current?.setSelectionRange(
+        displaySource(nextSource.slice(0, selectionStart)).length,
+        displaySource(nextSource.slice(0, selectionEnd)).length,
+      );
     });
   }
 
   function format(marker: string) {
     const el = input.current;
     if (!el) return;
-    const from = el.selectionStart,
-      to = el.selectionEnd;
+    const from = sourceOffset(value, el.selectionStart),
+      to = sourceOffset(value, el.selectionEnd);
     const selected = value.slice(from, to);
     replace(from, to, marker + selected + marker, from + marker.length, to + marker.length);
   }
@@ -95,8 +115,8 @@ export default function MarkdownComposer({
   function openLink() {
     const el = input.current;
     if (!el) return;
-    const from = el.selectionStart,
-      to = el.selectionEnd;
+    const from = sourceOffset(value, el.selectionStart),
+      to = sourceOffset(value, el.selectionEnd);
     // Edit a supported inline link in place. Other Markdown is never parsed and
     // reserialized, so unsupported/nested syntax stays intact in the source.
     const links = value.matchAll(/\[([^\]\n]*)\]\(([^\s)]*)\)/g);
@@ -108,17 +128,27 @@ export default function MarkdownComposer({
           end: offset + candidate[0].length,
           label: candidate[1] ?? "",
           url: candidate[2] ?? "",
+          source: value,
         });
         setLinkError("");
         return;
       }
     }
-    setLink({ start: from, end: to, label: value.slice(from, to), url: "https://" });
+    setLink({ start: from, end: to, label: value.slice(from, to), url: "https://", source: value });
     setLinkError("");
+  }
+
+  function closeLink() {
+    setLink(null);
+    requestAnimationFrame(() => input.current?.focus());
   }
 
   function applyLink() {
     if (!link) return;
+    if (value !== link.source) {
+      setLinkError("Draft changed while editing this link. Cancel and select it again.");
+      return;
+    }
     try {
       const url = new URL(link.url);
       if (
@@ -150,16 +180,16 @@ export default function MarkdownComposer({
   return (
     <div style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", gap: 8 }}>
       <div role="toolbar" aria-label="Markdown formatting" style={{ display: "flex", gap: 8 }}>
-        <button type="button" disabled={disabled} onClick={() => format("**")}>
+        <button type="button" disabled={disabled || !!link} onClick={() => format("**")}>
           Bold
         </button>
-        <button type="button" disabled={disabled} onClick={() => format("*")}>
+        <button type="button" disabled={disabled || !!link} onClick={() => format("*")}>
           Italic
         </button>
-        <button type="button" disabled={disabled} onClick={() => format("`")}>
+        <button type="button" disabled={disabled || !!link} onClick={() => format("`")}>
           Code
         </button>
-        <button type="button" disabled={disabled} onClick={openLink}>
+        <button type="button" disabled={disabled || !!link} onClick={openLink}>
           Edit link
         </button>
       </div>
@@ -167,24 +197,32 @@ export default function MarkdownComposer({
       <textarea
         id="capture-source"
         ref={input}
-        value={value}
-        disabled={disabled}
+        value={displaySource(value)}
+        disabled={disabled || !!link}
         aria-describedby="capture-editing-help"
         aria-controls={menuOpen ? "capture-mentions" : undefined}
         aria-activedescendant={
           menuOpen && suggestions[active] ? `capture-mention-${active}` : undefined
         }
-        onSelect={(e) => setCursor(e.currentTarget.selectionEnd)}
+        onSelect={(e) => setCursor(sourceOffset(value, e.currentTarget.selectionEnd))}
         onChange={(e) => {
-          setCursor(e.currentTarget.selectionEnd);
-          onChange(e.target.value);
+          if (disabled || link) return;
+          editGeneration.current++;
+          const next = reconcileInput(value, e.target.value);
+          setCursor(sourceOffset(next, e.currentTarget.selectionEnd));
+          onChange(next);
         }}
         onCompositionStart={() => setComposing(true)}
         onCompositionEnd={() => setComposing(false)}
         onPaste={(e) => {
           e.preventDefault();
+          if (disabled || link) return;
           const el = e.currentTarget;
-          replace(el.selectionStart, el.selectionEnd, e.clipboardData.getData("text/plain"));
+          replace(
+            sourceOffset(value, el.selectionStart),
+            sourceOffset(value, el.selectionEnd),
+            e.clipboardData.getData("text/plain"),
+          );
         }}
         onKeyDown={(e) => {
           if (composing || e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -256,12 +294,21 @@ export default function MarkdownComposer({
             {searchError ||
               (suggestions.length
                 ? "Enter/Tab selects a resource; Escape keeps literal text."
-                : "Searching local vault…")}
+                : searching
+                  ? "Searching local vault…"
+                  : "No local matches; plain text is kept.")}
           </p>
         </div>
       )}
       {link && (
-        <fieldset>
+        <fieldset
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              closeLink();
+            }
+          }}
+        >
           <legend>Edit Markdown link</legend>
           <label htmlFor="capture-link-label">Link label</label>
           <input
@@ -281,8 +328,7 @@ export default function MarkdownComposer({
           <button
             type="button"
             onClick={() => {
-              setLink(null);
-              input.current?.focus();
+              closeLink();
             }}
           >
             Cancel link
