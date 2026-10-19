@@ -10,6 +10,8 @@ All notable changes to this project will be documented in this file.
 - Open-source project documents: `CONTRIBUTING.md` and `SECURITY.md`.
 
 ### Changed
+- The macOS bundle identifier is now `com.chrispian.nil` (was `com.chrispian.planck`, left over from the old product name), so a stable code-signing identity and Keychain trust attach to the right name.
+- `make verify` builds the frontend before linting, so a clean checkout passes (the Go lint failed on the missing embedded `frontend/dist`).
 - Adopt published `libs/plugin-mcp` v0.1.1 and `libs/util` v0.2.0 for MCP and tracing, replacing archived standalone modules without local replacements.
 - Add finite macOS CI for the existing `make verify` desktop, frontend, backend and Wails binding-drift gate, with pinned verification tools and backend race checks.
 - `cmd/nil-mcp` adopts the shared `go-mcp` library.
