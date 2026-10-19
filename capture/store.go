@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
@@ -28,18 +29,20 @@ var ErrConflict = errors.New("draft changed; reload before saving")
 // Draft preserves the exact UTF-8 source. HTML is a disposable, safely escaped
 // source preview; neither the renderer nor a rich editor may replace Markdown.
 type Draft struct {
-	CaptureID       string      `json:"captureID"`
-	SchemaVersion   int         `json:"schemaVersion"`
-	Revision        int         `json:"revision"`
-	Markdown        string      `json:"markdown"`
-	ContentHash     string      `json:"contentHash"`
-	HTML            string      `json:"html"`
-	RendererVersion string      `json:"rendererVersion"`
-	CreatedAt       string      `json:"createdAt"`
-	UpdatedAt       string      `json:"updatedAt"`
-	QuickAdd        string      `json:"quickAdd"`
-	Fields          QuickFields `json:"fields"`
-	References      []Reference `json:"references"`
+	CaptureID       string        `json:"captureID"`
+	SchemaVersion   int           `json:"schemaVersion"`
+	Revision        int           `json:"revision"`
+	Markdown        string        `json:"markdown"`
+	ContentHash     string        `json:"contentHash"`
+	HTML            string        `json:"html"`
+	RendererVersion string        `json:"rendererVersion"`
+	CreatedAt       string        `json:"createdAt"`
+	UpdatedAt       string        `json:"updatedAt"`
+	QuickAdd        string        `json:"quickAdd"`
+	Fields          QuickFields   `json:"fields"`
+	References      []Reference   `json:"references"`
+	Snapshot        DraftSnapshot `json:"snapshot"`
+	LocalQueued     bool          `json:"localQueued"`
 }
 
 type Store struct{ db *sql.DB }
@@ -73,6 +76,10 @@ CREATE TABLE IF NOT EXISTS capture_drafts (
 		_ = db.Close()
 		return nil, err
 	}
+	if _, err = db.ExecContext(ctx, presetSchema); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &Store{db: db}, nil
 }
 
@@ -93,18 +100,46 @@ func project(d *Draft) {
 
 func (s *Store) Create(ctx context.Context) (Draft, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	d := Draft{CaptureID: uuid.NewString(), SchemaVersion: SchemaVersion, Revision: 1, CreatedAt: now, UpdatedAt: now}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Draft{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	snapshot, err := initialSnapshot(ctx, tx, now)
+	if err != nil {
+		return Draft{}, err
+	}
+	d := Draft{CaptureID: uuid.NewString(), SchemaVersion: SchemaVersion, Revision: 1, CreatedAt: now, UpdatedAt: now, Snapshot: snapshot}
+	if snapshot.Preset != nil {
+		d.QuickAdd = snapshot.Preset.QuickAdd
+	}
 	project(&d)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO capture_drafts VALUES (?,?,?,?,?,?,?,?,?)`, d.CaptureID, d.SchemaVersion, d.Revision, d.Markdown, d.ContentHash, d.HTML, d.RendererVersion, d.CreatedAt, d.UpdatedAt)
-	return d, err
+	_, err = tx.ExecContext(ctx, `INSERT INTO capture_drafts VALUES(?,?,?,?,?,?,?,?,?)`, d.CaptureID, d.SchemaVersion, d.Revision, d.Markdown, d.ContentHash, d.HTML, d.RendererVersion, d.CreatedAt, d.UpdatedAt)
+	if err != nil {
+		return d, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO capture_inputs(capture_id,quick_add) VALUES(?,?)`, d.CaptureID, d.QuickAdd)
+	if err != nil {
+		return d, err
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return d, err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO capture_snapshots(capture_id,snapshot_json) VALUES(?,?)`, d.CaptureID, string(data))
+	if err != nil {
+		return d, err
+	}
+	return d, tx.Commit()
 }
 
-const draftSelect = `SELECT d.*, COALESCE(i.quick_add, ''), COALESCE(i.schema_version,1) FROM capture_drafts d LEFT JOIN capture_inputs i ON i.capture_id=d.capture_id`
+const draftSelect = `SELECT d.*, COALESCE(i.quick_add, ''), COALESCE(i.schema_version,1),COALESCE(s.snapshot_json,''),q.capture_id IS NOT NULL FROM capture_drafts d LEFT JOIN capture_inputs i ON i.capture_id=d.capture_id LEFT JOIN capture_snapshots s ON s.capture_id=d.capture_id LEFT JOIN capture_local_queue q ON q.capture_id=d.capture_id`
 
 func scan(row interface{ Scan(...any) error }) (Draft, error) {
 	var d Draft
 	var inputVersion int
-	err := row.Scan(&d.CaptureID, &d.SchemaVersion, &d.Revision, &d.Markdown, &d.ContentHash, &d.HTML, &d.RendererVersion, &d.CreatedAt, &d.UpdatedAt, &d.QuickAdd, &inputVersion)
+	var snapshotJSON string
+	err := row.Scan(&d.CaptureID, &d.SchemaVersion, &d.Revision, &d.Markdown, &d.ContentHash, &d.HTML, &d.RendererVersion, &d.CreatedAt, &d.UpdatedAt, &d.QuickAdd, &inputVersion, &snapshotJSON, &d.LocalQueued)
 	if err != nil {
 		return d, err
 	}
@@ -113,6 +148,15 @@ func scan(row interface{ Scan(...any) error }) (Draft, error) {
 	}
 	if d.SchemaVersion != SchemaVersion {
 		return d, fmt.Errorf("unsupported capture schema %d", d.SchemaVersion)
+	}
+	d.Snapshot = DraftSnapshot{SchemaVersion: 1, AppliedBy: "none", ResolvedDefaults: ParseQuickAdd(""), Context: ContextSnapshot{State: "unavailable", ObservedAt: d.CreatedAt}}
+	if snapshotJSON != "" {
+		if err = json.Unmarshal([]byte(snapshotJSON), &d.Snapshot); err != nil {
+			return d, err
+		}
+		if d.Snapshot.SchemaVersion != 1 {
+			return d, fmt.Errorf("unsupported draft snapshot schema %d", d.Snapshot.SchemaVersion)
+		}
 	}
 	// Cache provenance is verified on every read. Rebuild without rewriting source.
 	project(&d)
@@ -161,7 +205,7 @@ func (s *Store) SaveContent(ctx context.Context, id string, revision int, markdo
 		return Draft{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	result, err := tx.ExecContext(ctx, `UPDATE capture_drafts SET markdown=?,content_hash=?,html=?,renderer_version=?,updated_at=?,revision=revision+1 WHERE capture_id=? AND revision=? AND schema_version=?`, markdown, d.ContentHash, d.HTML, d.RendererVersion, time.Now().UTC().Format(time.RFC3339Nano), id, revision, SchemaVersion)
+	result, err := tx.ExecContext(ctx, `UPDATE capture_drafts SET markdown=?,content_hash=?,html=?,renderer_version=?,updated_at=?,revision=revision+1 WHERE capture_id=? AND revision=? AND schema_version=? AND NOT EXISTS(SELECT 1 FROM capture_local_queue q WHERE q.capture_id=capture_drafts.capture_id)`, markdown, d.ContentHash, d.HTML, d.RendererVersion, time.Now().UTC().Format(time.RFC3339Nano), id, revision, SchemaVersion)
 	if err != nil {
 		return Draft{}, err
 	}

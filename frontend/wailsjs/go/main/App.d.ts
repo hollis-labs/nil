@@ -40,6 +40,8 @@ export function GetActiveVault():Promise<config.Vault>;
 
 export function GetBackrefs(arg1:number):Promise<Array<store.Item>>;
 
+export function GetCapturePresets():Promise<capture.PresetSelection>;
+
 export function GetChatConfig():Promise<config.ChatConfig>;
 
 export function GetChatHistory(arg1:number):Promise<Array<chat.ChatMessage>>;
@@ -72,6 +74,8 @@ export function NeedsSetup():Promise<boolean>;
 
 export function ProcessInboxItem(arg1:number,arg2:string):Promise<void>;
 
+export function QueueCaptureDraft(arg1:string,arg2:number):Promise<capture.Envelope>;
+
 export function RemoveDemoData():Promise<void>;
 
 export function RenameVault(arg1:string,arg2:string):Promise<void>;
@@ -82,6 +86,8 @@ export function SaveCaptureContent(arg1:string,arg2:number,arg3:string,arg4:stri
 
 export function SaveCaptureDraft(arg1:string,arg2:number,arg3:string):Promise<capture.Draft>;
 
+export function SaveCapturePreset(arg1:string,arg2:number,arg3:string,arg4:string):Promise<capture.Preset>;
+
 export function SaveChatTemplate(arg1:chat.Template):Promise<chat.Template>;
 
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
@@ -89,6 +95,8 @@ export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
 export function SearchCaptureReferences(arg1:string):Promise<Array<capture.Suggestion>>;
 
 export function SeedDemoData():Promise<void>;
+
+export function SelectCapturePreset(arg1:string):Promise<void>;
 
 export function SendChatMessage(arg1:number,arg2:string):Promise<chat.ChatResponse>;
 
