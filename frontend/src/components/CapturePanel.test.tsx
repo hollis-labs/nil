@@ -7,11 +7,16 @@ const backend = vi.hoisted(() => ({
   CreateCaptureDraft: vi.fn(),
   SaveCaptureContent: vi.fn(),
   SearchCaptureReferences: vi.fn(),
+  GetCapturePresets: vi.fn(),
+  SelectCapturePreset: vi.fn(),
+  SaveCapturePreset: vi.fn(),
+  QueueCaptureDraft: vi.fn(),
 }));
 vi.mock("../../wailsjs/go/main/App", () => backend);
 const draft = {
   captureID: "fixture-capture-0001",
   revision: 1,
+  quickAdd: "",
   markdown: "original",
   createdAt: "2026-10-19",
 };
@@ -20,6 +25,7 @@ describe("capture custody", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     backend.ListCaptureDrafts.mockResolvedValue([{ ...draft }]);
+    backend.GetCapturePresets.mockResolvedValue({ presets: [], selectedID: "" });
   });
 
   it.each([
@@ -45,6 +51,61 @@ describe("capture custody", () => {
     fireEvent.click(screen.getByText("Retry loading drafts"));
     await waitFor(() => expect(screen.getByLabelText("Markdown")).toHaveValue("original"));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("freezes a local queue operation and leaves its source available to copy", async () => {
+    backend.QueueCaptureDraft.mockResolvedValue({
+      schemaVersion: 1,
+      draft: { ...draft },
+      content: draft.markdown,
+      submittedAt: "2026-10-19",
+    });
+    render(<CapturePanel open onClose={() => {}} />);
+    const editor = await screen.findByDisplayValue("original");
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(backend.QueueCaptureDraft).toHaveBeenCalledWith(draft.captureID, 1));
+    await waitFor(() => expect(editor).toHaveAttribute("readonly"));
+    expect(editor).not.toBeDisabled();
+    expect(editor).toHaveValue("original");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Queued locally; not saved to Fragments Engine",
+    );
+    fireEvent.change(editor, { target: { value: "changed after queue" } });
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    expect(backend.QueueCaptureDraft).toHaveBeenCalledOnce();
+  });
+
+  it("reconciles lost local queue responses under the original identity", async () => {
+    backend.QueueCaptureDraft.mockRejectedValueOnce(new Error("response lost"));
+    backend.ListCaptureDrafts.mockResolvedValueOnce([{ ...draft }]).mockResolvedValueOnce([
+      { ...draft, localQueued: true },
+    ]);
+    render(<CapturePanel open onClose={() => {}} />);
+    const editor = await screen.findByDisplayValue("original");
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(editor).toHaveAttribute("readonly"));
+    expect(backend.QueueCaptureDraft).toHaveBeenCalledOnce();
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("changes future preset selection without rewriting an existing draft or removed tags", async () => {
+    const p1 = { id: "p1", revision: 1, name: "Work", quickAdd: "#removed @desk" };
+    const p2 = { id: "p2", revision: 3, name: "Home", quickAdd: "#home @home" };
+    backend.GetCapturePresets.mockResolvedValue({ presets: [p1, p2], selectedID: "p1" });
+    backend.SelectCapturePreset.mockResolvedValue(undefined);
+    backend.ListCaptureDrafts.mockResolvedValue([
+      { ...draft, quickAdd: "@desk", snapshot: { preset: p1, context: { state: "unavailable" } } },
+    ]);
+    render(<CapturePanel open onClose={() => {}} />);
+    await screen.findByDisplayValue("original");
+    await screen.findByText("Home · revision 3");
+    fireEvent.change(screen.getByLabelText("Preset for new drafts"), { target: { value: "p2" } });
+    await waitFor(() => expect(backend.SelectCapturePreset).toHaveBeenCalledWith("p2"));
+    expect(screen.getByLabelText("Quick Add title and defaults")).toHaveValue("@desk");
+    expect(screen.getByText(/Draft preset:/)).toHaveTextContent("Work · revision 1");
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
   });
 
   it("retains failed edits, prevents closing, and retries the same identity", async () => {
