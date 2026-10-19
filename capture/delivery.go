@@ -80,12 +80,15 @@ func (d *Delivery) Pair(ctx context.Context, origin, code string) (Account, erro
 	}
 	return a, nil
 }
-func (d *Delivery) Renew(ctx context.Context) (Account, error) {
+func (d *Delivery) Renew(ctx context.Context, expectedAccount ...string) (Account, error) {
 	d.management.Lock()
 	defer d.management.Unlock()
 	a, err := d.store.selectedAccount(ctx)
 	if err != nil {
 		return a, errors.New("select an existing Nil pairing before renewal")
+	}
+	if len(expectedAccount) > 0 && expectedAccount[0] != a.ID {
+		return Account{}, errors.New("selected Nil pairing changed; reload local setup before continuing")
 	}
 	c, err := d.client(a)
 	if err != nil {
@@ -107,13 +110,16 @@ type SetupEvidence struct {
 	ReadinessSupported bool                `json:"readinessSupported"`
 }
 
-func (d *Delivery) Evidence(ctx context.Context) (SetupEvidence, error) {
+func (d *Delivery) Evidence(ctx context.Context, expectedAccount ...string) (SetupEvidence, error) {
 	var result SetupEvidence
 	a, err := d.store.selectedAccount(ctx)
 	if err != nil {
 		return result, errors.New("pair Nil independently with Basalisk's Capture app profile")
 	}
 	result.Account = a
+	if len(expectedAccount) > 0 && expectedAccount[0] != a.ID {
+		return result, errors.New("selected Nil pairing changed; reload local setup before continuing")
+	}
 	c, err := d.client(a)
 	if err != nil {
 		return result, err
@@ -318,7 +324,7 @@ func validateStatus(w Wire, s broker.Status) error {
 // Run serializes send/status/recovery across processes with a bounded lease.
 // A stop after ambiguous acceptance first reconciles/replays the ORIGINAL bytes;
 // a stop404 is never treated as an initial-submission cancellation tombstone.
-func (d *Delivery) Run(ctx context.Context, id, action string, acknowledgeMayHaveSent bool) (broker.Status, error) {
+func (d *Delivery) Run(ctx context.Context, id, action string, acknowledgeMayHaveSent bool, expectedAccount ...string) (broker.Status, error) {
 	if !broker.ValidID(id) || !slices.Contains([]string{"send", "refresh", "retry", "stop"}, action) {
 		return broker.Status{}, errors.New("invalid capture delivery action")
 	}
@@ -334,6 +340,12 @@ func (d *Delivery) Run(ctx context.Context, id, action string, acknowledgeMayHav
 		d.store.release(cleanup, id, holder)
 	}()
 	if action == "stop" {
+		if len(expectedAccount) > 0 && expectedAccount[0] != "" {
+			selected, selectionErr := d.store.selectedAccount(ctx)
+			if selectionErr != nil || selected.ID != expectedAccount[0] {
+				return broker.Status{}, errors.New("selected Nil pairing changed; reload local setup before continuing")
+			}
+		}
 		stopped, stopErr := d.store.stopUnattempted(ctx, id, holder)
 		if stopErr != nil {
 			return broker.Status{}, stopErr
@@ -345,6 +357,9 @@ func (d *Delivery) Run(ctx context.Context, id, action string, acknowledgeMayHav
 	a, err := d.store.selectedAccount(ctx)
 	if err != nil {
 		return broker.Status{}, errors.New("pair/select Nil in Basalisk before delivery")
+	}
+	if len(expectedAccount) > 0 && expectedAccount[0] != a.ID {
+		return broker.Status{}, errors.New("selected Nil pairing changed; reload local setup before continuing")
 	}
 	c, err := d.client(a)
 	if err != nil {
@@ -405,10 +420,13 @@ func (d *Delivery) Run(ctx context.Context, id, action string, acknowledgeMayHav
 	return status, nil
 }
 
-func (d *Delivery) RemotePage(ctx context.Context, before int64) (broker.StatusPage, error) {
+func (d *Delivery) RemotePage(ctx context.Context, before int64, expectedAccount ...string) (broker.StatusPage, error) {
 	a, err := d.store.selectedAccount(ctx)
 	if err != nil {
 		return broker.StatusPage{}, errors.New("select the original Nil pairing")
+	}
+	if len(expectedAccount) > 0 && expectedAccount[0] != a.ID {
+		return broker.StatusPage{}, errors.New("selected Nil pairing changed; reload local setup before continuing")
 	}
 	c, err := d.client(a)
 	if err != nil {

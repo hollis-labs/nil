@@ -391,3 +391,22 @@ func TestPairingCustodyNeverPersistsOrReturnsBearer(t *testing.T) {
 		t.Fatal("renew rotated identity/token")
 	}
 }
+
+func TestExpectedPairingIdentityRejectsStaleRenderer(t *testing.T) {
+	ctx, _, d, f, draft, _ := fixtureDelivery(t)
+	if _, err := d.Run(ctx, draft.CaptureID, "send", false, "stale-renderer-account"); err == nil {
+		t.Fatal("stale setup sent using another native identity")
+	}
+	if _, err := d.Evidence(ctx, "stale-renderer-account"); err == nil {
+		t.Fatal("stale evidence identity accepted")
+	}
+	if _, err := d.Renew(ctx, "stale-renderer-account"); err == nil {
+		t.Fatal("stale renew identity accepted")
+	}
+	if _, err := d.RemotePage(ctx, 0, "stale-renderer-account"); err == nil {
+		t.Fatal("stale receipt identity accepted")
+	}
+	if len(f.posts) != 0 {
+		t.Fatal("identity mismatch sent content")
+	}
+}

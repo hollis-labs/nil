@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Backend from "../../wailsjs/go/main/App";
 import type { broker, capture } from "../../wailsjs/go/models";
+import CaptureReadiness, { type EvidenceObservation } from "./CaptureReadiness";
 
 export const deliveryStorage = {
   accounts: () => Backend.GetCaptureAccounts(),
   list: () => Backend.ListCaptureDeliveries(),
   select: (id: string) => Backend.SelectCaptureAccount(id),
   pair: (origin: string, code: string) => Backend.PairCaptureBroker(origin, code),
-  renew: () => Backend.RenewCaptureAccount(),
-  evidence: () => Backend.GetCaptureEvidence(),
-  run: (id: string, action: string, ack: boolean) => Backend.RunCaptureDelivery(id, action, ack),
-  remote: (before: number) => Backend.ListRemoteCaptureStatuses(before),
+  renew: (accountID: string) => Backend.RenewCaptureAccount(accountID),
+  evidence: (accountID: string) => Backend.GetCaptureEvidence(accountID),
+  run: (id: string, action: string, ack: boolean, accountID: string) =>
+    Backend.RunCaptureDelivery(id, action, ack, accountID),
+  remote: (before: number, accountID: string) =>
+    Backend.ListRemoteCaptureStatuses(before, accountID),
 };
 
 export function receiptLabel(s: broker.Status): string {
@@ -36,19 +39,23 @@ export default function CaptureDelivery() {
   const [origin, setOrigin] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
+  const [busy, setBusy] = useState(true);
+  const locked = useRef(true);
   const [poll, setPoll] = useState(false);
   const [ack, setAck] = useState<Record<string, boolean>>({});
-  const [evidence, setEvidence] = useState<capture.SetupEvidence | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceObservation | null>(null);
   const [remote, setRemote] = useState<broker.Status[]>([]);
   const [cursor, setCursor] = useState(0);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
+  const loadGeneration = useRef(0);
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     const [selection, deliveries] = await Promise.all([
       deliveryStorage.accounts(),
       deliveryStorage.list(),
     ]);
+    if (generation !== loadGeneration.current) return;
+    setEvidence((old) => (old?.value.account.id === selection.selectedID ? old : null));
     setAccounts(selection);
     setItems(deliveries);
   }, []);
@@ -61,11 +68,13 @@ export default function CaptureDelivery() {
       try {
         await work();
       } catch (e) {
+        setEvidence((old) => (old ? { ...old, refreshFailed: true } : null));
         setError(String(e));
       } finally {
         try {
           await load();
         } catch (e) {
+          setEvidence((old) => (old ? { ...old, refreshFailed: true } : null));
           setError(String(e));
         }
         locked.current = false;
@@ -75,7 +84,21 @@ export default function CaptureDelivery() {
     [load],
   );
   useEffect(() => {
-    void load().catch((e) => setError(String(e)));
+    let active = true;
+    void load()
+      .catch((e) => {
+        if (active) setError(String(e));
+      })
+      .finally(() => {
+        if (active) {
+          locked.current = false;
+          setBusy(false);
+        }
+      });
+    return () => {
+      active = false;
+      ++loadGeneration.current;
+    };
   }, [load]);
   useEffect(() => {
     if (!poll) return;
@@ -87,7 +110,7 @@ export default function CaptureDelivery() {
             item.accountID === accounts?.selectedID &&
             ["queued", "needs_attention"].includes(item.state)
           ) {
-            await deliveryStorage.run(item.captureID, "refresh", false);
+            await deliveryStorage.run(item.captureID, "refresh", false, accounts?.selectedID ?? "");
           }
         }
       });
@@ -172,7 +195,7 @@ export default function CaptureDelivery() {
       <button
         type="button"
         disabled={busy || !selected}
-        onClick={() => void operate(() => deliveryStorage.renew())}
+        onClick={() => void operate(() => deliveryStorage.renew(accounts?.selectedID ?? ""))}
       >
         Renew selected pairing
       </button>
@@ -180,52 +203,29 @@ export default function CaptureDelivery() {
         type="button"
         disabled={busy || !selected}
         onClick={() => {
-          setEvidence(null);
-          void operate(async () => setEvidence(await deliveryStorage.evidence()));
+          const accountID = accounts?.selectedID ?? "";
+          void operate(async () => {
+            try {
+              const value = await deliveryStorage.evidence(accountID);
+              setEvidence({
+                value,
+                receivedAt: performance.now(),
+                receivedWall: Date.now(),
+                refreshFailed: false,
+              });
+            } catch (e) {
+              setEvidence((old) =>
+                old?.value.account.id === accountID ? { ...old, refreshFailed: true } : null,
+              );
+              throw e;
+            }
+          });
         }}
       >
         Read setup evidence
       </button>
-      {evidence && (
-        <div role="status">
-          <p>
-            Recorded evidence at {evidence.readiness.generatedAt || "request time"}; valid for{" "}
-            {evidence.readiness.validForSeconds || 0} seconds. This does not test upstream
-            reachability or routing/enrichment completion.
-          </p>
-          <p>
-            Metadata v1:{" "}
-            {evidence.capabilities.captureMetadataVersions?.includes(1)
-              ? "supported"
-              : "server update required"}
-            . Context: {evidence.capabilities.captureContext.allowed ? "allowed" : "unavailable"}.
-            Recovery v1:{" "}
-            {evidence.capabilities.captureRecovery.version === 1
-              ? "supported"
-              : "server update required"}
-            .
-          </p>
-          {evidence.readinessSupported ? (
-            evidence.readiness.apps.map((app) => (
-              <p key={app.deviceID}>
-                Permission {app.authorization}; binding {app.connection.state}; worker{" "}
-                {app.worker.state} observed {app.worker.observedAt}. Queue {app.queue.queued},
-                attention {app.queue.needsAttention}, recorded saved {app.queue.saved}.
-                {app.lastConfirmed && (
-                  <span>
-                    {" "}
-                    Historical FE receipt {app.lastConfirmed.captureID}: fragment{" "}
-                    {app.lastConfirmed.fragmentID || "unavailable"}, revision{" "}
-                    {app.lastConfirmed.fragmentRevisionID || "unavailable"}, recorded{" "}
-                    {app.lastConfirmed.updatedAt}.
-                  </span>
-                )}
-              </p>
-            ))
-          ) : (
-            <p>Readiness evidence requires a server update.</p>
-          )}
-        </div>
+      {evidence && evidence.value.account.id === accounts?.selectedID && (
+        <CaptureReadiness observation={evidence} />
       )}
       <label>
         <input
@@ -294,7 +294,12 @@ export default function CaptureDelivery() {
                   }
                   onClick={() =>
                     void operate(() =>
-                      deliveryStorage.run(item.captureID, action, ack[item.captureID] ?? false),
+                      deliveryStorage.run(
+                        item.captureID,
+                        action,
+                        ack[item.captureID] ?? false,
+                        accounts?.selectedID ?? "",
+                      ),
                     )
                   }
                 >
@@ -316,7 +321,7 @@ export default function CaptureDelivery() {
         disabled={busy || !selected || (remoteLoaded && cursor === 0)}
         onClick={() =>
           void operate(async () => {
-            const page = await deliveryStorage.remote(cursor);
+            const page = await deliveryStorage.remote(cursor, accounts?.selectedID ?? "");
             setRemote((old) => [...old, ...page.items]);
             setCursor(page.nextBefore);
             setRemoteLoaded(true);

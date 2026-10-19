@@ -140,17 +140,17 @@ func (a *App) SelectCaptureAccount(id string) error {
 	}
 	return a.captureStore.SelectAccount(a.ctx, id)
 }
-func (a *App) RenewCaptureAccount() (capture.Account, error) {
+func (a *App) RenewCaptureAccount(expectedAccountID string) (capture.Account, error) {
 	if err := a.deliveryReady(); err != nil {
 		return capture.Account{}, err
 	}
-	return a.captureDelivery.Renew(a.ctx)
+	return a.captureDelivery.Renew(a.ctx, expectedAccountID)
 }
-func (a *App) GetCaptureEvidence() (capture.SetupEvidence, error) {
+func (a *App) GetCaptureEvidence(expectedAccountID string) (capture.SetupEvidence, error) {
 	if err := a.deliveryReady(); err != nil {
 		return capture.SetupEvidence{}, err
 	}
-	return a.captureDelivery.Evidence(a.ctx)
+	return a.captureDelivery.Evidence(a.ctx, expectedAccountID)
 }
 func (a *App) ListCaptureDeliveries() ([]capture.DeliveryView, error) {
 	if err := a.captureReady(); err != nil {
@@ -158,17 +158,17 @@ func (a *App) ListCaptureDeliveries() ([]capture.DeliveryView, error) {
 	}
 	return a.captureStore.DeliveryViews(a.ctx)
 }
-func (a *App) RunCaptureDelivery(id, action string, acknowledgeMayHaveSent bool) (broker.Status, error) {
+func (a *App) RunCaptureDelivery(id, action string, acknowledgeMayHaveSent bool, expectedAccountID string) (broker.Status, error) {
 	if err := a.deliveryReady(); err != nil {
 		return broker.Status{}, err
 	}
-	return a.captureDelivery.Run(a.ctx, id, action, acknowledgeMayHaveSent)
+	return a.captureDelivery.Run(a.ctx, id, action, acknowledgeMayHaveSent, expectedAccountID)
 }
-func (a *App) ListRemoteCaptureStatuses(before int64) (broker.StatusPage, error) {
+func (a *App) ListRemoteCaptureStatuses(before int64, expectedAccountID string) (broker.StatusPage, error) {
 	if err := a.deliveryReady(); err != nil {
 		return broker.StatusPage{}, err
 	}
-	return a.captureDelivery.RemotePage(a.ctx, before)
+	return a.captureDelivery.RemotePage(a.ctx, before, expectedAccountID)
 }
 func (a *App) deliveryReady() error {
 	if err := a.captureReady(); err != nil {

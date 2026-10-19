@@ -45,7 +45,7 @@ export function GetCaptureAccounts():Promise<capture.AccountSelection>;
 
 export function GetCaptureContextEvidence(arg1:string):Promise<capture.ContextEvidence>;
 
-export function GetCaptureEvidence():Promise<capture.SetupEvidence>;
+export function GetCaptureEvidence(arg1:string):Promise<capture.SetupEvidence>;
 
 export function GetCapturePresets():Promise<capture.PresetSelection>;
 
@@ -79,7 +79,7 @@ export function ListChatTemplates():Promise<Array<chat.Template>>;
 
 export function ListKinds():Promise<Array<store.Kind>>;
 
-export function ListRemoteCaptureStatuses(arg1:number):Promise<broker.StatusPage>;
+export function ListRemoteCaptureStatuses(arg1:number,arg2:string):Promise<broker.StatusPage>;
 
 export function NeedsSetup():Promise<boolean>;
 
@@ -93,11 +93,11 @@ export function RemoveDemoData():Promise<void>;
 
 export function RenameVault(arg1:string,arg2:string):Promise<void>;
 
-export function RenewCaptureAccount():Promise<capture.Account>;
+export function RenewCaptureAccount(arg1:string):Promise<capture.Account>;
 
 export function Restart():Promise<void>;
 
-export function RunCaptureDelivery(arg1:string,arg2:string,arg3:boolean):Promise<broker.Status>;
+export function RunCaptureDelivery(arg1:string,arg2:string,arg3:boolean,arg4:string):Promise<broker.Status>;
 
 export function SaveCaptureContent(arg1:string,arg2:number,arg3:string,arg4:string):Promise<capture.Draft>;
 

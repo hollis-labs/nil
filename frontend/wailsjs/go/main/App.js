@@ -78,8 +78,8 @@ export function GetCaptureContextEvidence(arg1) {
   return window['go']['main']['App']['GetCaptureContextEvidence'](arg1);
 }
 
-export function GetCaptureEvidence() {
-  return window['go']['main']['App']['GetCaptureEvidence']();
+export function GetCaptureEvidence(arg1) {
+  return window['go']['main']['App']['GetCaptureEvidence'](arg1);
 }
 
 export function GetCapturePresets() {
@@ -146,8 +146,8 @@ export function ListKinds() {
   return window['go']['main']['App']['ListKinds']();
 }
 
-export function ListRemoteCaptureStatuses(arg1) {
-  return window['go']['main']['App']['ListRemoteCaptureStatuses'](arg1);
+export function ListRemoteCaptureStatuses(arg1, arg2) {
+  return window['go']['main']['App']['ListRemoteCaptureStatuses'](arg1, arg2);
 }
 
 export function NeedsSetup() {
@@ -174,16 +174,16 @@ export function RenameVault(arg1, arg2) {
   return window['go']['main']['App']['RenameVault'](arg1, arg2);
 }
 
-export function RenewCaptureAccount() {
-  return window['go']['main']['App']['RenewCaptureAccount']();
+export function RenewCaptureAccount(arg1) {
+  return window['go']['main']['App']['RenewCaptureAccount'](arg1);
 }
 
 export function Restart() {
   return window['go']['main']['App']['Restart']();
 }
 
-export function RunCaptureDelivery(arg1, arg2, arg3) {
-  return window['go']['main']['App']['RunCaptureDelivery'](arg1, arg2, arg3);
+export function RunCaptureDelivery(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunCaptureDelivery'](arg1, arg2, arg3, arg4);
 }
 
 export function SaveCaptureContent(arg1, arg2, arg3, arg4) {
