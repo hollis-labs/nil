@@ -5,6 +5,7 @@ import {capture} from '../models';
 import {store} from '../models';
 import {config} from '../models';
 import {main} from '../models';
+import {broker} from '../models';
 
 export function ApproveChatAction(arg1:number):Promise<chat.ActionResult>;
 
@@ -40,6 +41,10 @@ export function GetActiveVault():Promise<config.Vault>;
 
 export function GetBackrefs(arg1:number):Promise<Array<store.Item>>;
 
+export function GetCaptureAccounts():Promise<capture.AccountSelection>;
+
+export function GetCaptureEvidence():Promise<capture.SetupEvidence>;
+
 export function GetCapturePresets():Promise<capture.PresetSelection>;
 
 export function GetChatConfig():Promise<config.ChatConfig>;
@@ -64,13 +69,19 @@ export function HasDemoData():Promise<boolean>;
 
 export function ImportTodoTxt(arg1:string):Promise<void>;
 
+export function ListCaptureDeliveries():Promise<Array<capture.DeliveryView>>;
+
 export function ListCaptureDrafts():Promise<Array<capture.Draft>>;
 
 export function ListChatTemplates():Promise<Array<chat.Template>>;
 
 export function ListKinds():Promise<Array<store.Kind>>;
 
+export function ListRemoteCaptureStatuses(arg1:number):Promise<broker.StatusPage>;
+
 export function NeedsSetup():Promise<boolean>;
+
+export function PairCaptureBroker(arg1:string,arg2:string):Promise<capture.Account>;
 
 export function ProcessInboxItem(arg1:number,arg2:string):Promise<void>;
 
@@ -80,7 +91,11 @@ export function RemoveDemoData():Promise<void>;
 
 export function RenameVault(arg1:string,arg2:string):Promise<void>;
 
+export function RenewCaptureAccount():Promise<capture.Account>;
+
 export function Restart():Promise<void>;
+
+export function RunCaptureDelivery(arg1:string,arg2:string,arg3:boolean):Promise<broker.Status>;
 
 export function SaveCaptureContent(arg1:string,arg2:number,arg3:string,arg4:string):Promise<capture.Draft>;
 
@@ -95,6 +110,8 @@ export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
 export function SearchCaptureReferences(arg1:string):Promise<Array<capture.Suggestion>>;
 
 export function SeedDemoData():Promise<void>;
+
+export function SelectCaptureAccount(arg1:string):Promise<void>;
 
 export function SelectCapturePreset(arg1:string):Promise<void>;
 

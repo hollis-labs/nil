@@ -22,13 +22,16 @@ import (
 var svc = items.New()
 
 type App struct {
-	captureStore *capture.Store
-	captureErr   error
-	ctx          context.Context
-	vaultMgr     *vault.Manager
-	needsSetup   bool
-	apiServer    *http.Server
-	apiMu        sync.Mutex
+	captureDelivery *capture.Delivery
+	captureCancel   context.CancelFunc
+	captureWorkers  sync.WaitGroup
+	captureStore    *capture.Store
+	captureErr      error
+	ctx             context.Context
+	vaultMgr        *vault.Manager
+	needsSetup      bool
+	apiServer       *http.Server
+	apiMu           sync.Mutex
 
 	// Chat addon (F5)
 	chatStore       *chat.ChatStore
@@ -43,7 +46,7 @@ func NewApp() *App {
 }
 
 func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
+	a.ctx, a.captureCancel = context.WithCancel(ctx)
 
 	// Load config (with migration and auto-defaults)
 	cfg := config.LoadOrDefault()
@@ -54,6 +57,9 @@ func (a *App) startup(ctx context.Context) {
 	}
 
 	a.captureStore, a.captureErr = capture.Open(ctx, config.GetConfigDir())
+	if a.captureErr == nil {
+		a.captureDelivery, a.captureErr = capture.NewDelivery(ctx, a.captureStore, capture.NewNativeCustody(), nil)
+	}
 
 	// Initialize vault manager (opens active vault + shared inbox)
 	vm, err := vault.NewManager(ctx, cfg)
@@ -81,6 +87,10 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(ctx context.Context) {
 	a.stopAPIServer()
+	if a.captureCancel != nil {
+		a.captureCancel()
+	}
+	a.captureWorkers.Wait()
 	if a.captureStore != nil {
 		_ = a.captureStore.Close()
 	}

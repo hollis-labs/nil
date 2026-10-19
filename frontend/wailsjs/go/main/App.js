@@ -70,6 +70,14 @@ export function GetBackrefs(arg1) {
   return window['go']['main']['App']['GetBackrefs'](arg1);
 }
 
+export function GetCaptureAccounts() {
+  return window['go']['main']['App']['GetCaptureAccounts']();
+}
+
+export function GetCaptureEvidence() {
+  return window['go']['main']['App']['GetCaptureEvidence']();
+}
+
 export function GetCapturePresets() {
   return window['go']['main']['App']['GetCapturePresets']();
 }
@@ -118,6 +126,10 @@ export function ImportTodoTxt(arg1) {
   return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
 
+export function ListCaptureDeliveries() {
+  return window['go']['main']['App']['ListCaptureDeliveries']();
+}
+
 export function ListCaptureDrafts() {
   return window['go']['main']['App']['ListCaptureDrafts']();
 }
@@ -130,8 +142,16 @@ export function ListKinds() {
   return window['go']['main']['App']['ListKinds']();
 }
 
+export function ListRemoteCaptureStatuses(arg1) {
+  return window['go']['main']['App']['ListRemoteCaptureStatuses'](arg1);
+}
+
 export function NeedsSetup() {
   return window['go']['main']['App']['NeedsSetup']();
+}
+
+export function PairCaptureBroker(arg1, arg2) {
+  return window['go']['main']['App']['PairCaptureBroker'](arg1, arg2);
 }
 
 export function ProcessInboxItem(arg1, arg2) {
@@ -150,8 +170,16 @@ export function RenameVault(arg1, arg2) {
   return window['go']['main']['App']['RenameVault'](arg1, arg2);
 }
 
+export function RenewCaptureAccount() {
+  return window['go']['main']['App']['RenewCaptureAccount']();
+}
+
 export function Restart() {
   return window['go']['main']['App']['Restart']();
+}
+
+export function RunCaptureDelivery(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RunCaptureDelivery'](arg1, arg2, arg3);
 }
 
 export function SaveCaptureContent(arg1, arg2, arg3, arg4) {
@@ -180,6 +208,10 @@ export function SearchCaptureReferences(arg1) {
 
 export function SeedDemoData() {
   return window['go']['main']['App']['SeedDemoData']();
+}
+
+export function SelectCaptureAccount(arg1) {
+  return window['go']['main']['App']['SelectCaptureAccount'](arg1);
 }
 
 export function SelectCapturePreset(arg1) {

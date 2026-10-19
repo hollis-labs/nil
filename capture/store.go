@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS capture_drafts (
 		_ = db.Close()
 		return nil, err
 	}
-	if _, err = db.ExecContext(ctx, presetSchema); err != nil {
+	if _, err = db.ExecContext(ctx, presetSchema+deliverySchema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
