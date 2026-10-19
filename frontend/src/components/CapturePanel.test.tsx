@@ -5,7 +5,8 @@ import CapturePanel from "./CapturePanel";
 const backend = vi.hoisted(() => ({
   ListCaptureDrafts: vi.fn(),
   CreateCaptureDraft: vi.fn(),
-  SaveCaptureDraft: vi.fn(),
+  SaveCaptureContent: vi.fn(),
+  SearchCaptureReferences: vi.fn(),
 }));
 vi.mock("../../wailsjs/go/main/App", () => backend);
 const draft = {
@@ -48,21 +49,20 @@ describe("capture custody", () => {
 
   it("retains failed edits, prevents closing, and retries the same identity", async () => {
     const onClose = vi.fn();
-    backend.SaveCaptureDraft.mockRejectedValueOnce(
+    backend.SaveCaptureContent.mockRejectedValueOnce(
       new Error("disk unavailable"),
     ).mockResolvedValueOnce({ ...draft, revision: 2, markdown: "unsaved" });
     render(<CapturePanel open onClose={onClose} />);
-    const editor = await screen.findByLabelText("Markdown");
-    await waitFor(() => expect(editor).toHaveValue("original"));
+    const editor = await screen.findByDisplayValue("original");
     fireEvent.change(editor, { target: { value: "unsaved" } });
     await screen.findByRole("alert");
     expect(editor).toHaveValue("unsaved");
     expect(screen.getByText("Close capture")).toBeDisabled();
     fireEvent.click(screen.getByText("Retry save"));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-    expect(backend.SaveCaptureDraft.mock.calls).toEqual([
-      [draft.captureID, 1, "unsaved"],
-      [draft.captureID, 1, "unsaved"],
+    expect(backend.SaveCaptureContent.mock.calls).toEqual([
+      [draft.captureID, 1, "unsaved", ""],
+      [draft.captureID, 1, "unsaved", ""],
     ]);
     fireEvent.click(screen.getByText("Close capture"));
     expect(onClose).toHaveBeenCalledOnce();
@@ -70,21 +70,20 @@ describe("capture custody", () => {
 
   it("serializes rapid edits using the last persisted revision", async () => {
     let finish: ((value: unknown) => void) | undefined;
-    backend.SaveCaptureDraft.mockImplementationOnce(
+    backend.SaveCaptureContent.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           finish = resolve;
         }),
     ).mockResolvedValueOnce({ ...draft, revision: 3, markdown: "second" });
     render(<CapturePanel open onClose={() => {}} />);
-    const editor = await screen.findByLabelText("Markdown");
-    await waitFor(() => expect(editor).toHaveValue("original"));
+    const editor = await screen.findByDisplayValue("original");
     fireEvent.change(editor, { target: { value: "first" } });
     fireEvent.change(editor, { target: { value: "second" } });
-    await waitFor(() => expect(backend.SaveCaptureDraft).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(backend.SaveCaptureContent).toHaveBeenCalledTimes(1));
     finish?.({ ...draft, revision: 2, markdown: "first" });
-    await waitFor(() => expect(backend.SaveCaptureDraft).toHaveBeenCalledTimes(2));
-    expect(backend.SaveCaptureDraft.mock.calls[1]).toEqual([draft.captureID, 2, "second"]);
+    await waitFor(() => expect(backend.SaveCaptureContent).toHaveBeenCalledTimes(2));
+    expect(backend.SaveCaptureContent.mock.calls[1]).toEqual([draft.captureID, 2, "second", ""]);
     expect(editor).toHaveValue("second");
   });
 });

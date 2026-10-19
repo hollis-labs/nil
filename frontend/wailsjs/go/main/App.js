@@ -146,6 +146,10 @@ export function Restart() {
   return window['go']['main']['App']['Restart']();
 }
 
+export function SaveCaptureContent(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveCaptureContent'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveCaptureDraft(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveCaptureDraft'](arg1, arg2, arg3);
 }
@@ -156,6 +160,10 @@ export function SaveChatTemplate(arg1) {
 
 export function Search(arg1) {
   return window['go']['main']['App']['Search'](arg1);
+}
+
+export function SearchCaptureReferences(arg1) {
+  return window['go']['main']['App']['SearchCaptureReferences'](arg1);
 }
 
 export function SeedDemoData() {
