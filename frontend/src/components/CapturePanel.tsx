@@ -18,6 +18,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const current = useRef<capture.Draft | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const pending = useRef(0);
@@ -31,6 +32,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     setStatus("Stored locally");
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt explicitly retries failed bootstrap with unchanged inputs.
   useEffect(() => {
     if (!open || current.current) return;
     let cancelled = false;
@@ -53,7 +55,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     return () => {
       cancelled = true;
     };
-  }, [open, select]);
+  }, [open, select, loadAttempt]);
 
   useEffect(() => {
     if (open && draft) input.current?.focus();
@@ -172,8 +174,12 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       {error && (
         <p role="alert">
           {error}{" "}
-          <button type="button" disabled={busy || !draft} onClick={() => save(source)}>
-            Retry save
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => (draft ? save(source) : setLoadAttempt((attempt) => attempt + 1))}
+          >
+            {draft ? "Retry save" : "Retry loading drafts"}
           </button>
         </p>
       )}

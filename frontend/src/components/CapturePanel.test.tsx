@@ -17,8 +17,33 @@ const draft = {
 
 describe("capture custody", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     backend.ListCaptureDrafts.mockResolvedValue([{ ...draft }]);
+  });
+
+  it.each([
+    "list",
+    "create",
+  ])("allows retry and dismissal after initial %s failure", async (failure) => {
+    const onClose = vi.fn();
+    if (failure === "list") {
+      backend.ListCaptureDrafts.mockRejectedValueOnce(
+        new Error("unavailable"),
+      ).mockResolvedValueOnce([{ ...draft }]);
+    } else {
+      backend.ListCaptureDrafts.mockResolvedValue([]);
+      backend.CreateCaptureDraft.mockRejectedValueOnce(
+        new Error("disk full"),
+      ).mockResolvedValueOnce({ ...draft });
+    }
+    render(<CapturePanel open onClose={onClose} />);
+    await screen.findByRole("alert");
+    expect(screen.getByText("Close capture")).not.toBeDisabled();
+    fireEvent.click(screen.getByText("Close capture"));
+    expect(onClose).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByText("Retry loading drafts"));
+    await waitFor(() => expect(screen.getByLabelText("Markdown")).toHaveValue("original"));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("retains failed edits, prevents closing, and retries the same identity", async () => {
