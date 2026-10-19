@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Backend from "../../wailsjs/go/main/App";
 import type { capture } from "../../wailsjs/go/models";
+import MarkdownComposer from "./MarkdownComposer";
 
 // All persistence stays behind this boundary; the source editor has no native,
 // credential, vault, or network dependencies.
 export const captureStorage = {
   list: () => Backend.ListCaptureDrafts(),
   create: () => Backend.CreateCaptureDraft(),
-  save: (id: string, revision: number, markdown: string) =>
-    Backend.SaveCaptureDraft(id, revision, markdown),
+  save: (id: string, revision: number, markdown: string, quickAdd: string) =>
+    Backend.SaveCaptureContent(id, revision, markdown, quickAdd),
+  search: (query: string) => Backend.SearchCaptureReferences(query),
 };
 
 export default function CapturePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [drafts, setDrafts] = useState<capture.Draft[]>([]);
   const [draft, setDraft] = useState<capture.Draft | null>(null);
   const [source, setSource] = useState("");
+  const [quickAdd, setQuickAdd] = useState("");
+  const sourceRef = useRef("");
+  const quickRef = useRef("");
+  const panel = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,12 +28,14 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   const current = useRef<capture.Draft | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const pending = useRef(0);
-  const input = useRef<HTMLTextAreaElement>(null);
 
   const select = useCallback((d: capture.Draft) => {
     current.current = d;
     setDraft(d);
     setSource(d.markdown);
+    sourceRef.current = d.markdown;
+    quickRef.current = d.quickAdd ?? "";
+    setQuickAdd(d.quickAdd ?? "");
     setError("");
     setStatus("Stored locally");
   }, []);
@@ -58,11 +66,18 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   }, [open, select, loadAttempt]);
 
   useEffect(() => {
-    if (open && draft) input.current?.focus();
-  }, [open, draft]);
+    if (!open) return;
+    const previous = document.activeElement;
+    return () => {
+      if (previous instanceof HTMLElement) previous.focus();
+    };
+  }, [open]);
 
-  function save(markdown: string) {
+  function save(markdown: string, quickInput = quickRef.current) {
+    sourceRef.current = markdown;
+    quickRef.current = quickInput;
     setSource(markdown);
+    setQuickAdd(quickInput);
     setStatus("Saving locally…");
     setBusy(true);
     pending.current++;
@@ -70,7 +85,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       .then(async () => {
         const d = current.current;
         if (!d) return;
-        const saved = await captureStorage.save(d.captureID, d.revision, markdown);
+        const saved = await captureStorage.save(d.captureID, d.revision, markdown, quickInput);
         current.current = saved;
         setDrafts((items) =>
           items.map((item) => (item.captureID === saved.captureID ? saved : item)),
@@ -106,6 +121,24 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   if (!open) return null;
   return (
     <div
+      ref={panel}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Tab") {
+          const elements = panel.current?.querySelectorAll<HTMLElement>(
+            "button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)",
+          );
+          const first = elements?.[0],
+            last = elements?.[elements.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last?.focus();
+          } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="capture-title"
@@ -150,24 +183,25 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           New draft
         </button>
       </div>
-      <label htmlFor="capture-source">Markdown</label>
-      <textarea
-        id="capture-source"
-        ref={input}
-        value={source}
+      <label htmlFor="capture-quick">Quick Add title and defaults</label>
+      <input
+        id="capture-quick"
+        value={quickAdd}
         disabled={!draft}
-        onChange={(e) => save(e.target.value)}
-        style={{
-          flex: 1,
-          minHeight: 120,
-          resize: "none",
-          background: "var(--term-panel)",
-          color: "var(--term-fg)",
-          border: "1px solid var(--term-border)",
-          padding: 12,
-          fontFamily: "monospace",
-        }}
+        placeholder="(B) Follow up +project #tag @desk due:2026-10-20"
+        onChange={(e) => save(sourceRef.current, e.target.value)}
       />
+      <MarkdownComposer
+        key={draft?.captureID ?? "loading"}
+        value={source}
+        onChange={save}
+        disabled={!draft}
+        searchReferences={captureStorage.search}
+        onSubmit={() => save(sourceRef.current)}
+      />
+      <button type="button" disabled={!draft || busy} onClick={() => save(sourceRef.current)}>
+        Keep draft locally
+      </button>
       <p role="status">
         {busy ? "Saving locally…" : status}. Delivery to Fragments Engine is not configured.
       </p>
