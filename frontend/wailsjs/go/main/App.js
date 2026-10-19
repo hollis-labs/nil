@@ -10,6 +10,10 @@ export function Archive(arg1, arg2) {
   return window['go']['main']['App']['Archive'](arg1, arg2);
 }
 
+export function CreateCaptureDraft() {
+  return window['go']['main']['App']['CreateCaptureDraft']();
+}
+
 export function CreateItemFromLine(arg1) {
   return window['go']['main']['App']['CreateItemFromLine'](arg1);
 }
@@ -110,6 +114,10 @@ export function ImportTodoTxt(arg1) {
   return window['go']['main']['App']['ImportTodoTxt'](arg1);
 }
 
+export function ListCaptureDrafts() {
+  return window['go']['main']['App']['ListCaptureDrafts']();
+}
+
 export function ListChatTemplates() {
   return window['go']['main']['App']['ListChatTemplates']();
 }
@@ -136,6 +144,10 @@ export function RenameVault(arg1, arg2) {
 
 export function Restart() {
   return window['go']['main']['App']['Restart']();
+}
+
+export function SaveCaptureDraft(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SaveCaptureDraft'](arg1, arg2, arg3);
 }
 
 export function SaveChatTemplate(arg1) {

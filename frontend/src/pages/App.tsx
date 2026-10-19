@@ -1,4 +1,5 @@
 import * as React from "react";
+import CapturePanel from "@/components/CapturePanel";
 import TerminalList, { ItemRow } from "@/components/TerminalList";
 import InboxView from "@/components/InboxView";
 import VaultSwitcher from "@/components/VaultSwitcher";
@@ -42,6 +43,7 @@ function Inner() {
   const [query, setQuery] = React.useState("");
   const [notesOpen, setNotesOpen] = React.useState(false);
   const [notesItem, setNotesItem] = React.useState<any>(null);
+  const [captureOpen, setCaptureOpen] = React.useState(false);
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = React.useState<'general' | 'tabs' | 'data' | undefined>(undefined);
@@ -669,6 +671,8 @@ function Inner() {
             // @ts-ignore
             WebkitAppRegion: 'no-drag'
           } as any}>
+        <button type="button" className="badge" onClick={() => setCaptureOpen(true)}>Capture Markdown</button>
+        <CapturePanel open={captureOpen} onClose={() => setCaptureOpen(false)} />
         {/* Search Bar */}
         <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
           <SearchAutocomplete

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hollis-labs/nil/apiserver"
+	"github.com/hollis-labs/nil/capture"
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/service/items"
@@ -21,11 +22,13 @@ import (
 var svc = items.New()
 
 type App struct {
-	ctx        context.Context
-	vaultMgr   *vault.Manager
-	needsSetup bool
-	apiServer  *http.Server
-	apiMu      sync.Mutex
+	captureStore *capture.Store
+	captureErr   error
+	ctx          context.Context
+	vaultMgr     *vault.Manager
+	needsSetup   bool
+	apiServer    *http.Server
+	apiMu        sync.Mutex
 
 	// Chat addon (F5)
 	chatStore       *chat.ChatStore
@@ -49,6 +52,8 @@ func (a *App) startup(ctx context.Context) {
 	if cfg.EnsureDefaults() {
 		_ = config.Save(cfg)
 	}
+
+	a.captureStore, a.captureErr = capture.Open(ctx, config.GetConfigDir())
 
 	// Initialize vault manager (opens active vault + shared inbox)
 	vm, err := vault.NewManager(ctx, cfg)
@@ -76,6 +81,9 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(ctx context.Context) {
 	a.stopAPIServer()
+	if a.captureStore != nil {
+		_ = a.captureStore.Close()
+	}
 	if a.vaultMgr != nil {
 		a.vaultMgr.CloseAll()
 	}
