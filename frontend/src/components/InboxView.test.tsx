@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Backend from "../../wailsjs/go/main/App";
 import InboxView from "./InboxView";
@@ -91,10 +91,23 @@ function rowFor(title: string): HTMLElement {
 
 describe("InboxView", () => {
   it("loads and renders inbox items on mount", async () => {
-    await renderInbox();
-    expect(screen.getByText("Untitled capture")).toBeInTheDocument();
-    expect(screen.getByText("Call dentist")).toBeInTheDocument();
-    expect(mocked.GetInboxItems).toHaveBeenCalledTimes(1);
+    // Mount eagerly loads once and schedules the existing 300 ms empty-query
+    // refresh. Control time so parallel suite load cannot race this assertion.
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        render(<InboxView onClose={vi.fn()} onEdit={vi.fn()} onProcessed={vi.fn()} />);
+      });
+      expect(screen.getByText("Untitled capture")).toBeInTheDocument();
+      expect(screen.getByText("Call dentist")).toBeInTheDocument();
+      expect(mocked.GetInboxItems).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300);
+      });
+      expect(mocked.GetInboxItems).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("processing a single item calls ProcessInboxItem with the active vault and notifies the parent", async () => {
