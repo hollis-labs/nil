@@ -78,11 +78,15 @@ export function RenameVault(arg1:string,arg2:string):Promise<void>;
 
 export function Restart():Promise<void>;
 
+export function SaveCaptureContent(arg1:string,arg2:number,arg3:string,arg4:string):Promise<capture.Draft>;
+
 export function SaveCaptureDraft(arg1:string,arg2:number,arg3:string):Promise<capture.Draft>;
 
 export function SaveChatTemplate(arg1:chat.Template):Promise<chat.Template>;
 
 export function Search(arg1:store.SearchRequest):Promise<Array<store.Item>>;
+
+export function SearchCaptureReferences(arg1:string):Promise<Array<capture.Suggestion>>;
 
 export function SeedDemoData():Promise<void>;
 

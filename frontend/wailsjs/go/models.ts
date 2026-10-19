@@ -1,5 +1,53 @@
 export namespace capture {
 	
+	export class Reference {
+	    relation: string;
+	    provider: string;
+	    instance: string;
+	    kind: string;
+	    id: string;
+	    revision: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Reference(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.relation = source["relation"];
+	        this.provider = source["provider"];
+	        this.instance = source["instance"];
+	        this.kind = source["kind"];
+	        this.id = source["id"];
+	        this.revision = source["revision"];
+	        this.label = source["label"];
+	    }
+	}
+	export class QuickFields {
+	    title: string;
+	    projects: string[];
+	    contexts: string[];
+	    tags: string[];
+	    priority?: string;
+	    dueDate?: string;
+	    thresholdDate?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuickFields(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.projects = source["projects"];
+	        this.contexts = source["contexts"];
+	        this.tags = source["tags"];
+	        this.priority = source["priority"];
+	        this.dueDate = source["dueDate"];
+	        this.thresholdDate = source["thresholdDate"];
+	    }
+	}
 	export class Draft {
 	    captureID: string;
 	    schemaVersion: number;
@@ -10,6 +58,9 @@ export namespace capture {
 	    rendererVersion: string;
 	    createdAt: string;
 	    updatedAt: string;
+	    quickAdd: string;
+	    fields: QuickFields;
+	    references: Reference[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Draft(source);
@@ -26,7 +77,62 @@ export namespace capture {
 	        this.rendererVersion = source["rendererVersion"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
+	        this.quickAdd = source["quickAdd"];
+	        this.fields = this.convertValues(source["fields"], QuickFields);
+	        this.references = this.convertValues(source["references"], Reference);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class Suggestion {
+	    reference: Reference;
+	    url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Suggestion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.reference = this.convertValues(source["reference"], Reference);
+	        this.url = source["url"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }
