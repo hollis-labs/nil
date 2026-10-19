@@ -34,7 +34,7 @@ frontend-build:
 frontend-test:
 	npm --prefix $(FRONTEND_DIR) run test
 
-verify: lint test frontend-build codegen-check build
+verify: frontend-build lint test codegen-check build
 
 codegen:
 	wails generate module
