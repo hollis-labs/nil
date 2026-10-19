@@ -60,6 +60,34 @@ func (a *App) CreateCaptureDraft() (capture.Draft, error) {
 	return a.captureStore.Create(a.ctx)
 }
 
+func (a *App) GetCapturePresets() (capture.PresetSelection, error) {
+	if err := a.captureReady(); err != nil {
+		return capture.PresetSelection{}, err
+	}
+	return a.captureStore.Presets(a.ctx)
+}
+
+func (a *App) SaveCapturePreset(id string, revision int, name, quickAdd string) (capture.Preset, error) {
+	if err := a.captureReady(); err != nil {
+		return capture.Preset{}, err
+	}
+	return a.captureStore.SavePreset(a.ctx, id, revision, name, quickAdd)
+}
+
+func (a *App) SelectCapturePreset(id string) error {
+	if err := a.captureReady(); err != nil {
+		return err
+	}
+	return a.captureStore.SelectPreset(a.ctx, id)
+}
+
+func (a *App) QueueCaptureDraft(id string, revision int) (capture.Envelope, error) {
+	if err := a.captureReady(); err != nil {
+		return capture.Envelope{}, err
+	}
+	return a.captureStore.Queue(a.ctx, id, revision)
+}
+
 func (a *App) ListCaptureDrafts() ([]capture.Draft, error) {
 	if err := a.captureReady(); err != nil {
 		return nil, err

@@ -6,8 +6,10 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
+  readOnly?: boolean;
   searchReferences: (query: string) => Promise<capture.Suggestion[]>;
   onSubmit: () => void;
+  submitHint?: string;
 };
 
 function escapeLabel(label: string) {
@@ -21,8 +23,10 @@ export default function MarkdownComposer({
   value,
   onChange,
   disabled,
+  readOnly = false,
   searchReferences,
   onSubmit,
+  submitHint = "keeps the draft locally; delivery is unavailable until configured",
 }: Props) {
   const input = useRef<HTMLTextAreaElement>(null);
   const [cursor, setCursor] = useState(0);
@@ -45,7 +49,7 @@ export default function MarkdownComposer({
   const query = !composing && match ? (match[1] ?? "") : null;
   const start = query === null ? 0 : cursor - query.length - 1;
   const menuKey = query === null ? "" : `${start}:${query}`;
-  const menuOpen = !!menuKey && menuKey !== dismissed && !link;
+  const menuOpen = !!menuKey && menuKey !== dismissed && !link && !readOnly;
 
   useEffect(() => {
     setSuggestions([]);
@@ -180,16 +184,20 @@ export default function MarkdownComposer({
   return (
     <div style={{ display: "flex", flex: 1, minHeight: 0, flexDirection: "column", gap: 8 }}>
       <div role="toolbar" aria-label="Markdown formatting" style={{ display: "flex", gap: 8 }}>
-        <button type="button" disabled={disabled || !!link} onClick={() => format("**")}>
+        <button
+          type="button"
+          disabled={disabled || readOnly || !!link}
+          onClick={() => format("**")}
+        >
           Bold
         </button>
-        <button type="button" disabled={disabled || !!link} onClick={() => format("*")}>
+        <button type="button" disabled={disabled || readOnly || !!link} onClick={() => format("*")}>
           Italic
         </button>
-        <button type="button" disabled={disabled || !!link} onClick={() => format("`")}>
+        <button type="button" disabled={disabled || readOnly || !!link} onClick={() => format("`")}>
           Code
         </button>
-        <button type="button" disabled={disabled || !!link} onClick={openLink}>
+        <button type="button" disabled={disabled || readOnly || !!link} onClick={openLink}>
           Edit link
         </button>
       </div>
@@ -199,6 +207,7 @@ export default function MarkdownComposer({
         ref={input}
         value={displaySource(value)}
         disabled={disabled || !!link}
+        readOnly={readOnly}
         aria-describedby="capture-editing-help"
         aria-controls={menuOpen ? "capture-mentions" : undefined}
         aria-activedescendant={
@@ -206,7 +215,7 @@ export default function MarkdownComposer({
         }
         onSelect={(e) => setCursor(sourceOffset(value, e.currentTarget.selectionEnd))}
         onChange={(e) => {
-          if (disabled || link) return;
+          if (disabled || readOnly || link) return;
           editGeneration.current++;
           const next = reconcileInput(value, e.target.value);
           setCursor(sourceOffset(next, e.currentTarget.selectionEnd));
@@ -216,7 +225,7 @@ export default function MarkdownComposer({
         onCompositionEnd={() => setComposing(false)}
         onPaste={(e) => {
           e.preventDefault();
-          if (disabled || link) return;
+          if (disabled || readOnly || link) return;
           const el = e.currentTarget;
           replace(
             sourceOffset(value, el.selectionStart),
@@ -225,7 +234,7 @@ export default function MarkdownComposer({
           );
         }}
         onKeyDown={(e) => {
-          if (composing || e.nativeEvent.isComposing || e.keyCode === 229) return;
+          if (readOnly || composing || e.nativeEvent.isComposing || e.keyCode === 229) return;
           if (menuOpen) {
             if (e.key === "Escape") {
               e.preventDefault();
@@ -337,9 +346,8 @@ export default function MarkdownComposer({
         </fieldset>
       )}
       <p id="capture-editing-help">
-        Enter inserts a newline. Ctrl/Cmd+Enter keeps the draft locally; delivery is unavailable
-        until configured. Plain @context is parsed only in Quick Add; selected suggestions insert
-        typed local links.
+        Enter inserts a newline. Ctrl/Cmd+Enter {submitHint}. Plain @context is parsed only in Quick
+        Add; selected suggestions insert typed local links.
       </p>
     </div>
   );

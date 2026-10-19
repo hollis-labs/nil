@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Backend from "../../wailsjs/go/main/App";
 import type { capture } from "../../wailsjs/go/models";
+import CapturePresets from "./CapturePresets";
 import MarkdownComposer from "./MarkdownComposer";
 
 // All persistence stays behind this boundary; the source editor has no native,
@@ -11,6 +12,7 @@ export const captureStorage = {
   save: (id: string, revision: number, markdown: string, quickAdd: string) =>
     Backend.SaveCaptureContent(id, revision, markdown, quickAdd),
   search: (query: string) => Backend.SearchCaptureReferences(query),
+  submit: (id: string, revision: number) => Backend.QueueCaptureDraft(id, revision),
 };
 
 export default function CapturePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -23,6 +25,12 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   const panel = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
+  const [presetBusy, setPresetBusy] = useState(false);
+  const [queuing, setQueuing] = useState(false);
+  const [queueUnknown, setQueueUnknown] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const submitting = useRef(false);
   const [error, setError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const current = useRef<capture.Draft | null>(null);
@@ -37,7 +45,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     quickRef.current = d.quickAdd ?? "";
     setQuickAdd(d.quickAdd ?? "");
     setError("");
-    setStatus("Stored locally");
+    setQueueUnknown(false);
+    setStatus(d.localQueued ? "Queued locally; not saved to Fragments Engine" : "Stored locally");
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: loadAttempt explicitly retries failed bootstrap with unchanged inputs.
@@ -74,6 +83,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   }, [open]);
 
   function save(markdown: string, quickInput = quickRef.current) {
+    if (current.current?.localQueued || submitting.current || creatingRef.current || queueUnknown)
+      return;
     sourceRef.current = markdown;
     quickRef.current = quickInput;
     setSource(markdown);
@@ -105,7 +116,70 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       });
   }
 
+  async function submit() {
+    if (
+      submitting.current ||
+      creatingRef.current ||
+      !current.current ||
+      current.current.localQueued
+    )
+      return;
+    const submittedID = current.current.captureID;
+    const submittedSource = sourceRef.current,
+      submittedQuick = quickRef.current;
+    submitting.current = true;
+    setQueuing(true);
+    setBusy(true);
+    let invoked = false;
+    try {
+      await queue.current;
+      const d = current.current;
+      if (
+        d.captureID !== submittedID ||
+        d.markdown !== submittedSource ||
+        d.quickAdd !== submittedQuick
+      )
+        throw new Error("latest edits are not saved");
+      invoked = true;
+      const envelope = await captureStorage.submit(submittedID, d.revision);
+      const frozen = envelope.draft;
+      frozen.localQueued = true;
+      setDrafts((items) =>
+        items.map((item) => (item.captureID === frozen.captureID ? frozen : item)),
+      );
+      if (current.current?.captureID === submittedID) select(frozen);
+    } catch {
+      let recovered = false;
+      if (invoked) {
+        try {
+          const items = await captureStorage.list();
+          const stored = items.find((item) => item.captureID === submittedID);
+          if (stored?.localQueued) {
+            setDrafts(items);
+            if (current.current?.captureID === submittedID) select(stored);
+            recovered = true;
+          } else {
+            setQueueUnknown(!stored);
+          }
+        } catch {
+          setQueueUnknown(true);
+        }
+      }
+      if (!recovered)
+        setError(
+          "Queue result is unconfirmed. Your text is kept; retry the same local operation or repair storage.",
+        );
+    } finally {
+      submitting.current = false;
+      setQueuing(false);
+      setBusy(false);
+    }
+  }
+
   async function newDraft() {
+    if (submitting.current || creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
     setBusy(true);
     try {
       const created = await captureStorage.create();
@@ -114,6 +188,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     } catch {
       setError("Could not create a draft. Your current draft has been kept.");
     } finally {
+      creatingRef.current = false;
+      setCreating(false);
       setBusy(false);
     }
   }
@@ -130,6 +206,11 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           !e.nativeEvent.isComposing &&
           e.keyCode !== 229 &&
           !busy &&
+          !queuing &&
+          !creating &&
+          !submitting.current &&
+          !creatingRef.current &&
+          pending.current === 0 &&
           !error
         ) {
           e.preventDefault();
@@ -168,13 +249,22 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       }}
     >
       <h2 id="capture-title">Capture</h2>
+      <CapturePresets onBusy={setPresetBusy} />
+      <small>
+        Draft preset:{" "}
+        {draft?.snapshot?.preset
+          ? `${draft.snapshot.preset.name} · revision ${draft.snapshot.preset.revision} (manual)`
+          : "none"}
+        . Context: {draft?.snapshot?.context.state ?? "unavailable"}.
+      </small>
       <div style={{ display: "flex", gap: 8 }}>
         <label htmlFor="capture-drafts">Recover draft</label>
         <select
           id="capture-drafts"
           value={draft?.captureID ?? ""}
-          disabled={busy || !!error}
+          disabled={busy || queuing || creating || !!error}
           onChange={(e) => {
+            if (submitting.current || creatingRef.current || pending.current > 0) return;
             const d = drafts.find((item) => item.captureID === e.target.value);
             if (d) select(d);
           }}
@@ -188,7 +278,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         <button
           type="button"
           className="badge"
-          disabled={busy || !!error}
+          disabled={busy || queuing || creating || presetBusy || !!error || queueUnknown}
           onClick={() => void newDraft()}
         >
           New draft
@@ -198,7 +288,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       <input
         id="capture-quick"
         value={quickAdd}
-        disabled={!draft}
+        disabled={!draft || queuing || creating}
+        readOnly={!!draft?.localQueued || queueUnknown}
         placeholder="(B) Follow up +project #tag @desk due:2026-10-20"
         onChange={(e) => save(sourceRef.current, e.target.value)}
       />
@@ -206,12 +297,25 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         key={draft?.captureID ?? "loading"}
         value={source}
         onChange={save}
-        disabled={!draft}
+        disabled={!draft || queuing || creating}
+        readOnly={!!draft?.localQueued || queueUnknown}
         searchReferences={captureStorage.search}
-        onSubmit={() => save(sourceRef.current)}
+        onSubmit={() => void submit()}
+        submitHint="queues an immutable local capture; delivery remains unavailable until configured"
       />
-      <button type="button" disabled={!draft || busy} onClick={() => save(sourceRef.current)}>
+      <button
+        type="button"
+        disabled={!draft || busy || queuing || creating || !!draft.localQueued || queueUnknown}
+        onClick={() => save(sourceRef.current)}
+      >
         Keep draft locally
+      </button>
+      <button
+        type="button"
+        disabled={!draft || busy || queuing || creating || !!draft.localQueued}
+        onClick={() => void submit()}
+      >
+        Queue locally
       </button>
       <p role="status">
         {busy ? "Saving locally…" : status}. Delivery to Fragments Engine is not configured.
@@ -221,18 +325,26 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           {error}{" "}
           <button
             type="button"
-            disabled={busy}
-            onClick={() => (draft ? save(source) : setLoadAttempt((attempt) => attempt + 1))}
+            disabled={busy || queuing || creating}
+            onClick={() =>
+              queueUnknown
+                ? void submit()
+                : draft
+                  ? save(source)
+                  : setLoadAttempt((attempt) => attempt + 1)
+            }
           >
-            {draft ? "Retry save" : "Retry loading drafts"}
+            {queueUnknown ? "Retry local queue" : draft ? "Retry save" : "Retry loading drafts"}
           </button>
         </p>
       )}
       <button
         type="button"
         className="badge"
-        disabled={busy || (!!error && !!draft)}
-        onClick={onClose}
+        disabled={busy || queuing || creating || (!!error && !!draft)}
+        onClick={() => {
+          if (!submitting.current && !creatingRef.current && pending.current === 0) onClose();
+        }}
       >
         Close capture
       </button>

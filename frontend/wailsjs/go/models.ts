@@ -1,5 +1,103 @@
 export namespace capture {
 	
+	export class ContextSnapshot {
+	    state: string;
+	    observedAt: string;
+	    bindingID?: string;
+	    draftAt?: string;
+	    deviceID?: string;
+	    origin?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContextSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.state = source["state"];
+	        this.observedAt = source["observedAt"];
+	        this.bindingID = source["bindingID"];
+	        this.draftAt = source["draftAt"];
+	        this.deviceID = source["deviceID"];
+	        this.origin = source["origin"];
+	    }
+	}
+	export class Preset {
+	    id: string;
+	    revision: number;
+	    name: string;
+	    quickAdd: string;
+	    fields: QuickFields;
+	
+	    static createFrom(source: any = {}) {
+	        return new Preset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.revision = source["revision"];
+	        this.name = source["name"];
+	        this.quickAdd = source["quickAdd"];
+	        this.fields = this.convertValues(source["fields"], QuickFields);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class DraftSnapshot {
+	    schemaVersion: number;
+	    preset?: Preset;
+	    appliedBy: string;
+	    resolvedDefaults: QuickFields;
+	    context: ContextSnapshot;
+	
+	    static createFrom(source: any = {}) {
+	        return new DraftSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schemaVersion = source["schemaVersion"];
+	        this.preset = this.convertValues(source["preset"], Preset);
+	        this.appliedBy = source["appliedBy"];
+	        this.resolvedDefaults = this.convertValues(source["resolvedDefaults"], QuickFields);
+	        this.context = this.convertValues(source["context"], ContextSnapshot);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Reference {
 	    relation: string;
 	    provider: string;
@@ -61,6 +159,8 @@ export namespace capture {
 	    quickAdd: string;
 	    fields: QuickFields;
 	    references: Reference[];
+	    snapshot: DraftSnapshot;
+	    localQueued: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Draft(source);
@@ -80,6 +180,78 @@ export namespace capture {
 	        this.quickAdd = source["quickAdd"];
 	        this.fields = this.convertValues(source["fields"], QuickFields);
 	        this.references = this.convertValues(source["references"], Reference);
+	        this.snapshot = this.convertValues(source["snapshot"], DraftSnapshot);
+	        this.localQueued = source["localQueued"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class Envelope {
+	    schemaVersion: number;
+	    draft: Draft;
+	    content: string;
+	    submittedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Envelope(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.schemaVersion = source["schemaVersion"];
+	        this.draft = this.convertValues(source["draft"], Draft);
+	        this.content = source["content"];
+	        this.submittedAt = source["submittedAt"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class PresetSelection {
+	    presets: Preset[];
+	    selectedID: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetSelection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.presets = this.convertValues(source["presets"], Preset);
+	        this.selectedID = source["selectedID"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

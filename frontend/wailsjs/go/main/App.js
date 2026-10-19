@@ -70,6 +70,10 @@ export function GetBackrefs(arg1) {
   return window['go']['main']['App']['GetBackrefs'](arg1);
 }
 
+export function GetCapturePresets() {
+  return window['go']['main']['App']['GetCapturePresets']();
+}
+
 export function GetChatConfig() {
   return window['go']['main']['App']['GetChatConfig']();
 }
@@ -134,6 +138,10 @@ export function ProcessInboxItem(arg1, arg2) {
   return window['go']['main']['App']['ProcessInboxItem'](arg1, arg2);
 }
 
+export function QueueCaptureDraft(arg1, arg2) {
+  return window['go']['main']['App']['QueueCaptureDraft'](arg1, arg2);
+}
+
 export function RemoveDemoData() {
   return window['go']['main']['App']['RemoveDemoData']();
 }
@@ -154,6 +162,10 @@ export function SaveCaptureDraft(arg1, arg2, arg3) {
   return window['go']['main']['App']['SaveCaptureDraft'](arg1, arg2, arg3);
 }
 
+export function SaveCapturePreset(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SaveCapturePreset'](arg1, arg2, arg3, arg4);
+}
+
 export function SaveChatTemplate(arg1) {
   return window['go']['main']['App']['SaveChatTemplate'](arg1);
 }
@@ -168,6 +180,10 @@ export function SearchCaptureReferences(arg1) {
 
 export function SeedDemoData() {
   return window['go']['main']['App']['SeedDemoData']();
+}
+
+export function SelectCapturePreset(arg1) {
+  return window['go']['main']['App']['SelectCapturePreset'](arg1);
 }
 
 export function SendChatMessage(arg1, arg2) {
