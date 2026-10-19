@@ -36,6 +36,7 @@ export default function CapturePanel({
   const sourceRef = useRef("");
   const quickRef = useRef("");
   const panel = useRef<HTMLDivElement>(null);
+  const composingField = useRef<HTMLElement | null>(null);
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
   const [presetBusy, setPresetBusy] = useState(false);
@@ -100,9 +101,23 @@ export default function CapturePanel({
   useEffect(() => {
     if (!open || !Number.isSafeInteger(focusRequest)) return;
     const frame = requestAnimationFrame(() => {
+      const root = panel.current;
+      if (!root) return;
+      const composition = composingField.current;
+      const active = document.activeElement;
+      // Refocus an ongoing composition or the active link field in place. A
+      // menu/hotkey must not move a URL edit into its label or commit the IME.
       const target =
-        panel.current?.querySelector<HTMLElement>("#capture-link-label") ??
-        panel.current?.querySelector<HTMLElement>("#capture-source");
+        composition &&
+        root.contains(composition) &&
+        composition.matches("input:not(:disabled), textarea:not(:disabled)")
+          ? composition
+          : active instanceof HTMLElement &&
+              root.contains(active) &&
+              active.matches("#capture-link-label:not(:disabled), #capture-link-url:not(:disabled)")
+            ? active
+            : (root.querySelector<HTMLElement>("#capture-link-label:not(:disabled)") ??
+              root.querySelector<HTMLElement>("#capture-source:not(:disabled)"));
       target?.focus();
     });
     return () => cancelAnimationFrame(frame);
@@ -224,6 +239,12 @@ export default function CapturePanel({
   return (
     <div
       ref={panel}
+      onCompositionStartCapture={(event) => {
+        if (event.target instanceof HTMLElement) composingField.current = event.target;
+      }}
+      onCompositionEndCapture={() => {
+        composingField.current = null;
+      }}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (

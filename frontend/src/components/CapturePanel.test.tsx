@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CapturePanel from "./CapturePanel";
 
@@ -299,5 +299,79 @@ describe("capture custody", () => {
     expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
     expect(backend.QueueCaptureDraft).not.toHaveBeenCalled();
     expect(backend.SaveCaptureContent).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "Link label",
+    "Link URL",
+  ])("repeated invocation preserves unsaved link editor %s and its selection", async (fieldName) => {
+    backend.SaveCaptureContent.mockImplementation(() => new Promise(() => {}));
+    const onClose = vi.fn();
+    const { rerender } = render(<CapturePanel open onClose={onClose} focusRequest={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Markdown")).not.toBeDisabled());
+    const source = screen.getByLabelText("Markdown") as HTMLTextAreaElement;
+    fireEvent.change(source, { target: { value: "unsaved source" } });
+    source.setSelectionRange(0, 7);
+    fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
+    fireEvent.change(screen.getByLabelText("Link label"), { target: { value: "unsaved label" } });
+    fireEvent.change(screen.getByLabelText("Link URL"), {
+      target: { value: "https://fixture.example/unsaved" },
+    });
+    const field = screen.getByLabelText(fieldName) as HTMLInputElement;
+    field.focus();
+    field.setSelectionRange(2, 5);
+    fireEvent.compositionStart(field);
+    rerender(<CapturePanel open onClose={onClose} focusRequest={1} />);
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field.selectionStart).toBe(2);
+    expect(field.selectionEnd).toBe(5);
+    expect(screen.getByLabelText("Link label")).toHaveValue("unsaved label");
+    expect(screen.getByLabelText("Link URL")).toHaveValue("https://fixture.example/unsaved");
+    expect(source).toHaveValue("unsaved source");
+    fireEvent.compositionEnd(field);
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.QueueCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.SaveCaptureContent).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "Markdown",
+    "Quick Add title and defaults",
+  ])("repeated invocation keeps %s IME composition active without submitting", async (fieldName) => {
+    backend.SaveCaptureContent.mockImplementation(() => new Promise(() => {}));
+    const onClose = vi.fn();
+    const { rerender } = render(<CapturePanel open onClose={onClose} focusRequest={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Markdown")).not.toBeDisabled());
+    const field = screen.getByLabelText(fieldName) as HTMLInputElement;
+    field.focus();
+    fireEvent.compositionStart(field);
+    fireEvent.change(field, { target: { value: "未確定の入力" } });
+    field.setSelectionRange(1, 3);
+    rerender(<CapturePanel open onClose={onClose} focusRequest={1} />);
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(field).toHaveValue("未確定の入力");
+    expect(field.selectionStart).toBe(1);
+    expect(field.selectionEnd).toBe(3);
+    fireEvent.keyDown(field, { key: "Enter", ctrlKey: true, isComposing: true, keyCode: 229 });
+    expect(backend.QueueCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    fireEvent.compositionEnd(field);
+  });
+
+  it("refocuses enabled link label instead of disabled Markdown after a menu invocation", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(<CapturePanel open onClose={onClose} focusRequest={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Markdown")).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
+    screen.getByRole("button", { name: "Cancel link" }).focus();
+    expect(screen.getByLabelText("Markdown")).toBeDisabled();
+    rerender(<CapturePanel open onClose={onClose} focusRequest={1} />);
+    await waitFor(() => expect(screen.getByLabelText("Link label")).toHaveFocus());
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.QueueCaptureDraft).not.toHaveBeenCalled();
   });
 });
