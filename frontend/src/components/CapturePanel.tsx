@@ -177,7 +177,12 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           </button>
         </p>
       )}
-      <button type="button" className="badge" disabled={busy || !!error} onClick={onClose}>
+      <button
+        type="button"
+        className="badge"
+        disabled={busy || (!!error && !!draft)}
+        onClick={onClose}
+      >
         Close capture
       </button>
     </div>
