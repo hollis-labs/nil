@@ -62,7 +62,17 @@ export default function CaptureShortcutSettings() {
           {status.available
             ? "macOS native entry available."
             : "Global shortcut and status item require macOS."}{" "}
-          {status.error}
+          Saved shortcut:{" "}
+          {[
+            status.shortcut.command && "Command",
+            status.shortcut.control && "Control",
+            status.shortcut.option && "Option",
+            status.shortcut.shift && "Shift",
+            status.shortcut.key,
+          ]
+            .filter(Boolean)
+            .join("+")}
+          .{status.error}
         </p>
       )}
       {shortcut && (

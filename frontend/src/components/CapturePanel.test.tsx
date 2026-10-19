@@ -282,4 +282,22 @@ describe("capture custody", () => {
     expect(backend.SaveCaptureContent.mock.calls[1]).toEqual([draft.captureID, 2, "second", ""]);
     expect(editor).toHaveValue("second");
   });
+  it("repeated native invocation refocuses the same unsaved draft without replacing source or selection", async () => {
+    backend.SaveCaptureContent.mockImplementation(() => new Promise(() => {}));
+    const onClose = vi.fn();
+    const { rerender } = render(<CapturePanel open onClose={onClose} focusRequest={0} />);
+    await waitFor(() => expect(screen.getByLabelText("Markdown")).not.toBeDisabled());
+    const source = screen.getByLabelText("Markdown") as HTMLTextAreaElement;
+    fireEvent.change(source, { target: { value: "unsaved source" } });
+    source.setSelectionRange(2, 5);
+    screen.getByLabelText("Quick Add title and defaults").focus();
+    rerender(<CapturePanel open onClose={onClose} focusRequest={1} />);
+    await waitFor(() => expect(source).toHaveFocus());
+    expect(source).toHaveValue("unsaved source");
+    expect(source.selectionStart).toBe(2);
+    expect(source.selectionEnd).toBe(5);
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.QueueCaptureDraft).not.toHaveBeenCalled();
+    expect(backend.SaveCaptureContent).toHaveBeenCalledTimes(1);
+  });
 });

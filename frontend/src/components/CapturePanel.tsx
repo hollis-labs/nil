@@ -36,7 +36,6 @@ export default function CapturePanel({
   const sourceRef = useRef("");
   const quickRef = useRef("");
   const panel = useRef<HTMLDivElement>(null);
-  const lastFocusRequest = useRef(-1);
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
   const [presetBusy, setPresetBusy] = useState(false);
@@ -99,14 +98,12 @@ export default function CapturePanel({
   // A repeated invocation raises/focuses the existing composer without changing
   // its draft, selection or pending save/queue operation.
   useEffect(() => {
-    if (!open) {
-      lastFocusRequest.current = -1;
-      return;
-    }
-    if (lastFocusRequest.current === focusRequest) return;
-    lastFocusRequest.current = focusRequest;
+    if (!open || !Number.isSafeInteger(focusRequest)) return;
     const frame = requestAnimationFrame(() => {
-      panel.current?.querySelector<HTMLElement>("#capture-link-label, #capture-source")?.focus();
+      const target =
+        panel.current?.querySelector<HTMLElement>("#capture-link-label") ??
+        panel.current?.querySelector<HTMLElement>("#capture-source");
+      target?.focus();
     });
     return () => cancelAnimationFrame(frame);
   }, [open, focusRequest]);

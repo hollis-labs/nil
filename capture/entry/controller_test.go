@@ -2,6 +2,7 @@ package entry
 
 import (
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -111,5 +112,34 @@ func TestCarbonDefaultAndValidation(t *testing.T) {
 	s.Command = false
 	if _, err = Normalize(s); err == nil {
 		t.Fatal("unmodified capture shortcut accepted")
+	}
+}
+
+func TestReadinessBeforeStartAndConcurrentShutdown(t *testing.T) {
+	native := &fakeNative{}
+	count := 0
+	c := New(native, func(Shortcut) error { return nil }, func() { count++ })
+	c.Ready()
+	c.Request()
+	c.Request()
+	if count != 0 {
+		t.Fatal("invoked before native startup")
+	}
+	c.Start(Default())
+	if count != 1 {
+		t.Fatal("startup dropped pending invocation")
+	}
+	var workers sync.WaitGroup
+	for range 50 {
+		workers.Add(1)
+		go func() { defer workers.Done(); c.Request() }()
+	}
+	workers.Add(1)
+	go func() { defer workers.Done(); c.Close() }()
+	workers.Wait()
+	final := count
+	c.Request()
+	if count != final || native.closed != 1 {
+		t.Fatal("request escaped shutdown fencing")
 	}
 }
