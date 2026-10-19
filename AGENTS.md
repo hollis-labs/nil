@@ -5,8 +5,10 @@ shell around a Go backend and a React/TypeScript frontend rendered in a WebView.
 Tasks and notes are one object with different affordances — a single
 `kind`-discriminated table, todo.txt-inspired capture syntax, FTS5 search, and
 one SQLite file per vault that the user owns outright. It is not a server, a
-sync service, or multi-user: the HTTP API binds `127.0.0.1`, and the only host
-NIL ever calls out to is `api.anthropic.com`, from the chat bridge. The app was
+sync service, or multi-user: the HTTP API binds `127.0.0.1`. The chat bridge
+calls `api.anthropic.com`. The v2 capture surface calls an explicitly paired
+Basalisk origin through its native broker adapter; credentials never enter the
+renderer. The app was
 called PLANCK and then NANITE; "Nanite" now names an unrelated CLI agent
 framework in another repo.
 

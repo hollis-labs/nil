@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Backend from "../../wailsjs/go/main/App";
 import type { capture } from "../../wailsjs/go/models";
+import CaptureContext from "./CaptureContext";
+import CaptureDelivery from "./CaptureDelivery";
 import CapturePresets from "./CapturePresets";
 import MarkdownComposer from "./MarkdownComposer";
 
@@ -16,6 +18,7 @@ export const captureStorage = {
 };
 
 export default function CapturePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [drafts, setDrafts] = useState<capture.Draft[]>([]);
   const [draft, setDraft] = useState<capture.Draft | null>(null);
   const [source, setSource] = useState("");
@@ -255,8 +258,9 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         {draft?.snapshot?.preset
           ? `${draft.snapshot.preset.name} · revision ${draft.snapshot.preset.revision} (manual)`
           : "none"}
-        . Context: {draft?.snapshot?.context.state ?? "unavailable"}.
+        .
       </small>
+      <CaptureContext captureID={draft?.captureID} />
       <div style={{ display: "flex", gap: 8 }}>
         <label htmlFor="capture-drafts">Recover draft</label>
         <select
@@ -301,7 +305,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         readOnly={!!draft?.localQueued || queueUnknown}
         searchReferences={captureStorage.search}
         onSubmit={() => void submit()}
-        submitHint="queues an immutable local capture; delivery remains unavailable until configured"
+        submitHint="queues an immutable local capture; open Basalisk delivery to send"
       />
       <button
         type="button"
@@ -318,8 +322,17 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         Queue locally
       </button>
       <p role="status">
-        {busy ? "Saving locally…" : status}. Delivery to Fragments Engine is not configured.
+        {busy ? "Saving locally…" : status}. Open Basalisk delivery to send and reconcile queued
+        captures.
       </p>
+      <button
+        type="button"
+        disabled={busy || queuing || creating}
+        onClick={() => setDeliveryOpen((value) => !value)}
+      >
+        {deliveryOpen ? "Hide Basalisk delivery" : "Open Basalisk delivery"}
+      </button>
+      {deliveryOpen && <CaptureDelivery />}
       {error && (
         <p role="alert">
           {error}{" "}
