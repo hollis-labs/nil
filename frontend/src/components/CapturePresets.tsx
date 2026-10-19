@@ -12,6 +12,7 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [editingPreset, setEditingPreset] = useState<capture.Preset | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the same native read after failure.
@@ -41,6 +42,7 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
   }, [onBusy, attempt]);
 
   async function choose(id: string) {
+    if (editing) return;
     setBusy(true);
     onBusy(true);
     try {
@@ -56,13 +58,13 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
   }
 
   async function save(update: boolean) {
-    const current = presets.find((p) => p.id === selected);
+    const current = editingPreset;
     if (update && !current) return;
     setBusy(true);
     onBusy(true);
     try {
       const saved = await Backend.SaveCapturePreset(
-        update ? selected : "",
+        update ? (current?.id ?? "") : "",
         update ? (current?.revision ?? 0) : 0,
         name,
         defaults,
@@ -90,7 +92,7 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
         <select
           id="capture-preset"
           value={selected}
-          disabled={busy}
+          disabled={busy || editing}
           onChange={(e) => void choose(e.target.value)}
         >
           <option value="">No preset</option>
@@ -105,6 +107,7 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
           disabled={busy}
           onClick={() => {
             const p = presets.find((item) => item.id === selected);
+            setEditingPreset(p ?? null);
             setName(p?.name ?? "");
             setDefaults(p?.quickAdd ?? "");
             setEditing(true);
@@ -132,10 +135,10 @@ export default function CapturePresets({ onBusy }: { onBusy: (busy: boolean) => 
           </button>
           <button
             type="button"
-            disabled={!selected || !name.trim()}
+            disabled={!editingPreset || !name.trim()}
             onClick={() => void save(true)}
           >
-            Update selected preset
+            Update preset
           </button>
           <button type="button" onClick={() => setEditing(false)}>
             Cancel preset edit

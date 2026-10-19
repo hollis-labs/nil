@@ -108,6 +108,136 @@ describe("capture custody", () => {
     expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
   });
 
+  it("keeps draft switching locked when autosave finishes before the queue reply", async () => {
+    let finishSave: ((value: unknown) => void) | undefined,
+      finishQueue: ((value: unknown) => void) | undefined;
+    backend.SaveCaptureContent.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    backend.QueueCaptureDraft.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishQueue = resolve;
+        }),
+    );
+    const onClose = vi.fn();
+    render(<CapturePanel open onClose={onClose} />);
+    const editor = await screen.findByDisplayValue("original");
+    fireEvent.change(editor, { target: { value: "edited" } });
+    await waitFor(() => expect(backend.SaveCaptureContent).toHaveBeenCalledOnce());
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    finishSave?.({ ...draft, markdown: "edited", revision: 2 });
+    await waitFor(() => expect(backend.QueueCaptureDraft).toHaveBeenCalledWith(draft.captureID, 2));
+    expect(screen.getByText("New draft")).toBeDisabled();
+    expect(screen.getByLabelText("Recover draft")).toBeDisabled();
+    expect(screen.getByText("Close capture")).toBeDisabled();
+    fireEvent.click(screen.getByText("Close capture"));
+    fireEvent.keyDown(editor, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("New draft"));
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+    finishQueue?.({ draft: { ...draft, markdown: "edited", revision: 2 } });
+    await waitFor(() => expect(editor).toHaveAttribute("readonly"));
+    expect(editor).toHaveValue("edited");
+  });
+
+  it("reconciles a lost queue reply for the submitted ID after an attempted draft switch", async () => {
+    const other = { ...draft, captureID: "other-capture-0002", markdown: "other draft" };
+    let rejectQueue: ((error: Error) => void) | undefined;
+    backend.ListCaptureDrafts.mockResolvedValueOnce([{ ...draft }, other]).mockResolvedValueOnce([
+      { ...draft, localQueued: true },
+      other,
+    ]);
+    backend.QueueCaptureDraft.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectQueue = reject;
+        }),
+    );
+    render(<CapturePanel open onClose={() => {}} />);
+    const editor = await screen.findByDisplayValue("original");
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(backend.QueueCaptureDraft).toHaveBeenCalledWith(draft.captureID, 1));
+    fireEvent.change(screen.getByLabelText("Recover draft"), {
+      target: { value: other.captureID },
+    });
+    rejectQueue?.(new Error("reply lost"));
+    await waitFor(() => expect(editor).toHaveAttribute("readonly"));
+    expect(screen.getByLabelText("Recover draft")).toHaveValue(draft.captureID);
+    expect(editor).toHaveValue("original");
+    expect(backend.QueueCaptureDraft).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("prevents old-draft edits from leaking into a pending new draft", async () => {
+    let finish: ((value: unknown) => void) | undefined;
+    backend.CreateCaptureDraft.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<CapturePanel open onClose={() => {}} />);
+    const editor = await screen.findByDisplayValue("original");
+    await waitFor(() => expect(screen.getByText("New draft")).not.toBeDisabled());
+    fireEvent.click(screen.getByText("New draft"));
+    await waitFor(() => expect(backend.CreateCaptureDraft).toHaveBeenCalledOnce());
+    expect(editor).toBeDisabled();
+    fireEvent.change(editor, { target: { value: "old edit" } });
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
+    finish?.({ ...draft, captureID: "new-capture-0002", markdown: "", quickAdd: "#preset" });
+    await screen.findByDisplayValue("#preset");
+    expect(screen.getByLabelText("Markdown")).toHaveValue("");
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
+  });
+
+  it("locks uncertain queue results and retries the original identity", async () => {
+    backend.ListCaptureDrafts.mockResolvedValueOnce([{ ...draft }]).mockRejectedValueOnce(
+      new Error("storage unavailable"),
+    );
+    backend.QueueCaptureDraft.mockRejectedValueOnce(new Error("reply lost")).mockResolvedValueOnce({
+      draft: { ...draft },
+    });
+    render(<CapturePanel open onClose={() => {}} />);
+    const editor = await screen.findByDisplayValue("original");
+    fireEvent.keyDown(editor, { key: "Enter", ctrlKey: true });
+    await screen.findByText("Retry local queue");
+    expect(editor).toHaveAttribute("readonly");
+    expect(screen.getByText("New draft")).toBeDisabled();
+    fireEvent.change(editor, { target: { value: "unsafe replacement" } });
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Retry local queue"));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(backend.QueueCaptureDraft.mock.calls).toEqual([
+      [draft.captureID, 1],
+      [draft.captureID, 1],
+    ]);
+    expect(backend.CreateCaptureDraft).not.toHaveBeenCalled();
+  });
+
+  it("binds preset editing to its captured identity and revision", async () => {
+    const p1 = { id: "p1", revision: 1, name: "Work", quickAdd: "#work" };
+    const p2 = { id: "p2", revision: 7, name: "Home", quickAdd: "#home" };
+    backend.GetCapturePresets.mockResolvedValue({ presets: [p1, p2], selectedID: "p1" });
+    backend.SaveCapturePreset.mockResolvedValue({ ...p1, revision: 2, name: "Renamed" });
+    render(<CapturePanel open onClose={() => {}} />);
+    await screen.findByDisplayValue("original");
+    await waitFor(() => expect(screen.getByText("Edit presets")).not.toBeDisabled());
+    fireEvent.click(screen.getByText("Edit presets"));
+    expect(screen.getByLabelText("Preset for new drafts")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Preset for new drafts"), { target: { value: "p2" } });
+    fireEvent.change(screen.getByLabelText("Preset name"), { target: { value: "Renamed" } });
+    fireEvent.click(screen.getByText("Update preset"));
+    await waitFor(() =>
+      expect(backend.SaveCapturePreset).toHaveBeenCalledWith("p1", 1, "Renamed", "#work"),
+    );
+    expect(backend.SelectCapturePreset).not.toHaveBeenCalled();
+    expect(backend.SaveCaptureContent).not.toHaveBeenCalled();
+  });
+
   it("retains failed edits, prevents closing, and retries the same identity", async () => {
     const onClose = vi.fn();
     backend.SaveCaptureContent.mockRejectedValueOnce(

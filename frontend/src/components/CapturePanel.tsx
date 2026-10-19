@@ -28,6 +28,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   const [presetBusy, setPresetBusy] = useState(false);
   const [queuing, setQueuing] = useState(false);
   const [queueUnknown, setQueueUnknown] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
   const submitting = useRef(false);
   const [error, setError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -81,7 +83,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   }, [open]);
 
   function save(markdown: string, quickInput = quickRef.current) {
-    if (current.current?.localQueued || submitting.current || queueUnknown) return;
+    if (current.current?.localQueued || submitting.current || creatingRef.current || queueUnknown)
+      return;
     sourceRef.current = markdown;
     quickRef.current = quickInput;
     setSource(markdown);
@@ -114,7 +117,16 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   }
 
   async function submit() {
-    if (submitting.current || !current.current || current.current.localQueued) return;
+    if (
+      submitting.current ||
+      creatingRef.current ||
+      !current.current ||
+      current.current.localQueued
+    )
+      return;
+    const submittedID = current.current.captureID;
+    const submittedSource = sourceRef.current,
+      submittedQuick = quickRef.current;
     submitting.current = true;
     setQueuing(true);
     setBusy(true);
@@ -122,25 +134,29 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     try {
       await queue.current;
       const d = current.current;
-      if (d.markdown !== sourceRef.current || d.quickAdd !== quickRef.current)
+      if (
+        d.captureID !== submittedID ||
+        d.markdown !== submittedSource ||
+        d.quickAdd !== submittedQuick
+      )
         throw new Error("latest edits are not saved");
       invoked = true;
-      const envelope = await captureStorage.submit(d.captureID, d.revision);
+      const envelope = await captureStorage.submit(submittedID, d.revision);
       const frozen = envelope.draft;
       frozen.localQueued = true;
       setDrafts((items) =>
         items.map((item) => (item.captureID === frozen.captureID ? frozen : item)),
       );
-      select(frozen);
+      if (current.current?.captureID === submittedID) select(frozen);
     } catch {
       let recovered = false;
       if (invoked) {
         try {
           const items = await captureStorage.list();
-          const stored = items.find((item) => item.captureID === current.current?.captureID);
+          const stored = items.find((item) => item.captureID === submittedID);
           if (stored?.localQueued) {
             setDrafts(items);
-            select(stored);
+            if (current.current?.captureID === submittedID) select(stored);
             recovered = true;
           } else {
             setQueueUnknown(!stored);
@@ -161,6 +177,9 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   }
 
   async function newDraft() {
+    if (submitting.current || creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
     setBusy(true);
     try {
       const created = await captureStorage.create();
@@ -169,6 +188,8 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
     } catch {
       setError("Could not create a draft. Your current draft has been kept.");
     } finally {
+      creatingRef.current = false;
+      setCreating(false);
       setBusy(false);
     }
   }
@@ -185,6 +206,11 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           !e.nativeEvent.isComposing &&
           e.keyCode !== 229 &&
           !busy &&
+          !queuing &&
+          !creating &&
+          !submitting.current &&
+          !creatingRef.current &&
+          pending.current === 0 &&
           !error
         ) {
           e.preventDefault();
@@ -236,8 +262,9 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         <select
           id="capture-drafts"
           value={draft?.captureID ?? ""}
-          disabled={busy || !!error}
+          disabled={busy || queuing || creating || !!error}
           onChange={(e) => {
+            if (submitting.current || creatingRef.current || pending.current > 0) return;
             const d = drafts.find((item) => item.captureID === e.target.value);
             if (d) select(d);
           }}
@@ -251,7 +278,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         <button
           type="button"
           className="badge"
-          disabled={busy || presetBusy || !!error || queueUnknown}
+          disabled={busy || queuing || creating || presetBusy || !!error || queueUnknown}
           onClick={() => void newDraft()}
         >
           New draft
@@ -261,7 +288,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       <input
         id="capture-quick"
         value={quickAdd}
-        disabled={!draft || queuing}
+        disabled={!draft || queuing || creating}
         readOnly={!!draft?.localQueued || queueUnknown}
         placeholder="(B) Follow up +project #tag @desk due:2026-10-20"
         onChange={(e) => save(sourceRef.current, e.target.value)}
@@ -270,7 +297,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
         key={draft?.captureID ?? "loading"}
         value={source}
         onChange={save}
-        disabled={!draft || queuing}
+        disabled={!draft || queuing || creating}
         readOnly={!!draft?.localQueued || queueUnknown}
         searchReferences={captureStorage.search}
         onSubmit={() => void submit()}
@@ -278,14 +305,14 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       />
       <button
         type="button"
-        disabled={!draft || busy || !!draft.localQueued || queueUnknown}
+        disabled={!draft || busy || queuing || creating || !!draft.localQueued || queueUnknown}
         onClick={() => save(sourceRef.current)}
       >
         Keep draft locally
       </button>
       <button
         type="button"
-        disabled={!draft || busy || !!draft.localQueued}
+        disabled={!draft || busy || queuing || creating || !!draft.localQueued}
         onClick={() => void submit()}
       >
         Queue locally
@@ -298,7 +325,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
           {error}{" "}
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || queuing || creating}
             onClick={() =>
               queueUnknown
                 ? void submit()
@@ -314,8 +341,10 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       <button
         type="button"
         className="badge"
-        disabled={busy || (!!error && !!draft)}
-        onClick={onClose}
+        disabled={busy || queuing || creating || (!!error && !!draft)}
+        onClick={() => {
+          if (!submitting.current && !creatingRef.current && pending.current === 0) onClose();
+        }}
       >
         Close capture
       </button>
