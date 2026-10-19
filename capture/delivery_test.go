@@ -291,3 +291,103 @@ func TestDeliveryCrossProcessLeaseAndPairingIsolation(t *testing.T) {
 		t.Fatal("duplicate submission")
 	}
 }
+
+func TestDeliverySessionlessHistoricalDraftAndAmbiguousStopReplay(t *testing.T) {
+	ctx, _, d, f, draft, _ := fixtureDelivery(t)
+	// Loading/sending a draft created without a context job never asks for current focus.
+	f.lose = true
+	if _, err := d.Run(ctx, draft.CaptureID, "send", false); err == nil {
+		t.Fatal("expected lost initial response")
+	}
+	if _, err := d.Run(ctx, draft.CaptureID, "stop", true); err != nil {
+		t.Fatal(err)
+	}
+	if f.binds != 0 || len(f.posts) != 2 || f.posts[0] != f.posts[1] || len(f.actionBodies) != 1 {
+		t.Fatal("ambiguous stop failed original-byte reconciliation")
+	}
+	var req broker.Request
+	if err := json.Unmarshal([]byte(f.posts[1]), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.ContextBindingID != "" {
+		t.Fatal("historical context was resampled")
+	}
+}
+
+func TestContextTimeoutLeavesRecoverableState(t *testing.T) {
+	ctx, s, d, _, draft, _ := fixtureDelivery(t)
+	if _, err := d.BeginContext(ctx, draft.CaptureID); err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	// A canceled discovery made no binding request. Its terminal local state is
+	// written with a bounded cleanup context so this process can send sessionless.
+	_ = d.SampleContext(canceled, draft.CaptureID)
+	job, err := s.contextJob(ctx, draft.CaptureID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.State == "pending" {
+		t.Fatal("canceled invocation left context pending")
+	}
+
+}
+
+func TestPairingCustodyNeverPersistsOrReturnsBearer(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	custody := fixtureCustody{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/auth/pair/exchange" {
+			if r.Header.Get("Authorization") != "" {
+				t.Error("exchange reused bearer")
+			}
+			_, _ = w.Write([]byte(`{"device":{"id":"fixture-native-device","audience":"basalisk","scopes":["basalisk.fragments.create","basalisk.activity.read"],"expires_at":"2099-01-01T00:00:00Z"},"token":"disposable-pairing-token","token_type":"Bearer"}`))
+			return
+		}
+		if r.URL.Path != "/auth/renew" || r.Header.Get("Authorization") != "Bearer disposable-pairing-token" {
+			t.Error("renew protocol mismatch")
+		}
+		body, _ := io.ReadAll(r.Body)
+		if string(body) != "{}" {
+			t.Error("renew must retain scopes")
+		}
+		_, _ = w.Write([]byte(`{"id":"fixture-native-device","audience":"basalisk","scopes":["basalisk.fragments.create","basalisk.activity.read"],"expires_at":"2099-02-01T00:00:00Z"}`))
+	}))
+	defer server.Close()
+	d, err := NewDelivery(ctx, s, custody, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := d.Pair(ctx, server.URL, "disposable-code")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serialized, _ := json.Marshal(account)
+	if strings.Contains(string(serialized), "token") || strings.Contains(string(serialized), "disposable-code") {
+		t.Fatal("renderer pairing result leaked credential")
+	}
+	var stored string
+	if err = s.db.QueryRowContext(ctx, `SELECT account_json FROM capture_accounts`).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(stored, "disposable") {
+		t.Fatal("credential persisted in capture metadata")
+	}
+	token := custody[account.ID].Reveal()
+	if token != "disposable-pairing-token" {
+		t.Fatal("credential not in injected native custody")
+	}
+	renewed, err := d.Renew(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renewed.ID != account.ID || custody[account.ID].Reveal() != token {
+		t.Fatal("renew rotated identity/token")
+	}
+}

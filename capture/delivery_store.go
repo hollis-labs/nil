@@ -268,3 +268,7 @@ func (s *Store) stopUnattempted(ctx context.Context, id, holder string) (bool, e
 	n, err := r.RowsAffected()
 	return n == 1, err
 }
+
+func (s *Store) ContextEvidence(ctx context.Context, id string) ContextEvidence {
+	return s.contextEvidence(ctx, id)
+}

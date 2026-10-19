@@ -4,6 +4,7 @@ import CapturePanel from "./CapturePanel";
 
 const backend = vi.hoisted(() => ({
   ListCaptureDrafts: vi.fn(),
+  GetCaptureContextEvidence: vi.fn(),
   CreateCaptureDraft: vi.fn(),
   SaveCaptureContent: vi.fn(),
   SearchCaptureReferences: vi.fn(),
@@ -24,6 +25,10 @@ const draft = {
 describe("capture custody", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    backend.GetCaptureContextEvidence.mockResolvedValue({
+      state: "unavailable",
+      code: "not_sampled_at_invocation",
+    });
     backend.ListCaptureDrafts.mockResolvedValue([{ ...draft }]);
     backend.GetCapturePresets.mockResolvedValue({ presets: [], selectedID: "" });
   });

@@ -1,5 +1,9 @@
 // Package broker consumes the published Basalisk capture protocol. It contains
 // no owner API, issuer enrollment, FE key, or arbitrary URL-fetching facility.
+// Source contracts: Tesseract 01M58MXY5NB83XYZAY84V9F9Z0 (pairing/context),
+// 01M58P23F43D2AN5C8BATFM85S (recovery), 01M58WJGJFYXKTFW9DMZBJ5XY4
+// (readiness), and 01M58MCP5V6MFCDBAX7WXXA81E (metadata). These define
+// fixed routes; discovery never authorizes arbitrary URLs or broader scopes.
 package broker
 
 const CaptureScope = "basalisk.fragments.create"

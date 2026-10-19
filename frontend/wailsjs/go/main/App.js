@@ -74,6 +74,10 @@ export function GetCaptureAccounts() {
   return window['go']['main']['App']['GetCaptureAccounts']();
 }
 
+export function GetCaptureContextEvidence(arg1) {
+  return window['go']['main']['App']['GetCaptureContextEvidence'](arg1);
+}
+
 export function GetCaptureEvidence() {
   return window['go']['main']['App']['GetCaptureEvidence']();
 }

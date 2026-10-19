@@ -179,3 +179,10 @@ func (a *App) deliveryReady() error {
 	}
 	return nil
 }
+
+func (a *App) GetCaptureContextEvidence(id string) (capture.ContextEvidence, error) {
+	if err := a.captureReady(); err != nil {
+		return capture.ContextEvidence{}, err
+	}
+	return a.captureStore.ContextEvidence(a.ctx, id), nil
+}

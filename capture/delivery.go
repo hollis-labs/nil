@@ -168,6 +168,11 @@ func (d *Delivery) finishContext(ctx context.Context, j ContextJob, state, code 
 	return nil
 }
 func (d *Delivery) SampleContext(ctx context.Context, id string) error {
+	defer func() {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+		_, _ = d.store.db.ExecContext(cleanup, `UPDATE capture_context_jobs SET state='ambiguous',code='invocation_interrupted' WHERE capture_id=? AND state='pending'`, id)
+	}()
 	j, err := d.store.contextJob(ctx, id)
 	if err != nil {
 		return err

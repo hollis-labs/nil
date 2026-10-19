@@ -43,6 +43,8 @@ export function GetBackrefs(arg1:number):Promise<Array<store.Item>>;
 
 export function GetCaptureAccounts():Promise<capture.AccountSelection>;
 
+export function GetCaptureContextEvidence(arg1:string):Promise<capture.ContextEvidence>;
+
 export function GetCaptureEvidence():Promise<capture.SetupEvidence>;
 
 export function GetCapturePresets():Promise<capture.PresetSelection>;
