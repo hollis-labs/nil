@@ -10,6 +10,9 @@ resources:
     type: process
     project: nil
     connector: local
+    env: dev
+    owner: self
+    admin: self
     config:
       command:
         - wails
