@@ -11,6 +11,7 @@ import (
 
 	"github.com/hollis-labs/nil/apiserver"
 	"github.com/hollis-labs/nil/capture"
+	"github.com/hollis-labs/nil/capture/entry"
 	"github.com/hollis-labs/nil/chat"
 	"github.com/hollis-labs/nil/config"
 	"github.com/hollis-labs/nil/service/items"
@@ -22,6 +23,7 @@ import (
 var svc = items.New()
 
 type App struct {
+	captureEntry    *entry.Controller
 	captureDelivery *capture.Delivery
 	captureCancel   context.CancelFunc
 	captureWorkers  sync.WaitGroup
@@ -42,7 +44,14 @@ type App struct {
 }
 
 func NewApp() *App {
-	return &App{}
+	app := &App{}
+	app.captureEntry = entry.New(entry.NewNative(), func(shortcut entry.Shortcut) error {
+		if err := app.captureReady(); err != nil {
+			return err
+		}
+		return app.captureStore.SaveEntryShortcut(app.ctx, shortcut)
+	}, app.raiseCapture)
+	return app
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -60,6 +69,14 @@ func (a *App) startup(ctx context.Context) {
 	if a.captureErr == nil {
 		a.captureDelivery, a.captureErr = capture.NewDelivery(ctx, a.captureStore, capture.NewNativeCustody(), nil)
 	}
+
+	shortcut := entry.Default()
+	if a.captureStore != nil {
+		if stored, err := a.captureStore.EntryShortcut(a.ctx); err == nil {
+			shortcut = stored
+		}
+	}
+	a.captureEntry.Start(shortcut)
 
 	// Initialize vault manager (opens active vault + shared inbox)
 	vm, err := vault.NewManager(ctx, cfg)
@@ -86,6 +103,7 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.captureEntry.Close()
 	a.stopAPIServer()
 	if a.captureCancel != nil {
 		a.captureCancel()

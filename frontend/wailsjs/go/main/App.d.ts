@@ -5,11 +5,14 @@ import {capture} from '../models';
 import {store} from '../models';
 import {config} from '../models';
 import {main} from '../models';
+import {entry} from '../models';
 import {broker} from '../models';
 
 export function ApproveChatAction(arg1:number):Promise<chat.ActionResult>;
 
 export function Archive(arg1:number,arg2:boolean):Promise<void>;
+
+export function CaptureEntryReady():Promise<void>;
 
 export function CreateCaptureDraft():Promise<capture.Draft>;
 
@@ -44,6 +47,8 @@ export function GetBackrefs(arg1:number):Promise<Array<store.Item>>;
 export function GetCaptureAccounts():Promise<capture.AccountSelection>;
 
 export function GetCaptureContextEvidence(arg1:string):Promise<capture.ContextEvidence>;
+
+export function GetCaptureEntryStatus():Promise<entry.Status>;
 
 export function GetCaptureEvidence(arg1:string):Promise<capture.SetupEvidence>;
 
@@ -120,6 +125,8 @@ export function SelectCapturePreset(arg1:string):Promise<void>;
 export function SendChatMessage(arg1:number,arg2:string):Promise<chat.ChatResponse>;
 
 export function SetAPIEnabled(arg1:boolean):Promise<void>;
+
+export function SetCaptureShortcut(arg1:entry.Shortcut):Promise<entry.Status>;
 
 export function SetChatConfig(arg1:config.ChatConfig):Promise<void>;
 

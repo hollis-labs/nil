@@ -4,6 +4,7 @@ import type { capture } from "../../wailsjs/go/models";
 import CaptureContext from "./CaptureContext";
 import CaptureDelivery from "./CaptureDelivery";
 import CapturePresets from "./CapturePresets";
+import CaptureShortcutSettings from "./CaptureShortcutSettings";
 import MarkdownComposer from "./MarkdownComposer";
 
 // All persistence stays behind this boundary; the source editor has no native,
@@ -17,7 +18,16 @@ export const captureStorage = {
   submit: (id: string, revision: number) => Backend.QueueCaptureDraft(id, revision),
 };
 
-export default function CapturePanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function CapturePanel({
+  open,
+  onClose,
+  focusRequest = 0,
+}: {
+  open: boolean;
+  onClose: () => void;
+  focusRequest?: number;
+}) {
+  const [shortcutSettingsOpen, setShortcutSettingsOpen] = useState(false);
   const [deliveryOpen, setDeliveryOpen] = useState(false);
   const [drafts, setDrafts] = useState<capture.Draft[]>([]);
   const [draft, setDraft] = useState<capture.Draft | null>(null);
@@ -26,6 +36,7 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   const sourceRef = useRef("");
   const quickRef = useRef("");
   const panel = useRef<HTMLDivElement>(null);
+  const composingField = useRef<HTMLElement | null>(null);
   const [status, setStatus] = useState("Loading drafts…");
   const [busy, setBusy] = useState(false);
   const [presetBusy, setPresetBusy] = useState(false);
@@ -84,6 +95,33 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       if (previous instanceof HTMLElement) previous.focus();
     };
   }, [open]);
+
+  // A repeated invocation raises/focuses the existing composer without changing
+  // its draft, selection or pending save/queue operation.
+  useEffect(() => {
+    if (!open || !Number.isSafeInteger(focusRequest)) return;
+    const frame = requestAnimationFrame(() => {
+      const root = panel.current;
+      if (!root) return;
+      const composition = composingField.current;
+      const active = document.activeElement;
+      // Refocus an ongoing composition or the active link field in place. A
+      // menu/hotkey must not move a URL edit into its label or commit the IME.
+      const target =
+        composition &&
+        root.contains(composition) &&
+        composition.matches("input:not(:disabled), textarea:not(:disabled)")
+          ? composition
+          : active instanceof HTMLElement &&
+              root.contains(active) &&
+              active.matches("#capture-link-label:not(:disabled), #capture-link-url:not(:disabled)")
+            ? active
+            : (root.querySelector<HTMLElement>("#capture-link-label:not(:disabled)") ??
+              root.querySelector<HTMLElement>("#capture-source:not(:disabled)"));
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [open, focusRequest]);
 
   function save(markdown: string, quickInput = quickRef.current) {
     if (current.current?.localQueued || submitting.current || creatingRef.current || queueUnknown)
@@ -201,6 +239,12 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
   return (
     <div
       ref={panel}
+      onCompositionStartCapture={(event) => {
+        if (event.target instanceof HTMLElement) composingField.current = event.target;
+      }}
+      onCompositionEndCapture={() => {
+        composingField.current = null;
+      }}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (
@@ -252,6 +296,14 @@ export default function CapturePanel({ open, onClose }: { open: boolean; onClose
       }}
     >
       <h2 id="capture-title">Capture</h2>
+      <button
+        type="button"
+        disabled={busy || queuing || creating}
+        onClick={() => setShortcutSettingsOpen((value) => !value)}
+      >
+        Capture invocation settings
+      </button>
+      {shortcutSettingsOpen && <CaptureShortcutSettings />}
       <CapturePresets onBusy={setPresetBusy} />
       <small>
         Draft preset:{" "}
